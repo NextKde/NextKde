@@ -20,6 +20,10 @@ Item {
         property var groupingCalls: []
         property var badgeCalls: []
         property var indicatorCalls: []
+        property var autoHideCalls: []
+        signal dockAutoHideAppChanged(var state)
+        function applicationIcon(appId) { return "" }
+        function updateDockAutoHideApp(appId, enabled) { autoHideCalls = autoHideCalls.concat([{appId, enabled}]) }
         property bool deferSnapshot: false
         signal dockSnapshotChanged(var state)
         signal dockBuiltinVisibilityChanged(var state)
@@ -44,6 +48,8 @@ Item {
             bridge.calls = []
             bridge.badgeCalls = []
             bridge.groupingCalls = []
+            bridge.autoHideCalls = []
+            bridge.indicatorCalls = []
             bridge.deferSnapshot = false
             bridge.lastError = ""
         }
@@ -164,6 +170,60 @@ Item {
             verify(control.checked, "external snapshots keep the switch binding")
             compare(bridge.indicatorCalls.length, 2, "snapshot updates must not write back")
             app.destroy()
+        }
+        function test_app_auto_hide_list() {
+            bridge.deferSnapshot = true
+            const component = Qt.createComponent("../../main.qml")
+            compare(component.status, Component.Ready, component.errorString())
+            const app = component.createObject(null, {currentPage:3})
+            verify(app !== null)
+            try {
+                const input = findChild(app.contentItem, "dockAutoHideAppInput")
+                const add = findChild(app.contentItem, "addManualDockAutoHideApp")
+                const picker = findChild(app.contentItem, "dockAutoHideRunningApps")
+                const addRunning = findChild(app.contentItem, "addRunningDockAutoHideApp")
+                verify(input !== null && add !== null && picker !== null && addRunning !== null)
+                input.text = "org.example.Editor"
+                verify(!add.enabled, "no writes before initial snapshot")
+                bridge.snapshot = Object.assign({}, bridge.snapshot, {autoHideApps: [], runningApps: [
+                    {appId:"org.example.Editor.desktop", name:"Editor"},
+                    {appId:"org.example.Player.desktop", name:"Player"}]})
+                bridge.dockSnapshotChanged(bridge.snapshot)
+                verify(add.enabled)
+                add.clicked()
+                compare(bridge.autoHideCalls.length, 1)
+                compare(bridge.autoHideCalls[0].appId, "org.example.Editor")
+                compare(bridge.autoHideCalls[0].enabled, true)
+                verify(!add.enabled && !addRunning.enabled)
+                bridge.dockSnapshotChanged(bridge.snapshot)
+                verify(!add.enabled, "unrelated snapshots cannot acknowledge an app edit")
+                bridge.lastError = "save failed"
+                bridge.dockAutoHideAppChanged({})
+                verify(add.enabled)
+                compare(input.text, "org.example.Editor", "failed writes preserve manual input")
+                bridge.lastError = ""
+                add.clicked()
+                bridge.snapshot = Object.assign({}, bridge.snapshot, {autoHideApps:["org.example.Editor.desktop"]})
+                bridge.dockAutoHideAppChanged(bridge.snapshot)
+                compare(input.text, "")
+                compare(picker.model.length, 1, "already configured apps leave the picker")
+                compare(picker.model[0].appId, "org.example.Player.desktop")
+                tryVerify(() => findChild(app.contentItem, "removeDockAutoHideApp_org.example.Editor.desktop") !== null)
+                const remove = findChild(app.contentItem, "removeDockAutoHideApp_org.example.Editor.desktop")
+                remove.clicked()
+                compare(bridge.autoHideCalls[2].enabled, false)
+                verify(!remove.enabled)
+                bridge.snapshot = Object.assign({}, bridge.snapshot, {autoHideApps:[]})
+                bridge.dockAutoHideAppChanged(bridge.snapshot)
+                compare(picker.model.length, 2)
+                addRunning.clicked()
+                compare(bridge.autoHideCalls[3].appId, "org.example.Editor.desktop")
+                compare(bridge.autoHideCalls[3].enabled, true)
+                bridge.dockAutoHideAppChanged(bridge.snapshot)
+                compare(bridge.autoHideCalls.length, 4, "readbacks never send extra writes")
+            } finally {
+                app.destroy()
+            }
         }
         function test_selection() {
             const component = Qt.createComponent("../../main.qml")

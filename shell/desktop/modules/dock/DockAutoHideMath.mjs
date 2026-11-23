@@ -158,6 +158,19 @@ export function hasConflict(windows, targetScreen, avoidanceRect, releaseRect,
     return false;
 }
 
+// App rules use the same screen/desktop/minimize eligibility as collision,
+// but do not require the window to overlap the Dock itself. Identity matching
+// happens at the AppIdentityService boundary before producing these candidates.
+export function hasAutoHideApp(windows, targetScreen, currentDesktopId) {
+    return Array.isArray(windows) && windows.some(window => window?.autoHideApp
+        && window.isVisible !== false
+        && windowEligible(window, targetScreen, currentDesktopId));
+}
+
+export function effectiveVisibilityMode(mode, autoHideApp) {
+    return autoHideApp ? "persistent" : mode;
+}
+
 // §8.2 Policy — the single source of truth for a desired visibility.
 export function shouldBeVisible(mode, hasConflict, hasInhibitor) {
     if (mode === "always")

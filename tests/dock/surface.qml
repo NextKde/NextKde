@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import qs.desktop.modules.dock
+import qs.desktop.modules.common
 
 ShellRoot {
     DockWindow { id: leftDock; position: "left"; visible: true }
@@ -22,6 +23,23 @@ ShellRoot {
                     check(dock.edgeMargin === 7 && dock.workspaceMargin === 7,
                         edge + " margins must follow 56px thickness, not 900px length")
                     check(dock.exclusiveZone === 70, edge + " reserves only the thickness and gaps")
+                    dock.testController.phase = "Bootstrapping"
+                    check(dock.exclusiveZone === 0, edge + " boot readiness must not reserve workspace")
+                    dock.testController.phase = "Shown"
+                    dock.testController.effectiveMode = "persistent"
+                    check(dock.testController.mode === "always" && dock.exclusiveZone === 0,
+                        edge + " application rule releases workspace without changing the saved mode")
+                    dock.publishWorkspaceLayout()
+                    check(!WorkspaceLayoutService.dockReserved && WorkspaceLayoutService.workspaceGap === 0,
+                        edge + " initial placement also stops avoiding the hidden Dock")
+                    dock.testController.revealProgress = 0
+                    dock.testController.revealProgress = 1
+                    check(dock.exclusiveZone === 0, edge + " temporary reveal never reflows windows")
+                    dock.testController.effectiveMode = Qt.binding(() => dock.testController.mode)
+                    check(dock.exclusiveZone === 70, edge + " clearing the rule restores workspace")
+                    dock.publishWorkspaceLayout()
+                    check(WorkspaceLayoutService.dockReserved && WorkspaceLayoutService.workspaceGap === 7,
+                        edge + " clearing the rule restores initial placement too")
                     if (edge === "left") check(dock.restX === 7, "left glass is near the edge")
                     if (edge === "right") check(dock.restX === dock.width - 63, "right glass is near the edge")
                     if (edge === "bottom") check(dock.restY === dock.height - 63, "bottom inset stays unchanged: " + dock.restY + ", height=" + dock.height + ", thickness=" + dock.testContainer.height)
