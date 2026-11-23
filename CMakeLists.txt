@@ -110,6 +110,18 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/deskcenter/weather-card-205.test.mjs)
         set_tests_properties(kos-deskcenter.weather-card PROPERTIES LABELS logic TIMEOUT 10)
+        # The desktop icon-size menu and its persistence setter must expose the
+        # same four tiers, including the extra-small 32 px option.
+        add_test(NAME kos-deskcenter.icon-size
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/deskcenter/icon-size.test.mjs)
+        set_tests_properties(kos-deskcenter.icon-size PROPERTIES LABELS logic TIMEOUT 10)
+        # The shortcut-alignment menu must persist and reach the free-slot
+        # grid; the column-order mirror itself is covered by the density test.
+        add_test(NAME kos-deskcenter.shortcut-alignment
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/deskcenter/shortcut-alignment.test.mjs)
+        set_tests_properties(kos-deskcenter.shortcut-alignment PROPERTIES LABELS logic TIMEOUT 10)
         # Regression: SurfaceShape ignored scale changes, so panels animating
         # scale on entry (wallpaper preview) fringed at the corners.
         add_test(NAME kos-surface-shape.scale-sync

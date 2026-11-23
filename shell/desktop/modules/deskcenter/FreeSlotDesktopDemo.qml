@@ -19,6 +19,7 @@ Item {
     property real baseCellWidth: 112
     property real baseCellHeight: 114
     property string density: "comfortable"
+    property string alignment: "right"
     property real iconVisualSize: 68
     readonly property var gridMetrics: DesktopGridMetrics.metrics(baseCellWidth,
         baseCellHeight, iconVisualSize, density, titleFontMetrics.height)
@@ -31,15 +32,17 @@ Item {
     readonly property real contentHeight: cellHeight - 4
     FontMetrics { id: titleFontMetrics }
     readonly property real columnPitch: cellWidth + cellGap
-    readonly property real rowPitch: cellHeight + cellGap
+    readonly property var rowGeometry: DesktopGridMetrics.rowLayout(
+        validHeight, cellHeight, cellGap)
+    readonly property real rowPitch: rowGeometry.pitch
     readonly property int columnCount: Math.max(1,
         Math.floor((validWidth + cellGap) / columnPitch))
-    readonly property int rowCount: Math.max(1,
-        Math.floor((validHeight + cellGap) / rowPitch))
+    readonly property int rowCount: rowGeometry.count
     readonly property int capacity: columnCount * rowCount
     readonly property real gridWidth: columnCount * cellWidth
         + Math.max(0, columnCount - 1) * cellGap
-    readonly property real gridOriginX: validX + validWidth - gridWidth
+    readonly property real gridOriginX: alignment === "left"
+        ? validX : validX + validWidth - gridWidth
     // `slots` is the durable layout. `previewSlots` is a private drag-time
     // layout: delegates animate it immediately, but it becomes durable only
     // when a valid drop is committed.
@@ -353,7 +356,8 @@ Item {
     }
 
     function pointForSlot(slot) {
-        const column = columnCount - 1 - Math.floor(slot / rowCount)
+        const column = DesktopGridMetrics.columnForSlot(slot, rowCount,
+            columnCount, alignment)
         const row = slot % rowCount
         return Qt.point(gridOriginX + column * columnPitch, validY + row * rowPitch)
     }
@@ -368,7 +372,8 @@ Item {
         const row = Math.floor(localY / rowPitch)
         if (column < 0 || column >= columnCount || row < 0 || row >= rowCount)
             return -1
-        return (columnCount - 1 - column) * rowCount + row
+        return DesktopGridMetrics.slotForCell(column, row, rowCount,
+            columnCount, alignment)
     }
 
     function pointInGap(pointX, pointY) {
