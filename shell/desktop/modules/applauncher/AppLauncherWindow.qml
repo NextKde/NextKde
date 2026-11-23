@@ -9,6 +9,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
+import "LauncherGeometry.mjs" as LauncherGeometry
 
 // Output-bound application-launcher surface. The panel itself spans the
 // output only to make centering reliable. The visible glass card follows Dock
@@ -168,41 +169,18 @@ PanelWindow {
         }
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
-    readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
-    readonly property real minimumLauncherHeight: 500
-    readonly property bool usesMinimumSize: AppLauncherService.dockWidth < minimumLauncherWidth
-    // Sizing depends on display mode: fullscreen fills screen, center floats
-    // with comfortable dialogue dimensions, bottom follows the Dock.
-    // The compact presentations solve one landscape card and stand it up
-    // beside a side Dock: a landscape card floating next to a vertical Dock
-    // reads as the wrong shape, so the two dimensions swap when the Dock
-    // leaves the bottom edge.
-    readonly property real compactCardWidth: isBottomWideMode
-        ? (screen ? Math.round(screen.width * 0.50) : 960)
-        : (usesMinimumSize ? minimumLauncherWidth : AppLauncherService.dockWidth)
-    readonly property real compactCardHeight: usesMinimumSize
-        ? minimumLauncherHeight
-        : (screen ? Math.round(screen.height * 0.50) : 540)
-    readonly property real launcherWidth: isFullscreenMode
-        ? (screen ? screen.width : 1920)
-        : (isCenterMode
-            ? (screen ? Math.min(Math.max(680, Math.round(screen.width * 0.65)), 1040) : 760)
-            : (dockAtBottom ? compactCardWidth
-                // The transposed short side (half the output height) reads a
-                // touch narrow in portrait; give the standing card 55%.
-                : Math.max(compactCardHeight,
-                    screen ? Math.round(screen.height * 0.55) : 594)))
-
-    readonly property real launcherHeight: isFullscreenMode
-        ? (screen ? screen.height : 1080)
-        : (isCenterMode
-            ? (screen ? Math.min(Math.max(520, Math.round(screen.height * 0.68)), 760) : 560)
-            : (dockAtBottom ? compactCardHeight
-                // The transposed long side is too tall for a floating card
-                // (it ran to 960 of 1080 pixels); cap a side card at two
-                // thirds of the output so the portrait shape stays compact.
-                : Math.min(compactCardWidth,
-                    screen ? Math.round(screen.height * 2 / 3) : 720)))
+    // Sizing and placement live in LauncherGeometry.mjs so CI can exercise
+    // the math without a compositor: this block used to be an inline ternary
+    // tree, and the side-Dock shape regressions had no test anywhere.
+    readonly property var _cardSize: LauncherGeometry.launcherSize({
+        displayMode: root.displayMode,
+        screenWidth: screen ? screen.width : 0,
+        screenHeight: screen ? screen.height : 0,
+        dockPosition: AppLauncherService.dockPosition,
+        dockWidth: AppLauncherService.dockWidth
+    })
+    readonly property real launcherWidth: _cardSize.width
+    readonly property real launcherHeight: _cardSize.height
     // Preserve the resolved catalogue while hidden. Theme icons deliberately
     // load on the GUI thread, so clearing this model on close made every open
     // rebuild and synchronously decode the first screen of icons.
@@ -1254,22 +1232,24 @@ PanelWindow {
 
     Item {
         id: launcherRevealClip
-        // Explicit geometry, never a runtime anchor-set switch. Qt can retain
-        // a previous anchor set for a frame (the same trap the GridView below
-        // documents), which froze this clip's width/height at the old output
-        // size after the Dock returned from a side edge: the card then opened
-        // at 1874x1080 instead of 960x540.
-        width: root.isFullscreenMode ? parent.width : root.launcherWidth
-        height: root.isFullscreenMode ? parent.height : root.launcherHeight
-        x: root.isFullscreenMode ? 0
-            : (root.isCenterMode || root.dockAtBottom
-                ? Math.round((parent.width - width) / 2)
-                : (root.dockAtRight ? parent.width - width : 0))
-        y: root.isFullscreenMode ? 0
-            : (root.isCenterMode || root.dockAtBottom
-                ? (root.isCenterMode ? Math.round((parent.height - height) / 2)
-                    : parent.height - height)
-                : Math.round((parent.height - height) / 2))
+        // Explicit geometry, never a runtime anchor-set switch: Qt can retain
+        // a previous anchor set for a frame, which froze this clip's
+        // width/height at the old output size after the Dock returned from a
+        // side edge (the card then opened at 1874x1080 instead of 960x540).
+        // The placement math is unit tested in test_launcher_geometry.mjs.
+        readonly property var rect: LauncherGeometry.revealRect({
+            isFullscreenMode: root.isFullscreenMode,
+            isCenterMode: root.isCenterMode,
+            dockPosition: AppLauncherService.dockPosition,
+            width: root.launcherWidth,
+            height: root.launcherHeight,
+            parentWidth: parent ? parent.width : 0,
+            parentHeight: parent ? parent.height : 0
+        })
+        x: rect.x
+        y: rect.y
+        width: rect.width
+        height: rect.height
         clip: root.isFullscreenMode
 
         // The fullscreen presentation owns the entire output, not merely the

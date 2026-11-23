@@ -114,6 +114,20 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 --test ${CMAKE_CURRENT_SOURCE_DIR}/tests/applauncher/screen-routing.test.mjs)
         set_tests_properties(kos-applauncher.screen-routing PROPERTIES LABELS logic TIMEOUT 10)
+        # Regression: the launcher reveal clip froze at the previous output
+        # size after the Dock left and returned, and the side-Dock card was
+        # sized from the Dock's whole edge length (PR #425).
+        add_test(NAME kos-applauncher.launcher-geometry
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/applauncher/test_launcher_geometry.mjs)
+        set_tests_properties(kos-applauncher.launcher-geometry PROPERTIES LABELS logic TIMEOUT 10)
+        # Regression: persistent status panels on a secondary output were
+        # pinned to its far edge, and side-Dock panels ran off the bottom
+        # (PR #424).
+        add_test(NAME kos-shell.panel-placement
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_panel_placement.mjs)
+        set_tests_properties(kos-shell.panel-placement PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.traffic-history
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_traffic_history.mjs)
         set_tests_properties(kos-shell.traffic-history PROPERTIES LABELS logic TIMEOUT 10)
