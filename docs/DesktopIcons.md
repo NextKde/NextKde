@@ -2,6 +2,27 @@
 
 [简体中文](DesktopIcons.zh-CN.md)
 
+## Desktop shortcuts
+
+Right-click an application icon in the launcher and choose **Send to Desktop** to
+create a symbolic link named after the installed `.desktop` entry in the XDG
+desktop directory. The link points at the installed entry, so the shortcut
+follows application updates. A launcher custom icon still applies through the
+file-name lookup; a custom display name is not written into the shortcut.
+
+Sending the same application again does not replace a file or link that already
+exists; the launcher reports "Shortcut already exists on Desktop". A missing or
+unwritable desktop directory fails with a notification. If the platform daemon
+is unavailable the action is refused and the failure is logged, because no
+fallback writes desktop files from QML. After a successful creation the Shell
+requests `desktop.refresh`, so the icon appears even when the data service's
+directory watcher was not installed. Opening, renaming, cutting/moving and
+trashing continue to use the existing desktop file operations; rename, move and
+trash act on the shortcut link itself and never modify the installed `.desktop`
+file it points at.
+
+## Spacing
+
 Right-click the desktop background and choose icon spacing: loose, compact or tighter.
 Spacing is independent of icon size, display scaling and files. Labels keep at most two lines,
 using actual font height. The preference is `DesktopFiles/iconSpacing` in

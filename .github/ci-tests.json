@@ -14,6 +14,7 @@
     "kos-platform.startup",
     "kos-platform.media-feedback",
     "kos-platform.file-copy",
+    "kos-platform.desktop-shortcut",
     "kos-platform.independent-app-widgets",
     "kos-platform.window-placement",
     "kos-platform.jsonl-client",

@@ -7,6 +7,7 @@ import Quickshell.Widgets
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import qs.desktop.modules.platform
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
 import "LauncherGeometry.mjs" as LauncherGeometry
@@ -460,6 +461,8 @@ PanelWindow {
         appContextMenu.anchorItem = anchorItem
         appContextMenu.clear()
         appContextMenu.addItem("application-open", I18n.tr("Open app"), "open")
+        appContextMenu.addItem("launcher.menu.sendToDesktop",
+            I18n.tr("Send to Desktop"), "send-to-desktop")
         appContextMenu.addItem("edit-rename", I18n.tr("Edit app"), "edit")
         const pinned = DockModelService.isAppPinned(app.id)
         appContextMenu.addItem(pinned ? "unpin" : "pin",
@@ -470,6 +473,29 @@ PanelWindow {
 
     function dismissApplicationMenu() {
         appContextMenu.hide()
+    }
+
+    // The launcher stays open after sending an app to the desktop, so the
+    // result needs an explicit surface. Success is visible as the new icon;
+    // an existing shortcut or a failed write would otherwise look like a
+    // no-op.
+    function notifyDesktopShortcutResult(ok, created) {
+        if (ok && created)
+            return
+        const summary = ok
+            ? I18n.tr("Shortcut already exists on Desktop")
+            : I18n.tr("Could not create the desktop shortcut")
+        PlatformClient.request("notify", {
+            summary: summary,
+            body: "",
+            icon: "",
+            appName: "NextKDE",
+            urgency: "normal"
+        }, function(response) {
+            if (!response?.ok)
+                console.warn("[AppLauncher] shortcut notify failed: "
+                    + (response?.error?.message || "platform unavailable"))
+        })
     }
 
     function showApplicationEditor(app) {
@@ -1127,6 +1153,8 @@ PanelWindow {
                 return;
             if (name === "open")
                 root.launchApplication(app);
+            else if (name === "send-to-desktop")
+                AppActionService.sendToDesktop(app.id);
             else if (name === "edit")
                 AppActionService.edit(app);
             else if (name === "pin")
@@ -1149,6 +1177,16 @@ PanelWindow {
         }
         function onHideRequested(appId) {
             AppLauncherConfigService.hideApplication(appId);
+        }
+        function onDesktopShortcutFinished(appId, ok, created, path, errorCode) {
+            if (ok && created) {
+                console.log("[AppLauncher] desktop shortcut app=" + appId
+                    + " path=" + path);
+                return;
+            }
+            console.log("[AppLauncher] desktop shortcut app=" + appId
+                + " result=" + (errorCode || (ok ? "already-exists" : "failed")));
+            root.notifyDesktopShortcutResult(ok, created);
         }
     }
 
