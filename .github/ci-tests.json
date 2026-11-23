@@ -33,6 +33,8 @@
     "kos-shell.language",
     "kos-ci.inventory-contract",
     "kos-shell.clipboard-placement",
+    "kos-deskcenter.icon-size",
+    "kos-deskcenter.shortcut-alignment",
     "kos-deskcenter.density-metrics",
     "kos-deskcenter.widget-layout",
     "kos-deskcenter.desktop-outputs",
