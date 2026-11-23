@@ -1,5 +1,6 @@
 #include "buttonrenderer.h"
 #include "buttonconfig.h"
+#include "../windowappearance/geometryprotocol.h"
 
 #include <effect/effectwindow.h>
 #include <effect/effecthandler.h>
@@ -54,6 +55,32 @@ constexpr Type CooperativeSlotType[TypeCount] = {Maximize, Minimize, Close};
 qreal interceptMargin(const AppConfig &config)
 {
     return std::max(0.0, config.interceptMargin);
+}
+
+PanelWindowContour resolvedWindowContour(const KWin::EffectWindow *window)
+{
+    const QSizeF size = window ? window->frameGeometry().size() : QSizeF();
+    const KWin::Window *w = window ? window->window() : nullptr;
+    if (!w) {
+        return {size, {}, 0.0};
+    }
+    const QVariant visualVar = w->property(WindowAppearance::VisualRadiiProperty);
+    const bool hasVisualRadii = visualVar.isValid() && visualVar.canConvert<QVector4D>();
+    const QVector4D radii = hasVisualRadii
+        ? visualVar.value<QVector4D>()
+        : w->borderRadius().toVector();
+    qreal smoothness = 0.0;
+    if (hasVisualRadii) {
+        const QVariant expVar = w->property(WindowAppearance::CurveExponentProperty);
+        if (expVar.isValid()) {
+            bool ok = false;
+            const qreal exponent = expVar.toReal(&ok);
+            if (ok) {
+                smoothness = std::clamp((exponent - 2.0) / 2.0, 0.0, 1.0);
+            }
+        }
+    }
+    return {size, {radii.x(), radii.y(), radii.z(), radii.w()}, smoothness};
 }
 
 bool sameSize(const QSizeF &a, const QSizeF &b)
@@ -646,9 +673,7 @@ void ButtonRenderer::paint(const KWin::RenderTarget &renderTarget,
             w && w->maximizeMode() == KWin::MaximizeFull;
         // RGB changes only a uniform, not three supersampled button textures.
         const qreal scale = viewport.scale();
-        const QVector4D nativeRadii = w ? w->borderRadius().toVector() : QVector4D();
-        const PanelWindowContour contour{window->frameGeometry().size(),
-            {nativeRadii.x(), nativeRadii.y(), nativeRadii.z(), nativeRadii.w()}};
+        const PanelWindowContour contour = resolvedWindowContour(window);
         if (!config.cooperativeControls && overlayMode != OverlayMode::Transparent) {
             auto backgroundClip = clip;
             // Where the Auto background plate may reach this frame. For the

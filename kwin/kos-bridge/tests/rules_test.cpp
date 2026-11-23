@@ -383,6 +383,19 @@ void testGeometry()
         shape.offset = AppOffset{1.01, 1.01};
         CHECK(panelFlushMask(shape) == 0);
     }
+    // Continuous-corner contour uses both visual radii (tangent extent) and smoothness.
+    shape.position = ButtonPosition::Right;
+    shape.offset = AppOffset{0, 0};
+    const qreal extent = WindowAppearance::cornerExtent(20.0, 0.6);
+    const PanelWindowContour continuous{rounded.size, {extent, extent, extent, extent}, 0.6};
+    const PanelWindowContour arcSameExtent{rounded.size, {extent, extent, extent, extent}, 0.0};
+    // At the top-right corner, (98, 2) is outside the continuous corner (diagonal inset ~5.86),
+    // while (94, 6) is inside the superellipse (diagonal inset ~5.86) yet outside a circle of
+    // radius `extent` (diagonal inset ~8.64).
+    CHECK(!panelBackgroundPath(box, shape, continuous).contains(QPointF(98, 2)));
+    CHECK(panelBackgroundPath(box, shape, continuous).contains(QPointF(94, 6)));
+    CHECK(!panelBackgroundPath(box, shape, arcSameExtent).contains(QPointF(94, 6)));
+    CHECK(panelBackgroundKey(shape, continuous) != panelBackgroundKey(shape, arcSameExtent));
     CHECK(panelBackgroundPath(QRectF(), shape, rounded).isEmpty());
 
 }
