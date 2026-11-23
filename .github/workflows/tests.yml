@@ -134,6 +134,15 @@ jobs:
       KOS_EXPECT_FONT_DPI: ${{ matrix.font_dpi }}
     container: archlinux:base-devel
     steps:
+      # The pinned snapshot only serves packages from archive.archlinux.org,
+      # whose slow downloads are the recurring false failure in these jobs.
+      # Cache the package archives per series and snapshot; pacman still
+      # verifies every package, so a stale entry is simply re-downloaded.
+      - name: Mount package cache
+        uses: actions/cache@v6
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ matrix.series }}-${{ matrix.snapshot }}
       # Pin the entire Qt/KF/Plasma runtime, not just headers or a mocked KCM.
       - name: Select the Plasma ${{ matrix.series }} runtime snapshot
         env:
@@ -150,6 +159,10 @@ jobs:
             cmake ninja gcc qt6-base qt6-declarative kconfig kcmutils \
             plasma-workspace kio kservice dbus gtk3 wayland pkgconf \
             flatpak ostree xorg-server-xvfb xorg-xauth
+      # Keep the saved cache to what this snapshot actually installed: the
+      # image upgrade leaves superseded archives that only cost quota.
+      - name: Prune superseded package archives
+        run: pacman -Sc --noconfirm
       - name: Assert Plasma series and record the actual runtime
         env:
           PLASMA_SERIES: ${{ matrix.series }}
@@ -513,6 +526,15 @@ jobs:
     container: archlinux:base-devel
 
     steps:
+      # Shared with the matching fonts series: both jobs install from the same
+      # pinned snapshot, and archive.archlinux.org downloads are the slow,
+      # flaky part. pacman verifies every package, so stale archives are just
+      # re-downloaded.
+      - name: Mount package cache
+        uses: actions/cache@v6
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ matrix.series }}-${{ matrix.snapshot }}
       # A complete repository snapshot keeps Qt/KF/KDecoration and KWin in
       # agreement. Alternate headers on a rolling SDK alone do not prove a
       # plugin can compile and link on each supported series.
@@ -540,6 +562,9 @@ jobs:
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
             kcoreaddons kdecoration gettext libxcb vulkan-headers wayland python
+      # Keep the saved cache to what this snapshot actually installed.
+      - name: Prune superseded package archives
+        run: pacman -Sc --noconfirm
 
       - name: Assert SDK series and record package versions
         env:
