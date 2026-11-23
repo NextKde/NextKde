@@ -10,9 +10,11 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A superseded run on the same branch tells us nothing, so cancel it.
+# A superseded run on the same branch tells us nothing, so cancel it. Keying
+# pull requests by number keeps that working when a fork branch name differs
+# from the local one.
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -285,6 +287,15 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       QT_FORCE_STDERR_LOGGING: "1"
+      # ccache: content-hashed compiler cache. A translation unit is reused
+      # only when its preprocessed source and compiler options are identical,
+      # so a changed file always recompiles and every build still runs; this
+      # only stops paying for the same compilation twice.
+      CCACHE_DIR: ${{ github.workspace }}/.build/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 2G
 
     # Arch, not Ubuntu: `tools/kosctl` provisions `arch_core_build_packages`
     # from `pacman`, and this image gives those packages the same names and the
@@ -318,7 +329,8 @@ jobs:
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu xorg-server-xvfb xorg-xauth \
-            quickshell kwin fcitx5 python-pillow python-dbus python-gobject mesa vulkan-swrast libcap
+            quickshell kwin fcitx5 python-pillow python-dbus python-gobject mesa vulkan-swrast libcap \
+            ccache
 
       # Arch gives KWin CAP_SYS_NICE, which Docker's default capability
       # bounding set excludes. execve then fails with EPERM before KWin starts.
@@ -344,6 +356,18 @@ jobs:
           key: gocache-${{ runner.os }}-${{ hashFiles('services/data-service/go.sum') }}
           restore-keys: |
             gocache-${{ runner.os }}-
+
+      # Warm compiler cache. The key only decides what gets saved; any restore
+      # hit through the prefix lets ccache reuse unchanged translation units,
+      # while the build step still recompiles everything the commit changed.
+      - name: Mount compiler cache
+        id: ccache
+        uses: actions/cache@v6
+        with:
+          path: .build/ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('**/*.c', '**/*.cc', '**/*.cpp', '**/*.h', '**/CMakeLists.txt', 'tools/run-tests.sh') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
 
       # Build once, then let each test group run even if another group fails.
       # Spatial dependencies are mandatory: AUTO could silently omit coverage.
@@ -373,8 +397,10 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
+          # Every logic test is its own short-lived node process; four at a
+          # time is well inside the per-test TIMEOUT budget.
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^logic$' \
+            --parallel 4 -L '^logic$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/logic.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
 
@@ -412,8 +438,11 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
+          # Each suite runs its own offscreen process. Two at a time keeps
+          # CPU contention from tripping the tighter per-test TIMEOUTs while
+          # still overlapping the two-minute tail.
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^headless$' \
+            --parallel 2 -L '^headless$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/headless.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/headless.xml"
 
@@ -425,7 +454,7 @@ jobs:
         run: |
           mkdir -p .build/tests/test-results
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^widgets$' \
+            --parallel 2 -L '^widgets$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
 

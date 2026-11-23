@@ -10,6 +10,7 @@
     "kos-platform.kwin-shortcut-conflict",
     "kos-platform.desktop-transition",
     "kos-stage.desktop-policy",
+    "kos-window.effect-policy",
     "kos-platform.startup",
     "kos-platform.media-feedback",
     "kos-platform.file-copy",
