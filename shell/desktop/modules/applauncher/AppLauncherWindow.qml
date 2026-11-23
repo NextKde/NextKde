@@ -173,23 +173,36 @@ PanelWindow {
     readonly property bool usesMinimumSize: AppLauncherService.dockWidth < minimumLauncherWidth
     // Sizing depends on display mode: fullscreen fills screen, center floats
     // with comfortable dialogue dimensions, bottom follows the Dock.
+    // The compact presentations solve one landscape card and stand it up
+    // beside a side Dock: a landscape card floating next to a vertical Dock
+    // reads as the wrong shape, so the two dimensions swap when the Dock
+    // leaves the bottom edge.
+    readonly property real compactCardWidth: isBottomWideMode
+        ? (screen ? Math.round(screen.width * 0.50) : 960)
+        : (usesMinimumSize ? minimumLauncherWidth : AppLauncherService.dockWidth)
+    readonly property real compactCardHeight: usesMinimumSize
+        ? minimumLauncherHeight
+        : (screen ? Math.round(screen.height * 0.50) : 540)
     readonly property real launcherWidth: isFullscreenMode
         ? (screen ? screen.width : 1920)
         : (isCenterMode
             ? (screen ? Math.min(Math.max(680, Math.round(screen.width * 0.65)), 1040) : 760)
-            : (isBottomWideMode
-                ? (screen ? Math.round(screen.width * 0.50) : 960)
-                : (usesMinimumSize ? minimumLauncherWidth : AppLauncherService.dockWidth)))
+            : (dockAtBottom ? compactCardWidth
+                // The transposed short side (half the output height) reads a
+                // touch narrow in portrait; give the standing card 55%.
+                : Math.max(compactCardHeight,
+                    screen ? Math.round(screen.height * 0.55) : 594)))
 
     readonly property real launcherHeight: isFullscreenMode
         ? (screen ? screen.height : 1080)
         : (isCenterMode
             ? (screen ? Math.min(Math.max(520, Math.round(screen.height * 0.68)), 760) : 560)
-            : (!dockAtBottom
-                ? Math.min(Math.max(minimumLauncherHeight, AppLauncherService.dockWidth),
-                    Math.round(screen.height * 0.85))
-                : (usesMinimumSize ? minimumLauncherHeight
-                    : Math.round(screen.height * 0.50))))
+            : (dockAtBottom ? compactCardHeight
+                // The transposed long side is too tall for a floating card
+                // (it ran to 960 of 1080 pixels); cap a side card at two
+                // thirds of the output so the portrait shape stays compact.
+                : Math.min(compactCardWidth,
+                    screen ? Math.round(screen.height * 2 / 3) : 720)))
     // Preserve the resolved catalogue while hidden. Theme icons deliberately
     // load on the GUI thread, so clearing this model on close made every open
     // rebuild and synchronously decode the first screen of icons.
@@ -1241,17 +1254,22 @@ PanelWindow {
 
     Item {
         id: launcherRevealClip
-        anchors.fill: root.isFullscreenMode ? parent : undefined
-        anchors.centerIn: root.isCenterMode ? parent : undefined
-        anchors.horizontalCenter: (root.isBottomMode && root.dockAtBottom)
-            ? parent.horizontalCenter : undefined
-        anchors.bottom: (root.isBottomMode && root.dockAtBottom) ? parent.bottom : undefined
-        anchors.verticalCenter: (root.isBottomMode && !root.dockAtBottom)
-            ? parent.verticalCenter : undefined
-        anchors.left: (root.isBottomMode && root.dockAtLeft) ? parent.left : undefined
-        anchors.right: (root.isBottomMode && root.dockAtRight) ? parent.right : undefined
+        // Explicit geometry, never a runtime anchor-set switch. Qt can retain
+        // a previous anchor set for a frame (the same trap the GridView below
+        // documents), which froze this clip's width/height at the old output
+        // size after the Dock returned from a side edge: the card then opened
+        // at 1874x1080 instead of 960x540.
         width: root.isFullscreenMode ? parent.width : root.launcherWidth
         height: root.isFullscreenMode ? parent.height : root.launcherHeight
+        x: root.isFullscreenMode ? 0
+            : (root.isCenterMode || root.dockAtBottom
+                ? Math.round((parent.width - width) / 2)
+                : (root.dockAtRight ? parent.width - width : 0))
+        y: root.isFullscreenMode ? 0
+            : (root.isCenterMode || root.dockAtBottom
+                ? (root.isCenterMode ? Math.round((parent.height - height) / 2)
+                    : parent.height - height)
+                : Math.round((parent.height - height) / 2))
         clip: root.isFullscreenMode
 
         // The fullscreen presentation owns the entire output, not merely the
