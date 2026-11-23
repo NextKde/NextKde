@@ -279,9 +279,11 @@ QVariantMap SettingsBridge::i18nSnapshotFromReply(const QString& payload)
 
     const QJsonObject object = document.object();
     setLastError({ });
+    // No default: a reply without a language leaves the window on the persisted
+    // value applied at startup instead of guessing a concrete language.
     return {
         { QStringLiteral("language"),
-            object.value(QStringLiteral("language")).toString(QStringLiteral("zh-CN")) },
+            object.value(QStringLiteral("language")).toString() },
     };
 }
 

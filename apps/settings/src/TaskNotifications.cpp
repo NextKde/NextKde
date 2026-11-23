@@ -39,8 +39,11 @@ void TaskNotifications::notificationAction(uint id, const QString& action)
 }
 void TaskNotifications::sendUpdates(int count)
 {
-    const bool chinese = Kos::I18n::isChinese();
-    const bool portuguese = Kos::I18n::isPortuguese();
+    // Follow the language the UI is actually drawn in (the persisted choice,
+    // with "auto" resolved from the system locale), not the bare system
+    // locale: a pinned Chinese UI must not pop an English notification.
+    const bool chinese = Kos::I18n::uiIsChinese();
+    const bool portuguese = Kos::I18n::uiIsPortuguese();
     auto message = QDBusMessage::createMethodCall("org.freedesktop.Notifications", "/org/freedesktop/Notifications",
         "org.freedesktop.Notifications", "Notify");
     const auto title = chinese ? QString("应用更新") : portuguese ? QString("Atualizações de aplicativos") : QString("Application updates");
