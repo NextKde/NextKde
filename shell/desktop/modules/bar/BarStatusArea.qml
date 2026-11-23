@@ -4,6 +4,7 @@ import qs.desktop.modules.common
 import qs.desktop.modules.inputmethod
 import qs.desktop.modules.platform
 import "../common/VisibilityPolicy.mjs" as VisibilityPolicy
+import "../common/PanelPlacement.mjs" as PanelPlacement
 
 // Reusable system-status cluster. Popup panels stay anchored to the same
 // visual items whether this component lives in BarWindow or inside Dock.
@@ -136,52 +137,33 @@ Item {
     }
     function _panelPlacement(item) {
         const screen = targetScreen
-        const sx = screen ? screen.x : 0
-        const sy = screen ? screen.y : 0
-        const sw = screen ? screen.width : 0
-        const sh = screen ? screen.height : 0
         const origin = _hostOrigin()
         const local = item ? item.mapToItem(null, 0, 0) : Qt.point(0, 0)
-        const iw = item ? item.width : 0
-        const ih = item ? item.height : 0
-        const gx = origin.x + local.x
-        const gy = origin.y + local.y
-        const edge = root.dockHosted ? root.dockEdge : "top"
-        // The offset measures from the dock artwork itself, not from the
-        // anchor cell: the cell sits well inside the glass (measured a third
-        // of the pill down), so a cell-based offset sinks the panel into the
-        // dock. The resting rect the dock publishes is the artwork, in screen
-        // coordinates. It is null before the dock publishes or on a screen
-        // without one; the cell is the fallback then.
         const dockRect = root.dockHosted ? WorkspaceLayoutService.dockRect : null
-        // Both placements breathe: standalone four pixels below the Bar,
-        // dock-hosted eight pixels above the Dock artwork, the same room the
-        // old popup's negative margins gave the notification panel (-8 on
-        // every dock edge).
-        const gap = root.dockHosted ? 8 : 4
-        // A null item (hidden or unresolvable cell) must still open the panel
-        // somewhere sane: center it on the dock artwork, or the screen when
-        // there is no dock rect, instead of collapsing the center onto the
-        // output origin. Cell anchor and placement are separable since the
-        // panel takes its edge offset from the dock artwork either way.
-        const centerH = item ? gx + iw / 2
-            : (dockRect ? dockRect.x + dockRect.width / 2 : sx + sw / 2)
-        const centerV = item ? gy + ih / 2
-            : (dockRect ? dockRect.y + dockRect.height / 2 : sy + sh / 2)
-        if (edge === "top") {
-            const near = dockRect ? dockRect.y + dockRect.height : gy + ih
-            return { edge: edge, offset: near + gap - sy, center: centerH }
-        }
-        if (edge === "bottom") {
-            const near = dockRect ? dockRect.y : gy
-            return { edge: edge, offset: sy + sh - near + gap, center: centerH }
-        }
-        if (edge === "left") {
-            const near = dockRect ? dockRect.x + dockRect.width : gx + iw
-            return { edge: edge, offset: near + gap - sx, center: centerV }
-        }
-        const near = dockRect ? dockRect.x : gx
-        return { edge: edge, offset: sx + sw - near + gap, center: centerV }
+        // The math lives in PanelPlacement.mjs (tested in
+        // test_panel_placement.mjs): screen-local units, dock-artwork based
+        // offsets, null-anchor fallbacks. This function only gathers QML state.
+        return PanelPlacement.panelPlacement({
+            edge: root.dockHosted ? root.dockEdge : "top",
+            screenX: screen ? screen.x : 0,
+            screenY: screen ? screen.y : 0,
+            screenWidth: screen ? screen.width : 0,
+            screenHeight: screen ? screen.height : 0,
+            hostOrigin: origin,
+            hasAnchor: item != null,
+            anchorX: local.x,
+            anchorY: local.y,
+            anchorWidth: item ? item.width : 0,
+            anchorHeight: item ? item.height : 0,
+            dockRect: dockRect
+                ? { x: dockRect.x, y: dockRect.y,
+                    width: dockRect.width, height: dockRect.height }
+                : null,
+            // Both placements breathe: standalone four pixels below the Bar,
+            // dock-hosted eight pixels above the Dock artwork, the same room
+            // the old popup's negative margins gave the notification panel.
+            gap: root.dockHosted ? 8 : 4
+        })
     }
     function _applyPlacement(panel, placement) {
         if (!panel || !placement)

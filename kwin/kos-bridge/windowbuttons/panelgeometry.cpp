@@ -372,7 +372,7 @@ QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geomet
         const QPointF origin = geometry.independentBackground
             ? panelRectUnclipped(geometry, window.size).topLeft() : panelRect(geometry, window.size).topLeft();
         const auto contour = WindowAppearance::contourPath(
-            QRectF(-origin, window.size), window.radii, 0.0);
+            QRectF(-origin, window.size), window.radii, window.smoothness);
         path = path.intersected(contour);
     }
     return path;
@@ -381,14 +381,15 @@ QPainterPath panelBackgroundPath(const QRectF &rect, const PanelGeometry &geomet
 QString panelBackgroundKey(const PanelGeometry &geometry, const PanelWindowContour &window)
 {
     // Include the contour and its position relative to the panel: a change in
-    // window size, native radius, or subpixel offset can change the cutout.
+    // window size, visual radius, smoothness, or subpixel offset can change the cutout.
     const QPointF origin = geometry.independentBackground
             ? panelRectUnclipped(geometry, window.size).topLeft() : panelRect(geometry, window.size).topLeft();
     QString key = QString::number(panelFlushMask(geometry)) + QLatin1Char('_')
         + QString::number(geometry.independentBackground);
     for (qreal value : {origin.x(), origin.y(), window.size.width(), window.size.height(),
                        window.radii.topLeft, window.radii.topRight,
-                       window.radii.bottomRight, window.radii.bottomLeft})
+                       window.radii.bottomRight, window.radii.bottomLeft,
+                       window.smoothness})
         key += QLatin1Char('_') + QString::number(value, 'g', 17);
     return key;
 }

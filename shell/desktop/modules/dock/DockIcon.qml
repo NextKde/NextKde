@@ -531,7 +531,6 @@ Item {
     property Component _contextMenuComponent: Component {
         ContextMenu {
             capsuleReveal: true
-            reserveIconSpace: true
             property bool hasBeenVisible: false
             anchorItem: icon
             position: ConfigService.position

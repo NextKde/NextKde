@@ -31,6 +31,28 @@ ColumnLayout {
     readonly property real maxHoverScalePct: 300
     property int visibilityModeIndex: 0
     readonly property var visibilityModes: ["always", "smart", "persistent"]
+    property var autoHideApps: []
+    property var runningApps: []
+    property bool autoHideAppUpdatePending: false
+    property string submittedAutoHideApp: ""
+    readonly property var availableAutoHideApps: runningApps.filter(app =>
+        app.appId && autoHideApps.indexOf(app.appId) < 0).map(app => ({
+            appId: app.appId,
+            label: app.name && app.name !== app.appId ? app.name + " · " + app.appId : app.appId
+        }))
+
+    function appIcon(appId) {
+        return bridge && typeof bridge.applicationIcon === "function"
+            ? bridge.applicationIcon(appId) : "";
+    }
+
+    function setAutoHideApp(appId, enabled, manual = false) {
+        if (!bridge || !stateReady || autoHideAppUpdatePending || !appId.trim())
+            return;
+        autoHideAppUpdatePending = true;
+        submittedAutoHideApp = manual ? appId : "";
+        bridge.updateDockAutoHideApp(appId.trim(), enabled);
+    }
     property int windowGroupingIndex: 0
     readonly property var windowGroupings: ["grouped", "separate"]
     property bool showLauncher: true
@@ -84,6 +106,8 @@ ColumnLayout {
             dockHoverScalePct = Number.isFinite(hoverScale) ? Math.max(minHoverScalePct, Math.min(maxHoverScalePct, Math.round(hoverScale * 100))) : 119;
         }
         visibilityModeIndex = visibilityModeIndexFromString(state.visibilityMode);
+        autoHideApps = state.autoHideApps || [];
+        runningApps = state.runningApps || [];
         windowGroupingIndex = windowGroupingIndexFromString(state.windowGrouping);
         showLauncher = state.showLauncher !== false;
         showTrash = state.showTrash !== false;
@@ -198,6 +222,16 @@ ColumnLayout {
             dockPage.applyState(state);
             if (dockPage.bridge.lastError)
                 dockPage.errorText = I18n.tr(dockPage.bridge.lastError);
+        }
+        function onDockAutoHideAppChanged(state) {
+            dockPage.autoHideAppUpdatePending = false;
+            dockPage.applyState(state);
+            if (dockPage.bridge.lastError) {
+                dockPage.errorText = I18n.tr(dockPage.bridge.lastError);
+            } else if (manualAutoHideInput.text === dockPage.submittedAutoHideApp) {
+                manualAutoHideInput.text = "";
+            }
+            dockPage.submittedAutoHideApp = "";
         }
         function onDockBuiltinVisibilityChanged(state) {
             dockPage.builtinUpdatePending = false;
@@ -493,6 +527,114 @@ ColumnLayout {
                 onSelectionChanged: function (index) {
                     dockPage.saveVisibilityMode(index);
                 }
+            }
+        }
+
+        Demo.SettingsItem {
+            title: I18n.tr("Auto-hide for selected apps")
+            description: I18n.tr("Hide while a listed app has a visible window on this screen and desktop. Move to the edge to reveal the Dock.")
+            separator: false
+            verticalPadding: 4
+        }
+
+        Repeater {
+            model: dockPage.autoHideApps
+            delegate: Demo.SettingsItem {
+                id: autoHideRow
+                required property string modelData
+                objectName: "dockAutoHideAppRow_" + modelData
+                allowStacking: false
+                minimumLabelWidth: 0
+                controlSpacing: 0
+                Accessible.name: modelData
+                RowLayout {
+                    implicitWidth: autoHideRow.availableWidth
+                    Layout.fillWidth: true
+                    spacing: 8
+                    Controls.ApplicationIcon {
+                        source: dockPage.appIcon(autoHideRow.modelData)
+                        fallbackColor: dockPage.colors.secondaryText
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        Layout.minimumWidth: 0
+                        text: autoHideRow.modelData
+                        textFormat: Text.PlainText
+                        font.pixelSize: 12
+                        color: dockPage.colors.primaryText
+                        elide: Text.ElideRight
+                    }
+                    Controls.WindowButtonAction {
+                        objectName: "removeDockAutoHideApp_" + autoHideRow.modelData
+                        text: I18n.tr("Remove")
+                        iconName: "close"
+                        enabled: dockPage.stateReady && !dockPage.autoHideAppUpdatePending
+                        onClicked: dockPage.setAutoHideApp(autoHideRow.modelData, false)
+                    }
+                }
+            }
+        }
+
+        Demo.SettingsItem {
+            separator: false
+            verticalPadding: 4
+            description: dockPage.availableAutoHideApps.length === 0
+                ? I18n.tr("No apps available. Refresh or enter an app class below.") : ""
+            Controls.ApplicationIcon {
+                source: dockPage.appIcon(dockPage.availableAutoHideApps[autoHideAppsBox.currentIndex]?.appId || "")
+                fallbackColor: dockPage.colors.secondaryText
+            }
+            Controls.SettingsSelect {
+                id: autoHideAppsBox
+                objectName: "dockAutoHideRunningApps"
+                colors: dockPage.colors
+                materialForm: dockPage.materialForm
+                implicitWidth: 180
+                implicitHeight: 24
+                Layout.minimumWidth: 80
+                Layout.preferredWidth: 180
+                model: dockPage.availableAutoHideApps
+                textRole: "label"
+                enabled: dockPage.stateReady && !dockPage.autoHideAppUpdatePending && model.length > 0
+                property string selectedAppId: ""
+                currentIndex: Math.max(0, model.findIndex(app => app.appId === selectedAppId))
+                onActivated: function (index) { selectedAppId = model[index].appId; }
+            }
+            Controls.WindowButtonAction {
+                objectName: "refreshDockAutoHideApps"
+                text: I18n.tr("Refresh")
+                iconName: "refreshRounded"
+                enabled: dockPage.bridge !== null
+                onClicked: dockPage.refresh()
+            }
+            Controls.WindowButtonAction {
+                objectName: "addRunningDockAutoHideApp"
+                text: I18n.tr("Add")
+                iconName: "plus"
+                enabled: dockPage.stateReady && !dockPage.autoHideAppUpdatePending
+                    && !!dockPage.availableAutoHideApps[autoHideAppsBox.currentIndex]?.appId
+                onClicked: dockPage.setAutoHideApp(dockPage.availableAutoHideApps[autoHideAppsBox.currentIndex].appId, true)
+            }
+        }
+
+        Demo.SettingsItem {
+            Demo.LiquidTextField {
+                id: manualAutoHideInput
+                objectName: "dockAutoHideAppInput"
+                implicitWidth: 180
+                implicitHeight: 24
+                Layout.minimumWidth: 80
+                Layout.preferredWidth: 180
+                placeholderText: I18n.tr("Application class, e.g. md.obsidian.Obsidian")
+                onAccepted: dockPage.setAutoHideApp(text, true, true)
+            }
+            Controls.WindowButtonAction {
+                objectName: "addManualDockAutoHideApp"
+                text: I18n.tr("Add")
+                iconName: "plus"
+                enabled: dockPage.stateReady && !dockPage.autoHideAppUpdatePending
+                    && manualAutoHideInput.text.trim().length > 0
+                onClicked: dockPage.setAutoHideApp(manualAutoHideInput.text, true, true)
             }
         }
 

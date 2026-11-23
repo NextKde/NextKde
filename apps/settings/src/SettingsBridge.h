@@ -19,6 +19,7 @@ class SettingsBridge final : public QObject {
     Q_PROPERTY(bool sourceTreeEntry READ sourceTreeEntry NOTIFY entryChanged)
     Q_PROPERTY(bool developmentBannerDismissed READ isDevelopmentBannerDismissed WRITE
             setDevelopmentBannerDismissed NOTIFY bannerDismissedChanged)
+    Q_PROPERTY(QString savedLanguage READ savedLanguage CONSTANT)
 
 public:
     Q_INVOKABLE void launchSystemSettings();
@@ -26,6 +27,11 @@ public:
     ~SettingsBridge() override;
     QString lastError() const;
     bool isDevelopmentSession() const;
+    // The persisted Shell UI language ("auto"/"en"/"zh-CN"/"pt-BR"), empty when
+    // none was saved yet. Read once at construction so the window starts in the
+    // saved language instead of the system locale; the i18n snapshot then
+    // confirms it against the running Shell.
+    QString savedLanguage() const;
     QString sessionShellDir() const;
     bool sourceTreeEntry() const;
     void setSourceTreeEntry(bool value);
@@ -86,6 +92,7 @@ public:
     Q_INVOKABLE void updateDockIconOpacity(double opacity);
     Q_INVOKABLE void updateDockIconTintColor(const QString& color);
     Q_INVOKABLE void updateDockVisibilityMode(const QString& mode);
+    Q_INVOKABLE void updateDockAutoHideApp(const QString& appId, bool enabled);
     Q_INVOKABLE void updateDockWindowGrouping(const QString& mode);
     Q_INVOKABLE void appearanceSnapshot();
     Q_INVOKABLE void updateBlurStrength(double strength);
@@ -155,6 +162,7 @@ signals:
     void wallpaperModelsChecked(bool depthReady, bool foregroundReady);
     void dockNotificationBadgeVisibilityChanged(const QVariantMap& snapshot);
     void dockRevealIndicatorVisibilityChanged(const QVariantMap& snapshot);
+    void dockAutoHideAppChanged(const QVariantMap& snapshot);
     void appearanceSnapshotChanged(const QVariantMap& snapshot);
     void launcherSnapshotChanged(const QVariantMap& snapshot);
     void shortcutsSnapshotChanged(const QVariantMap& snapshot);
@@ -179,6 +187,7 @@ private:
         Wallpaper,
         DockNotificationBadgeVisibility,
         DockRevealIndicatorVisibility,
+        DockAutoHideApp,
         Appearance,
         Launcher,
         Shortcuts,
@@ -242,6 +251,9 @@ private:
     bool m_wallpaperBusy = false;
     QList<QStringList> m_wallpaperQueue;
     QString m_lastError;
+    // Snapshot of the Shell's persisted UI language, taken before the window
+    // loads (see savedLanguage()).
+    QString m_savedLanguage;
     // The Shell directory this window is talking to: seeded from KOS_SHELL_DIR,
     // replaced by whichever candidate answers. Empty until one of the two has
     // happened, which is also the state that reads as "not a development

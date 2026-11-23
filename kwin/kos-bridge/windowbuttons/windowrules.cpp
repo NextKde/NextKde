@@ -276,6 +276,46 @@ WindowMatcher appMatcher(const WindowQuery &query)
     return matcher;
 }
 
+MatchScope matcherScope(const WindowMatcher &matcher)
+{
+    return (matcher.title.isEmpty() && matcher.titleRegex.isEmpty()
+            && matcher.role.isEmpty())
+        ? MatchScope::App
+        : MatchScope::Window;
+}
+
+MatchScope initialAdjustScope(const WindowQuery &query,
+                              const std::optional<WindowMatcher> &existingMatcher,
+                              bool hasDistinctSibling)
+{
+    if (existingMatcher && !existingMatcher->isEmpty()) {
+        return matcherScope(*existingMatcher);
+    }
+    if (!query.role.isEmpty()) {
+        return MatchScope::Window;
+    }
+    if (!query.caption.isEmpty() && hasDistinctSibling) {
+        return MatchScope::Window;
+    }
+    return MatchScope::App;
+}
+
+WindowMatcher resolvedAdjustMatcher(const WindowQuery &query, MatchScope scope,
+                                    const std::optional<WindowMatcher> &existingMatcher)
+{
+    const bool hasExisting = existingMatcher && !existingMatcher->isEmpty();
+    if (scope == MatchScope::App) {
+        if (hasExisting && matcherScope(*existingMatcher) == MatchScope::App) {
+            return *existingMatcher;
+        }
+        return appMatcher(query);
+    }
+    if (hasExisting && matcherScope(*existingMatcher) == MatchScope::Window) {
+        return *existingMatcher;
+    }
+    return adjustmentMatcher(query);
+}
+
 QString overlayModeToString(OverlayMode mode)
 {
     switch (mode) {

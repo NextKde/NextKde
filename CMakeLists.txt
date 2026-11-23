@@ -97,6 +97,12 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/tooltip-mutex.test.mjs)
         set_tests_properties(kos-dock.tooltip-mutex PROPERTIES LABELS logic TIMEOUT 10)
+        # Regression: two roles named artwork that is not bundled, so those rows
+        # rendered nothing and read as a deliberate blank.
+        add_test(NAME kos-icons.roles
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/icons/roles.test.mjs)
+        set_tests_properties(kos-icons.roles PROPERTIES LABELS logic TIMEOUT 10)
         # Regression: the DeskCenter weather card overlapped its hero/symbol/
         # condition text on short cards; the size formulas must keep their
         # availability terms above the weekly forecast.
@@ -126,6 +132,20 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 --test ${CMAKE_CURRENT_SOURCE_DIR}/tests/applauncher/screen-routing.test.mjs)
         set_tests_properties(kos-applauncher.screen-routing PROPERTIES LABELS logic TIMEOUT 10)
+        # Regression: the launcher reveal clip froze at the previous output
+        # size after the Dock left and returned, and the side-Dock card was
+        # sized from the Dock's whole edge length (PR #425).
+        add_test(NAME kos-applauncher.launcher-geometry
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/applauncher/test_launcher_geometry.mjs)
+        set_tests_properties(kos-applauncher.launcher-geometry PROPERTIES LABELS logic TIMEOUT 10)
+        # Regression: persistent status panels on a secondary output were
+        # pinned to its far edge, and side-Dock panels ran off the bottom
+        # (PR #424).
+        add_test(NAME kos-shell.panel-placement
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/common/test_panel_placement.mjs)
+        set_tests_properties(kos-shell.panel-placement PROPERTIES LABELS logic TIMEOUT 10)
         add_test(NAME kos-shell.traffic-history
             COMMAND ${KOS_NODE_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/status-area/test_traffic_history.mjs)
         set_tests_properties(kos-shell.traffic-history PROPERTIES LABELS logic TIMEOUT 10)
@@ -338,6 +358,13 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-shell.widget-open PROPERTIES
                 LABELS "ui;headless" TIMEOUT 60
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.pim-refresh
+                COMMAND ${KOS_WEATHER_PYTHON_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/pim-refresh/run.py
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.pim-refresh PROPERTIES
+                LABELS "ui;headless" TIMEOUT 20
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         if(KOS_QUICKSHELL_EXECUTABLE)
@@ -884,6 +911,12 @@ find_package(Qt6 6.5 REQUIRED COMPONENTS
 find_package(KF6WindowSystem 6.0 QUIET)
 if(BUILD_TESTING)
     find_package(Qt6 6.5 REQUIRED COMPONENTS Test)
+    add_executable(kos-window-effect-policy-test
+        kwin/common/tests/windoweffectpolicy_test.cpp)
+    target_link_libraries(kos-window-effect-policy-test PRIVATE Qt6::Core)
+    add_test(NAME kos-window.effect-policy COMMAND kos-window-effect-policy-test)
+    set_tests_properties(kos-window.effect-policy PROPERTIES LABELS platform TIMEOUT 10)
+
     add_executable(kos-stage-desktop-policy-test
         kwin/kwin-effects-stageanim/tests/test_desktop_policy.cpp)
     target_link_libraries(kos-stage-desktop-policy-test PRIVATE Qt6::Core)

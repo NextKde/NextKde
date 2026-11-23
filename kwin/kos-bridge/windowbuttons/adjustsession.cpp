@@ -51,17 +51,17 @@ bool AdjustSession::begin(KWin::EffectWindow *window, const WindowQuery &query,
         m_existingMatcher = existingRule->matcher;
         m_baseOverlayMode = existingRule->overlayMode;
         m_overlayMode = existingRule->overlayMode;
-        m_baseScope = (existingRule->matcher.title.isEmpty()
-                       && existingRule->matcher.titleRegex.isEmpty()
-                       && existingRule->matcher.role.isEmpty())
-            ? MatchScope::App : MatchScope::Window;
+        m_baseScope = matcherScope(existingRule->matcher);
         m_scope = m_baseScope;
     } else {
         m_hasExistingRule = false;
         m_existingMatcher = WindowMatcher{};
         m_baseOverlayMode = OverlayMode::Cover;
         m_overlayMode = OverlayMode::Cover;
-        m_baseScope = canToggleScope() ? MatchScope::Window : MatchScope::App;
+        const bool hasDistinctSibling = m_query.role.isEmpty()
+            && !m_query.caption.isEmpty()
+            && m_siblingProbe && m_siblingProbe(m_query);
+        m_baseScope = initialAdjustScope(m_query, std::nullopt, hasDistinctSibling);
         m_scope = m_baseScope;
     }
 
@@ -177,24 +177,9 @@ void AdjustSession::setMatchScope(MatchScope scope)
 
 WindowMatcher AdjustSession::targetMatcher() const
 {
-    if (m_scope == MatchScope::App) {
-        if (m_hasExistingRule && m_baseScope == MatchScope::App && !m_existingMatcher.isEmpty()) {
-            return m_existingMatcher;
-        }
-        return appMatcher(m_query);
-    }
-    if (m_hasExistingRule && m_baseScope == MatchScope::Window
-        && !m_existingMatcher.titleRegex.isEmpty()) {
-        return m_existingMatcher;
-    }
-    // A roleless window with no distinct open sibling of the same class and
-    // type commits as class+type so changing document or tab captions keep
-    // the cover. A user who wants the caption honoured despite that can
-    // hand-write a titleRegex rule, which the branch above preserves.
-    if (m_query.role.isEmpty() && !m_siblingProbe(m_query)) {
-        return appMatcher(m_query);
-    }
-    return adjustmentMatcher(m_query);
+    return resolvedAdjustMatcher(
+        m_query, m_scope,
+        m_hasExistingRule ? std::optional<WindowMatcher>(m_existingMatcher) : std::nullopt);
 }
 
 void AdjustSession::syncOptions()
@@ -231,8 +216,8 @@ bool AdjustSession::commit()
         // effect would be a second place the same answer is written down, and
         // it would take the panel out of the user's configuration for nothing.
         // A changed scope or overlay mode counts as a change even when the
-        // geometry is identical, so a legacy caption-locked rule still gets
-        // promoted to class+type by re-saving it here.
+        // geometry is identical, so switching between title/role and app scope
+        // still updates the saved rule.
         qInfo() << "KOS: the panel for" << m_query.windowClass
                 << "was not changed; nothing written";
         return true;

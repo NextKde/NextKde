@@ -50,7 +50,7 @@ export const icons = Object.freeze({
     "action.reset": "reset-layout",
     "action.restart": "system-reboot",
     "action.screenshot": "screenshot",
-    "action.settings": "preferences-system",
+    "action.settings": "gear_alt",
     "action.shutdown": "power",
     "action.sleep": "system-suspend",
     "action.sort": "sort-name",
@@ -193,7 +193,7 @@ export const icons = Object.freeze({
     "dock.menu.launcher.bottomWide": "",
     "dock.menu.launcher.center": "",
     "dock.menu.launcher.fullscreen": "",
-    "dock.menu.launcher.settings": "preferences-system",
+    "dock.menu.launcher.settings": "gear_alt",
     "dock.menu.minimize": "",
     "dock.menu.new_window": "window-new",
     "dock.menu.open": "",
@@ -221,6 +221,7 @@ export const icons = Object.freeze({
     "launcher.closeEditor": "xmark",
     "launcher.folder.removeApp": "minus",
     "launcher.hiddenApps": "eye",
+    "launcher.menu.sendToDesktop": "link",
     "launcher.search": "search",
 
     // media

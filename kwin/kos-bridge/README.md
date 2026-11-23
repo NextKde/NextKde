@@ -383,13 +383,16 @@ without a jump. The wheel leaves `offset` alone, so the panel grows away from th
 edge it is pinned to rather than away from its own middle.
 
 Saving matches the **window class and type**, plus the window role when one
-is available. Without a role (including Wayland), adjusting a window when no
-distinct sibling of the same class and type is open saves against class and
+is available. Without a role (including Wayland), starting a new adjustment when
+no distinct sibling of the same class and type is open defaults to class and
 type so changing document or tab titles keep the cover; when a distinct sibling
 is also open (for example a QQ or WeChat image viewer alongside the main
-window), the exact caption scopes the override to that secondary window without
-disturbing the main one. Use a hand-written `titleRegex` for changing secondary
-captions when appropriate. A window with no class cannot be adjusted.
+window), it defaults to the exact caption so the override scopes to that
+secondary window without disturbing the main one. In either case, the adjust
+bar lets you explicitly toggle between title/role scope and app scope, and your
+selection is always honored on save. Use a hand-written `titleRegex` for
+changing secondary captions when appropriate. A window with no class cannot be
+adjusted.
 
 Every session ends in a line in the journal, because the file is the only readout
 an adjustment has:

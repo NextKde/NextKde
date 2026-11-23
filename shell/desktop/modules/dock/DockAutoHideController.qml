@@ -23,7 +23,11 @@ Item {
     // ────────────────────────────────────────────────────────────
     // Inputs (wired by DockWindow / DockContainer)
     // ────────────────────────────────────────────────────────────
-    property string mode: "always"          // "always" | "smart" | "persistent"
+    property string mode: "always"          // saved "always" | "smart" | "persistent"
+    property var autoHideApps: []           // canonical desktop IDs from config
+    property bool hasAutoHideApp: false
+    readonly property string effectiveMode:
+        DockMath.effectiveVisibilityMode(ctl.mode, ctl.hasAutoHideApp)
     property bool configReady: false
     property bool windowDataReady: false
     property string position: "bottom"
@@ -47,10 +51,10 @@ Item {
     // boot-resolve step then reveals (or stays hidden) per the real mode.
     property real revealProgress: 0.0
     readonly property bool hidden: ctl.phase === "Hidden"
-    readonly property bool handleActive: ctl.mode !== "always"
+    readonly property bool handleActive: ctl.effectiveMode !== "always"
     property bool hasWindowConflict: false
     readonly property bool policyWantsHidden:
-        DockMath.policyWantsHidden(ctl.mode, ctl.hasWindowConflict)
+        DockMath.policyWantsHidden(ctl.effectiveMode, ctl.hasWindowConflict)
     readonly property bool hasInhibitor:
         ctl.pointerInsideDock || ctl.editing || ctl.dragging
         || ctl.popupOpen || ctl.launcherOpen || ctl._temporaryRevealHold
@@ -80,7 +84,7 @@ Item {
         const s = ctl.targetScreen
         if (!s || s.x === undefined || s.width === undefined)
             return { x: 0, y: 0, width: 1, height: 1 }
-        return { x: s.x, y: s.y, width: s.width, height: s.height }
+        return { name: s.name || "", x: s.x, y: s.y, width: s.width, height: s.height }
     }
 
     function _windowCandidates() {
@@ -91,6 +95,8 @@ Item {
             if (!r || !r.geometry)
                 continue
             out.push({
+                autoHideApp: ctl.autoHideApps.some(app => AppIdentityService.sameApp(
+                    r.identity || r.toplevel?.appId || "", app)),
                 geometry: r.geometry,
                 screenName: r.screenName || "",
                 isMinimized: !!r.toplevel?.minimized || r.isVisible === false,
@@ -105,21 +111,19 @@ Item {
     }
 
     function _recomputeConflict() {
-        if (!ctl.windowDataReady || ctl.dockWidth <= 0 || ctl.dockHeight <= 0) {
-            const changed = ctl.hasWindowConflict
-            ctl.hasWindowConflict = false
-            return changed
-        }
         const target = ctl._targetRect()
+        const cands = ctl.windowDataReady ? ctl._windowCandidates() : []
+        // App presence does not depend on the Dock layout being measured yet.
+        const appPresent = DockMath.hasAutoHideApp(cands, target, WindowService.currentDesktopId)
         const base = DockMath.visibleDockRect(target, ctl.position,
             ctl.dockWidth, ctl.dockHeight, ctl.edgeMargin)
-        const cands = ctl._windowCandidates()
-        const next = DockMath.hasConflict(cands, target,
-            DockMath.intentionalOverlapRect(base, ctl.position), base,
-            ctl.hasWindowConflict, WindowService.currentDesktopId)
-        const changed = next !== ctl.hasWindowConflict
-        if (changed)
-            ctl.hasWindowConflict = next
+        const next = ctl.dockWidth > 0 && ctl.dockHeight > 0
+            && DockMath.hasConflict(cands, target,
+                DockMath.intentionalOverlapRect(base, ctl.position), base,
+                ctl.hasWindowConflict, WindowService.currentDesktopId)
+        const changed = next !== ctl.hasWindowConflict || appPresent !== ctl.hasAutoHideApp
+        ctl.hasWindowConflict = next
+        ctl.hasAutoHideApp = appPresent
         return changed
     }
 
@@ -222,13 +226,15 @@ Item {
         if (ctl.phase === next)
             return
         console.log("[DockAutoHide] " + ctl.phase + " -> " + next
-            + " mode=" + ctl.mode + " conflict=" + ctl.hasWindowConflict
+            + " mode=" + ctl.effectiveMode + " conflict=" + ctl.hasWindowConflict
             + " inhibit=" + ctl.hasInhibitor)
         ctl.phase = next
     }
 
     function hideDelay() {
-        if (ctl.mode === "persistent") {
+        if (ctl.hasAutoHideApp)
+            return DockAnimation.smartHideConflictDelay
+        if (ctl.effectiveMode === "persistent") {
             if (!ctl._persistentGraceUsed) {
                 ctl._persistentGraceUsed = true
                 return DockAnimation.smartHideModeSwitchGrace
@@ -259,14 +265,15 @@ Item {
     function _tryResolveBoot(forced) {
         if (!ctl._completed || ctl.phase !== "Bootstrapping") return
         if (!ctl.configReady && !forced) return
-        if (ctl.mode === "always") {
+        if ((ctl.mode === "smart" || ctl.autoHideApps.length > 0)
+                && !ctl.windowDataReady && !forced) return
+        ctl._recomputeConflict()
+        if (ctl.effectiveMode === "always") {
             ctl._enterAlwaysShown()
             return
         }
-        if (ctl.mode === "smart" && !ctl.windowDataReady && !forced) return
-
         ctl._bootTimeout.stop()
-        if (ctl.mode === "persistent") {
+        if (ctl.effectiveMode === "persistent") {
             // Boot went straight to Hidden (not a runtime always→persistent
             // switch), so skip the 700ms confirmation grace for later leaves.
             ctl._persistentGraceUsed = true
@@ -290,7 +297,11 @@ Item {
     // ────────────────────────────────────────────────────────────
     function _doEvaluate(conflictCurrent = false) {
         if (!conflictCurrent) ctl._recomputeConflict()
-        if (ctl.mode === "always") {
+        if (ctl.phase === "Bootstrapping") {
+            ctl._tryResolveBoot(false)
+            return
+        }
+        if (ctl.effectiveMode === "always") {
             // Only force-show once the saved mode is confirmed; during boot the
             // real mode may still be smart/persistent.
             if (ctl.configReady && ctl.phase !== "Shown")
@@ -303,24 +314,24 @@ Item {
             return
         case "Shown":
         case "Held":
-            if (!DockMath.shouldBeVisible(ctl.mode, ctl.hasWindowConflict, ctl.hasInhibitor)) {
+            if (!DockMath.shouldBeVisible(ctl.effectiveMode, ctl.hasWindowConflict, ctl.hasInhibitor)) {
                 ctl._enterHidePending()
             } else if (ctl.phase === "Held" && !ctl.policyWantsHidden) {
                 ctl._setPhase("Shown")
             }
             return
         case "HidePending":
-            if (DockMath.shouldBeVisible(ctl.mode, ctl.hasWindowConflict, ctl.hasInhibitor)) {
+            if (DockMath.shouldBeVisible(ctl.effectiveMode, ctl.hasWindowConflict, ctl.hasInhibitor)) {
                 ctl._hidePendingTimer.stop()
                 ctl._enterShownOrHeld()
             }
             return
         case "Hiding":
-            if (DockMath.shouldBeVisible(ctl.mode, ctl.hasWindowConflict, ctl.hasInhibitor))
+            if (DockMath.shouldBeVisible(ctl.effectiveMode, ctl.hasWindowConflict, ctl.hasInhibitor))
                 ctl._animateTo(1)
             return
         case "Hidden":
-            if (DockMath.shouldBeVisible(ctl.mode, ctl.hasWindowConflict, ctl.hasInhibitor)
+            if (DockMath.shouldBeVisible(ctl.effectiveMode, ctl.hasWindowConflict, ctl.hasInhibitor)
                     && !ctl._handleHovered) {
                 // Conflict cleared (smart) or an inhibitor opened (popup /
                 // launcher / urgent) — reveal; the handle-hover path is handled
@@ -343,6 +354,7 @@ Item {
     }
 
     function _enterAlwaysShown() {
+        ctl._bootTimeout.stop()
         ctl._hidePendingTimer.stop()
         ctl._revealDelayTimer.stop()
         ctl._tempHoldTimer.stop()
@@ -356,7 +368,7 @@ Item {
     // Public methods
     // ────────────────────────────────────────────────────────────
     function handleEntered() {
-        if (ctl.mode === "always" || !ctl.handleActive) return
+        if (ctl.effectiveMode === "always" || !ctl.handleActive) return
         ctl._handleHovered = true
         if (ctl.phase === "Hidden") {
             ctl._setPhase("RevealPending")
@@ -374,7 +386,7 @@ Item {
     }
 
     function handleClicked() {
-        if (ctl.mode === "always" || !ctl.handleActive) return
+        if (ctl.effectiveMode === "always" || !ctl.handleActive) return
         ctl._revealDelayTimer.stop()
         if (ctl.phase === "Hidden" || ctl.phase === "RevealPending"
                 || ctl.revealProgress < 1) {
@@ -384,7 +396,10 @@ Item {
     }
 
     function requestReveal(reason, holdMs) {
-        if (ctl.mode === "always") return
+        // Urgency is published on the presentation lane before placementRevision.
+        // Read the new records now, or the first matching urgent app loses its hold.
+        ctl._recomputeConflict()
+        if (ctl.effectiveMode === "always") return
         ctl._temporaryRevealHold = true
         ctl._tempHoldTimer.interval = holdMs || DockAnimation.smartHideLeaveDelay
         ctl._tempHoldTimer.restart()
@@ -404,7 +419,7 @@ Item {
         ctl._tempHoldTimer.stop()
         ctl._temporaryRevealHold = false
         ctl._handleHovered = false
-        ctl.revealProgress = ctl.configReady && ctl.mode === "always" ? 1 : 0
+        ctl.revealProgress = 0
         ctl._setPhase("Bootstrapping")
         ctl._bootTimeout.restart()
         ctl._recomputeConflict()
@@ -415,6 +430,7 @@ Item {
     // Input plumbing
     // ────────────────────────────────────────────────────────────
     onModeChanged: ctl._evaluateInteraction()
+    onAutoHideAppsChanged: ctl._evaluateInteraction()
     readonly property string _screenGeometryKey: targetScreen
         ? [targetScreen.x, targetScreen.y, targetScreen.width, targetScreen.height].join(":") : ""
     on_ScreenGeometryKeyChanged: ctl._scheduleEvaluate()

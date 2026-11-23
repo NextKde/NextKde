@@ -106,12 +106,14 @@ ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
           [config](const WindowMatcher &matcher) {
               return config && config->removeRule(matcher);
           },
-          // Runs once, at commit time only: a roleless window being saved
-          // alongside another managed window of the same class and type under
-          // a different caption scopes the rule to that caption instead of
-          // promoting it to class+type.
-          [config](const WindowQuery &query) -> bool {
-              if (!config || !KWin::effects || query.role.isEmpty()) {
+          // Runs when starting a new adjustment session for a roleless window:
+          // detects whether another managed window of the same class and type
+          // is open under a different non-empty caption so the adjust bar
+          // defaults to title scope for secondary windows and app scope when
+          // alone.
+          [](const WindowQuery &query) -> bool {
+              if (!KWin::effects || !query.role.isEmpty()
+                  || query.windowClass.isEmpty() || query.caption.isEmpty()) {
                   return false;
               }
               const auto windows = KWin::effects->stackingOrder();
@@ -121,6 +123,7 @@ ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
                   }
                   if (other->windowClass() == query.windowClass
                       && other->windowTypeInt() == query.type
+                      && !other->caption().isEmpty()
                       && other->caption() != query.caption) {
                       return true;
                   }

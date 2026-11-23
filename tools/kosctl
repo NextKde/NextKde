@@ -78,6 +78,17 @@ is_nixos() {
     [[ -f /etc/NIXOS ]]
 }
 
+# Non-TTY callers (the update agent) set KOS_SUDO_ASKPASS=1 so sudo can ask
+# through $SUDO_ASKPASS instead of /dev/tty. LC_ALL=C keeps ksshaskpass able
+# to parse the prompt. Defaults stay plain sudo.
+kos_sudo() {
+    if [[ ${KOS_SUDO_ASKPASS:-0} == 1 ]]; then
+        LC_ALL=C sudo -A "$@"
+    else
+        sudo "$@"
+    fi
+}
+
 # Arch package names are kept in one place so `doctor`, automatic dependency
 # installation, and the README describe the same default build. The KWin list
 # is needed only while compositor plugins are enabled.
@@ -177,6 +188,41 @@ fedora_kwin_build_packages=(
 fedora_optional_runtime_packages=(
     NetworkManager wireplumber bluez brightnessctl
     wl-clipboard cliphist glib2 xdg-utils spectacle
+)
+
+# OpenSUSE Tumbleweed package names for the same default build. The KWin list
+# stays separate because compositor plugins are optional, while the spatial
+# list follows KOS_BUILD_SPATIAL. Flatpak/OSTree and Fcitx5 development files
+# are core requirements so Settings always receives its app worker and panel.
+opensuse_core_build_packages=(
+    git python313 cmake ninja gcc-c++ go curl patchelf
+    pkgconf-pkg-config gettext-tools
+    quickshell
+    flatpak-devel libostree-devel fcitx5-devel
+    qt6-base-common-devel qt6-declarative-devel qt6-declarative-imports
+    qt6-tools-devel qt6-linguist-devel qt6-translations
+    qt6-quick3d-devel qt6-quick3d-imports qt6-svg-devel qt6-imageformats
+    qt6-wayland-devel qt6-wayland-imports
+    qt6-qt5compat-devel qt6-qt5compat-imports
+    qt6-base-private-devel qt6-declarative-private-devel
+    kf6-extra-cmake-modules
+    wayland-devel wayland-protocols-devel
+    libxkbcommon-devel libxkbcommon-x11-devel
+    kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel
+    kf6-kio-devel kf6-kcalendarcore-devel kf6-kcmutils-devel
+)
+opensuse_spatial_build_packages=(
+    opencv-devel
+)
+opensuse_kwin_build_packages=(
+    kf6-kconfig-devel kf6-ki18n-devel kf6-kguiaddons-devel
+    kf6-kcoreaddons-devel kwin6-devel kdecoration6-devel libplasma6-devel
+    libdrm-devel libgbm-devel libepoxy-devel libxcb-devel libX11-devel
+    vulkan-devel zlib-devel
+)
+opensuse_optional_runtime_packages=(
+    NetworkManager wireplumber bluez brightnessctl
+    wl-clipboard cliphist xdg-utils spectacle
 )
 
 fedora_package_installed() {
@@ -466,6 +512,28 @@ doctor() {
                 debian_quickshell_hint
             fi
         fi
+    elif command -v zypper >/dev/null 2>&1; then
+        local package
+        local -a required_packages=("${opensuse_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${opensuse_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${opensuse_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if rpm -q "$package" >/dev/null 2>&1; then
+                printf 'ok   pkg:%-8s installed\n' "$package"
+            else
+                printf 'miss pkg:%-8s required to build the default configuration\n' "$package"
+                failed=1
+            fi
+        done
+        for package in "${opensuse_optional_runtime_packages[@]}"; do
+            if ! rpm -q "$package" >/dev/null 2>&1; then
+                printf 'warn pkg:%-8s optional runtime integration unavailable\n' "$package"
+            fi
+        done
     elif command -v dnf >/dev/null 2>&1; then
         local package
         local -a required_packages=("${fedora_core_build_packages[@]}")
@@ -489,7 +557,7 @@ doctor() {
             fi
         done
     else
-        printf 'info %-12s library/package checks are currently available on Arch, Debian, Fedora and NixOS only\n' packages
+        printf 'info %-12s library/package checks are currently available on Arch, Debian, Fedora, OpenSUSE and NixOS only\n' packages
     fi
     if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
         printf 'ok   %-12s graphical session detected\n' session
@@ -538,6 +606,37 @@ configure_if_needed() {
     fi
     cmake -S "$source_dir" -B "$target_dir" -G Ninja "$@"
     printf '%s\n' "$inputs" > "$stamp"
+}
+
+opensuse_build_dependency_signature() {
+    local package
+    local -a required_packages=("${opensuse_core_build_packages[@]}")
+    if kwin_plugins_enabled; then
+        required_packages+=("${opensuse_kwin_build_packages[@]}")
+    fi
+    if spatial_requested; then
+        required_packages+=("${opensuse_spatial_build_packages[@]}")
+    fi
+    for package in "${required_packages[@]}"; do
+        rpm -q --qf '%{NAME}=%{VERSION}-%{RELEASE}\n' "$package" 2>/dev/null \
+            || printf '%s=missing\n' "$package"
+    done
+}
+
+refresh_opensuse_cmake_configuration() {
+    # CMake caches failed find_package/pkg-config probes. Reconfigure when an
+    # OpenSUSE-only required package is installed or upgraded so AUTO detection
+    # cannot keep the worker or Fcitx5 panel missing after dependencies change.
+    command -v zypper >/dev/null 2>&1 || return 0
+
+    local stamp="$build_dir/opensuse-build-dependencies"
+    local current
+    current=$(opensuse_build_dependency_signature)
+    if [[ -f "$stamp" && "$(<"$stamp")" == "$current" ]]; then
+        return 0
+    fi
+    rm -f -- "$build_dir/kos-configure-inputs"
+    printf '%s\n' "$current" > "$stamp"
 }
 
 configure_build() {
@@ -726,7 +825,7 @@ ensure_build_dependencies() {
         if (( ${#missing_packages[@]} > 0 )); then
             printf 'KOS build dependencies require administrator permission:\n'
             printf '  %s\n' "${missing_packages[*]}"
-            sudo pacman -S --needed -- "${missing_packages[@]}"
+            kos_sudo pacman -S --needed -- "${missing_packages[@]}"
         fi
     elif command -v apt-get >/dev/null 2>&1; then
         local package resolved
@@ -765,8 +864,28 @@ ensure_build_dependencies() {
             if (( ${#missing_packages[@]} > 0 )); then
                 printf 'KOS build dependencies require administrator permission:\n'
                 printf '  %s\n' "${missing_packages[*]}"
-                sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
+                kos_sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
             fi
+        fi
+    elif command -v zypper >/dev/null 2>&1; then
+        local package
+        local -a missing_packages=()
+        local -a required_packages=("${opensuse_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${opensuse_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${opensuse_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if ! rpm -q "$package" >/dev/null 2>&1; then
+                missing_packages+=("$package")
+            fi
+        done
+        if (( ${#missing_packages[@]} > 0 )); then
+            printf 'KOS build dependencies require administrator permission:\n'
+            printf '  %s\n' "${missing_packages[*]}"
+            sudo zypper --non-interactive install -- "${missing_packages[@]}"
         fi
     elif command -v dnf >/dev/null 2>&1; then
         local package
@@ -786,7 +905,7 @@ ensure_build_dependencies() {
         if (( ${#missing_packages[@]} > 0 )); then
             printf 'KOS build dependencies require administrator permission:\n'
             printf '  %s\n' "${missing_packages[*]}"
-            sudo dnf install -y "${missing_packages[@]}"
+            kos_sudo dnf install -y "${missing_packages[@]}"
         fi
     fi
 }
@@ -824,6 +943,7 @@ build_kwin_glass() {
 
 build() {
     detect_kwin_plugin_api_version
+    refresh_opensuse_cmake_configuration
     if (( kwin_plugin_rebuild_required )); then
         # A KWin package upgrade changes the imported library's absolute path
         # (for example libkwin.so.6.8.0 -> libkwin.so.6.8.1). Cleaning object
@@ -1565,8 +1685,18 @@ install_kwin_plugins() {
             *) ;;  # A path outside the system prefix was never installed.
         esac
     done < <(comm -23 "$previous_manifest" "$kwin_manifest")
+    # Ask once, up front: the rm/cp/chmod below are separate sudo calls and a
+    # non-TTY caller cannot answer a second prompt mid-install. A NOPASSWD
+    # install needs no prompt at all, and `sudo -v` would still ask, so probe
+    # with a no-op command first.
+    if [[ ${KOS_SUDO_ASKPASS:-0} == 1 ]] && ! kos_sudo -n true; then
+        if ! kos_sudo -v; then
+            printf 'sudo authorization failed; KWin plugins were not changed.\n' >&2
+            return 1
+        fi
+    fi
     if (( ${#system_entries[@]} > 0 || ${#stale_entries[@]} > 0 )); then
-        sudo rm -f -- "${system_entries[@]}" "${stale_entries[@]}"
+        kos_sudo rm -f -- "${system_entries[@]}" "${stale_entries[@]}"
     fi
     # The staged tree is written by the invoking user, so a plain `cp -a` copies
     # its ownership into the system prefix: the KWin plugins and the glass
@@ -1605,12 +1735,12 @@ install_kwin_plugins() {
     # directory traverse explicitly instead of only removing write.
     find "$stage_dir$kwin_system_prefix" -type d -exec chmod 755 {} +
     find "$stage_dir$kwin_system_prefix" -type f -exec chmod go-w,a+rX {} +
-    sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
+    kos_sudo cp -a --no-preserve=ownership "${selinux_context[@]}" \
         "$stage_dir$kwin_system_prefix/." "$kwin_system_prefix/"
     # Belt: the prefix itself is what a bad umask breaks first, and restoring
     # its 0755 here is exactly the manual recovery -- cheap, and it makes the
     # system-wide lockout impossible even if a future staging step slips.
-    sudo chmod 755 "$kwin_system_prefix"
+    kos_sudo chmod 755 "$kwin_system_prefix"
     # Directories the stale files lived in are pruned only when they end up
     # empty, so a shared directory such as the plugin dir is never touched.
     if (( ${#stale_entries[@]} > 0 )); then
@@ -1618,7 +1748,7 @@ install_kwin_plugins() {
         # QML decoration package nested files two levels deep, and pruning only
         # each file's own directory left the package root behind.
         printf '%s\n' "${stale_entries[@]}" | xargs -r -n1 dirname \
-            | sort -ru | sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
+            | sort -ru | kos_sudo xargs -r rmdir -p --ignore-fail-on-non-empty 2>/dev/null || true
     fi
     enable_kwin_effects
     printf 'Installed and enabled KOS Bridge, Dock Animation, Context Menu Input, and Glass.\n'
@@ -1923,7 +2053,7 @@ install_all() {
     take_over_plasma_desktop
     warn_notification_claimers
     python3 "$project_dir/tools/release/source-release.py" stamp "$prefix/share/kos/release.json" \
-        --from-file "$build_dir/release.json"
+        --from-file "$build_dir/release.json" --source-root "$project_dir"
     print_install_summary
 }
 
@@ -2009,7 +2139,7 @@ uninstall_kwin_plugins() {
         if (( ${#system_files[@]} > 0 )); then
             printf 'Removing KWin effects from %s requires administrator permission.\n' \
                 "$kwin_system_prefix"
-            sudo rm -f -- "${system_files[@]}"
+            kos_sudo rm -f -- "${system_files[@]}"
         fi
     fi
     # Clear disable overrides only after plugin files were actually removed.

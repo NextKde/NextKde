@@ -22,10 +22,9 @@ QtObject {
 
     // 生效语言：只接受 "zh-CN" / "en"。"auto" 由 shell 侧 I18nService 解析
     // 后写入，绝不能直接落进这里（否则 tr() 查不到词典目录会全部回退英文）。
-    // 默认按系统语言解析：覆盖 I18nService 异步加载持久值之前的启动窗口，
-    // 让英文系统的用户从第一帧起就是英文。
-    // 持久化与切换入口在 shell 侧 I18nService（state 文件 + IPC），
-    // settings 通过 i18n-settings IPC 目标读写同一个值。
+    // 默认按系统语言解析：覆盖没有持久值的进程；shell 在创建界面之前就写入
+    // 持久值，因此第一帧已是用户选的语言。
+    // 持久化与切换入口在 shell 侧 I18nService（state 文件 + IPC）。
     property string language: systemDefault()
 
     // 系统语言解析的唯一实现（I18nService 与 settings 的本地兜底都走这里）：

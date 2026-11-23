@@ -659,7 +659,6 @@ Item {
     // from the rest of the shell.
     ContextMenu {
         id: trashContextMenu
-        reserveIconSpace: true
         capsuleReveal: true
         anchorItem: trashIcon
         position: ConfigService.position
@@ -692,7 +691,6 @@ Item {
     // One menu for every user separator. Separators have no app actions.
     ContextMenu {
         id: separatorContextMenu
-        reserveIconSpace: true
         capsuleReveal: true
         position: ConfigService.position
         baseColor: ThemeService.backgroundColor
@@ -734,7 +732,6 @@ Item {
     // away from the rest of the shell.
     ContextMenu {
         id: appLauncherContextMenu
-        reserveIconSpace: true
         capsuleReveal: true
         anchorItem: appLauncherIcon
         position: ConfigService.position

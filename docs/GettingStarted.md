@@ -111,9 +111,10 @@ sudo zypper install \
   quickshell \
   git python313 cmake ninja gcc-c++ go curl patchelf \
   pkgconf-pkg-config gettext-tools \
+  flatpak-devel libostree-devel fcitx5-devel \
   qt6-base-common-devel qt6-declarative-devel qt6-declarative-imports \
   qt6-tools-devel qt6-linguist-devel qt6-translations \
-  qt6-quick3d-devel qt6-quick3d-imports qt6-svg-devel qt6-imageformats \
+  qt6-quick3d-devel qt6-quick3d-imports qt6-svg-devel qt6-imageformats opencv-devel \
   qt6-wayland-devel qt6-wayland-imports \
   qt6-qt5compat-devel qt6-qt5compat-imports \
   qt6-base-private-devel qt6-declarative-private-devel \
@@ -178,6 +179,19 @@ Selection stops on dirty sources or fetch/API errors. It only changes source; in
 checkout and start applies services. `kosctl version` distinguishes Installed and Source.
 New KWin plugins and desktop takeover require logout/login or reboot.
 Shallow source selection avoids historical process assets; an existing full clone retains its history.
+
+For a source checkout installed with `kosctl install`, Settings → About also offers
+Check for updates with two channels: **Stable** follows the latest official GitHub Release
+tag, and **Canary** follows `origin/main`. The choice is saved per install
+(`~/.config/kos/update-channel`); a release install starts on Stable and a development
+install on Canary. It refuses dirty trees or in-progress Git operations,
+builds incrementally, and asks for administrator authorization before changing KWin
+plugins. The build and user files stay user-owned; only the existing system-plugin copy
+uses sudo. The first install after this feature must run `./tools/kosctl install` once from
+the checkout so the release record includes its path. Switching channels checks out the
+selected revision (detached); local commits stay on their branches. Stable requires a
+GitHub `origin` with an official Release. Updated KWin plugins still require logout/login
+or a compositor restart.
 
 ## Optional standalone applications
 
@@ -255,6 +269,11 @@ Before upgrading, back up personal data. Managed runtime/config backups live in
 `${XDG_STATE_HOME:-$HOME/.local/state}/kos/install-backups/`; they do not cover all system plugins,
 dependencies or application data. Deployment is not atomic. See [rollback constraints](Releasing.md#backups-and-rollback)
 for reinstalling a compatible old tag and restoring configuration with services stopped.
+
+Settings → About updates the source checkout in place: it writes progress and a full log under
+`${XDG_STATE_HOME:-$HOME/.local/state}/kos/update/`, can outlive the Settings window, and leaves
+the running Shell untouched until you choose Restart KOS. If authorization or the build fails,
+the source checkout may already be updated; check the log and retry before logging out.
 
 ```sh
 ./tools/kosctl uninstall

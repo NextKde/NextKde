@@ -7,8 +7,10 @@ import Quickshell.Widgets
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import qs.desktop.modules.platform
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
+import "LauncherGeometry.mjs" as LauncherGeometry
 
 // Output-bound application-launcher surface. The panel itself spans the
 // output only to make centering reliable. The visible glass card follows Dock
@@ -168,28 +170,18 @@ PanelWindow {
         }
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
-    readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
-    readonly property real minimumLauncherHeight: 500
-    readonly property bool usesMinimumSize: AppLauncherService.dockWidth < minimumLauncherWidth
-    // Sizing depends on display mode: fullscreen fills screen, center floats
-    // with comfortable dialogue dimensions, bottom follows the Dock.
-    readonly property real launcherWidth: isFullscreenMode
-        ? (screen ? screen.width : 1920)
-        : (isCenterMode
-            ? (screen ? Math.min(Math.max(680, Math.round(screen.width * 0.65)), 1040) : 760)
-            : (isBottomWideMode
-                ? (screen ? Math.round(screen.width * 0.50) : 960)
-                : (usesMinimumSize ? minimumLauncherWidth : AppLauncherService.dockWidth)))
-
-    readonly property real launcherHeight: isFullscreenMode
-        ? (screen ? screen.height : 1080)
-        : (isCenterMode
-            ? (screen ? Math.min(Math.max(520, Math.round(screen.height * 0.68)), 760) : 560)
-            : (!dockAtBottom
-                ? Math.min(Math.max(minimumLauncherHeight, AppLauncherService.dockWidth),
-                    Math.round(screen.height * 0.85))
-                : (usesMinimumSize ? minimumLauncherHeight
-                    : Math.round(screen.height * 0.50))))
+    // Sizing and placement live in LauncherGeometry.mjs so CI can exercise
+    // the math without a compositor: this block used to be an inline ternary
+    // tree, and the side-Dock shape regressions had no test anywhere.
+    readonly property var _cardSize: LauncherGeometry.launcherSize({
+        displayMode: root.displayMode,
+        screenWidth: screen ? screen.width : 0,
+        screenHeight: screen ? screen.height : 0,
+        dockPosition: AppLauncherService.dockPosition,
+        dockWidth: AppLauncherService.dockWidth
+    })
+    readonly property real launcherWidth: _cardSize.width
+    readonly property real launcherHeight: _cardSize.height
     // Preserve the resolved catalogue while hidden. Theme icons deliberately
     // load on the GUI thread, so clearing this model on close made every open
     // rebuild and synchronously decode the first screen of icons.
@@ -469,6 +461,8 @@ PanelWindow {
         appContextMenu.anchorItem = anchorItem
         appContextMenu.clear()
         appContextMenu.addItem("application-open", I18n.tr("Open app"), "open")
+        appContextMenu.addItem("launcher.menu.sendToDesktop",
+            I18n.tr("Send to Desktop"), "send-to-desktop")
         appContextMenu.addItem("edit-rename", I18n.tr("Edit app"), "edit")
         const pinned = DockModelService.isAppPinned(app.id)
         appContextMenu.addItem(pinned ? "unpin" : "pin",
@@ -479,6 +473,29 @@ PanelWindow {
 
     function dismissApplicationMenu() {
         appContextMenu.hide()
+    }
+
+    // The launcher stays open after sending an app to the desktop, so the
+    // result needs an explicit surface. Success is visible as the new icon;
+    // an existing shortcut or a failed write would otherwise look like a
+    // no-op.
+    function notifyDesktopShortcutResult(ok, created) {
+        if (ok && created)
+            return
+        const summary = ok
+            ? I18n.tr("Shortcut already exists on Desktop")
+            : I18n.tr("Could not create the desktop shortcut")
+        PlatformClient.request("notify", {
+            summary: summary,
+            body: "",
+            icon: "",
+            appName: "NextKDE",
+            urgency: "normal"
+        }, function(response) {
+            if (!response?.ok)
+                console.warn("[AppLauncher] shortcut notify failed: "
+                    + (response?.error?.message || "platform unavailable"))
+        })
     }
 
     function showApplicationEditor(app) {
@@ -1136,6 +1153,8 @@ PanelWindow {
                 return;
             if (name === "open")
                 root.launchApplication(app);
+            else if (name === "send-to-desktop")
+                AppActionService.sendToDesktop(app.id);
             else if (name === "edit")
                 AppActionService.edit(app);
             else if (name === "pin")
@@ -1158,6 +1177,16 @@ PanelWindow {
         }
         function onHideRequested(appId) {
             AppLauncherConfigService.hideApplication(appId);
+        }
+        function onDesktopShortcutFinished(appId, ok, created, path, errorCode) {
+            if (ok && created) {
+                console.log("[AppLauncher] desktop shortcut app=" + appId
+                    + " path=" + path);
+                return;
+            }
+            console.log("[AppLauncher] desktop shortcut app=" + appId
+                + " result=" + (errorCode || (ok ? "already-exists" : "failed")));
+            root.notifyDesktopShortcutResult(ok, created);
         }
     }
 
@@ -1241,17 +1270,24 @@ PanelWindow {
 
     Item {
         id: launcherRevealClip
-        anchors.fill: root.isFullscreenMode ? parent : undefined
-        anchors.centerIn: root.isCenterMode ? parent : undefined
-        anchors.horizontalCenter: (root.isBottomMode && root.dockAtBottom)
-            ? parent.horizontalCenter : undefined
-        anchors.bottom: (root.isBottomMode && root.dockAtBottom) ? parent.bottom : undefined
-        anchors.verticalCenter: (root.isBottomMode && !root.dockAtBottom)
-            ? parent.verticalCenter : undefined
-        anchors.left: (root.isBottomMode && root.dockAtLeft) ? parent.left : undefined
-        anchors.right: (root.isBottomMode && root.dockAtRight) ? parent.right : undefined
-        width: root.isFullscreenMode ? parent.width : root.launcherWidth
-        height: root.isFullscreenMode ? parent.height : root.launcherHeight
+        // Explicit geometry, never a runtime anchor-set switch: Qt can retain
+        // a previous anchor set for a frame, which froze this clip's
+        // width/height at the old output size after the Dock returned from a
+        // side edge (the card then opened at 1874x1080 instead of 960x540).
+        // The placement math is unit tested in test_launcher_geometry.mjs.
+        readonly property var rect: LauncherGeometry.revealRect({
+            isFullscreenMode: root.isFullscreenMode,
+            isCenterMode: root.isCenterMode,
+            dockPosition: AppLauncherService.dockPosition,
+            width: root.launcherWidth,
+            height: root.launcherHeight,
+            parentWidth: parent ? parent.width : 0,
+            parentHeight: parent ? parent.height : 0
+        })
+        x: rect.x
+        y: rect.y
+        width: rect.width
+        height: rect.height
         clip: root.isFullscreenMode
 
         // The fullscreen presentation owns the entire output, not merely the

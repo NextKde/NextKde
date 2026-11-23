@@ -24,11 +24,6 @@ enum class AdjustAction {
     Done,
 };
 
-enum class MatchScope {
-    Window,
-    App,
-};
-
 struct AdjustBarState {
     OverlayMode mode = OverlayMode::Cover;
     MatchScope scope = MatchScope::Window;
