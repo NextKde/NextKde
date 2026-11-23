@@ -397,8 +397,10 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
+          # Every logic test is its own short-lived node process; four at a
+          # time is well inside the per-test TIMEOUT budget.
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^logic$' \
+            --parallel 4 -L '^logic$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/logic.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
 
@@ -436,8 +438,11 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
+          # Each suite runs its own offscreen process. Two at a time keeps
+          # CPU contention from tripping the tighter per-test TIMEOUTs while
+          # still overlapping the two-minute tail.
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^headless$' \
+            --parallel 2 -L '^headless$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/headless.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/headless.xml"
 
@@ -449,7 +454,7 @@ jobs:
         run: |
           mkdir -p .build/tests/test-results
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^widgets$' \
+            --parallel 2 -L '^widgets$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
 
