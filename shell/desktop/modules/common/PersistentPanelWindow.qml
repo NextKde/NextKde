@@ -72,8 +72,16 @@ PanelWindow {
         top: window.panelEdge === "top"
             ? window.panelOffset
             : (window.verticalEdge
-                ? Math.max(window.edgeMargin, Math.round(window.panelCenter
-                    - window.implicitHeight / 2)) : 0)
+                // Center on the anchor cell, but never past the bottom edge:
+                // a side dock puts cells low, and these panels are nearly
+                // screen-tall, so an unclamped centre pushes them off the
+                // bottom (the "sunken, truncated" panel). The horizontal
+                // branch below has always clamped its far edge; this one was
+                // missing the same upper bound.
+                ? Math.max(window.edgeMargin, Math.min(
+                    Math.round(window.panelCenter - window.implicitHeight / 2),
+                    (window.targetScreen ? window.targetScreen.height : 1080)
+                        - window.implicitHeight - window.edgeMargin)) : 0)
         bottom: window.panelEdge === "bottom" ? window.panelOffset : 0
         left: window.panelEdge === "left"
             ? window.panelOffset
