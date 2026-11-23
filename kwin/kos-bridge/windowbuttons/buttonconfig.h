@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <array>
+#include <optional>
 
 #include "panelgeometry.h"
 #include "windowrules.h"
@@ -131,7 +132,8 @@ public:
     // `default`, then `apps[class]`, then the first matching hand-written
     // `rules` entry, then the first matching machine-written rule -- which
     // replaces the geometry whole and touches nothing else.
-    AppConfig getAppConfig(const WindowQuery &) const;
+    AppConfig getAppConfig(const WindowQuery &,
+                           const std::optional<GeometryRule> &pinnedRule = std::nullopt) const;
 
     // Writes an adjusted geometry and overlay mode as a machine rule. The
     // user's own file is never opened for writing.
