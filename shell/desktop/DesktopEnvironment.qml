@@ -21,6 +21,19 @@ import qs.desktop.modules.inputmethod
 Item {
     id: shell
 
+    // I18nService is a QML singleton, so nothing applies the persisted UI
+    // language unless it is touched. Touch it here, in the first property
+    // binding: root bindings are evaluated before the children below are
+    // created, and several surfaces build their I18n.tr() strings once while
+    // they are created (e.g. the Dock's trash menu in Component.onCompleted),
+    // so a later application would leave those in the system locale. The
+    // singleton reads its state file synchronously and applies the saved
+    // language while it is built, so the first frame is already translated.
+    // Without this the desktop started in the system locale and only flipped
+    // when Settings first called the i18n-settings IPC below — which looked
+    // like the language changing on every update restart.
+    readonly property string _uiLanguage: I18nService.language
+
     IpcHandler {
         target: "notification-settings"
         function snapshot(): string {

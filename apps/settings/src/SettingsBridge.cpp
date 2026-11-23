@@ -6,6 +6,8 @@
 #include <QThread>
 #include <QTimer>
 
+#include "../../../shared/i18n/SystemLanguage.h"
+
 SettingsBridge::SettingsBridge(QObject* parent)
     : QObject(parent)
     , m_shellClient(this)
@@ -28,11 +30,16 @@ SettingsBridge::SettingsBridge(QObject* parent)
         &SettingsBridge::galleryImportProgress);
     connect(&m_wallpaperLibrary, &WallpaperLibrary::galleryImportFinished, this,
         &SettingsBridge::galleryImportFinished);
+    // Taken before the window loads so its first frame can use the saved
+    // language; the Shell's own i18n snapshot then confirms the value.
+    m_savedLanguage = Kos::I18n::persistedChoice();
 }
 
 SettingsBridge::~SettingsBridge() = default;
 
 QString SettingsBridge::lastError() const { return m_lastError; }
+
+QString SettingsBridge::savedLanguage() const { return m_savedLanguage; }
 
 bool SettingsBridge::isDevelopmentSession() const
 {
