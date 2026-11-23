@@ -373,13 +373,18 @@ assert.match(dockAnimationSource,
 // resize.
 const barStatusAreaSource = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
 const persistentPanelSource = read("../../shell/desktop/modules/common/PersistentPanelWindow.qml");
-assert.match(barStatusAreaSource, /const gap = root\.dockHosted \? 8 : 4/,
+const panelPlacementSource = read("../../shell/desktop/modules/common/PanelPlacement.mjs");
+assert.match(barStatusAreaSource, /gap:\s*root\.dockHosted \? 8 : 4/,
     "standalone Control Center starts four pixels below the Bar");
+assert.match(panelPlacementSource, /\bgap = 4\b/,
+    "the placement math keeps a four-pixel default gap");
 assert.match(controlCenterPanelSource, /PersistentPanelWindow \{/,
     "the Control Center is one persistent layer-shell surface");
-assert.match(persistentPanelSource,
-    /Math\.min\(\s*Math\.round\(window\.panelCenter - window\.implicitWidth/,
+assert.match(persistentPanelSource, /PanelPlacement\.clampedCenterOffset\(\{/,
     "the panel clamps at screen edges instead of resizing");
+assert.match(panelPlacementSource,
+    /Math\.max\(edgeMargin, Math\.min\(centered, screenSize - size - edgeMargin\)\)/,
+    "the along-edge offset is clamped at both screen ends");
 assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
     "application menus keep a four-pixel Bar gap");
 
