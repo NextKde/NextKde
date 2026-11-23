@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QString>
+#include <QStringList>
 #include <QVector>
 
 #include <optional>
@@ -73,12 +74,43 @@ enum class MatchScope {
     App,
 };
 
+struct WindowScopeContext {
+    // Distinct managed sibling captions of the same class and type currently open.
+    QStringList siblingCaptions;
+    // True when this live window has transitioned between distinct non-placeholder captions.
+    bool dynamicCaption = false;
+    // True when an earlier-created distinct sibling of the same class and type is open.
+    bool hasOlderSibling = false;
+    // True when any distinct open sibling has a dynamic caption.
+    bool hasDynamicSibling = false;
+    // True when at least one distinct open sibling does not have its own window-scoped rule.
+    bool hasUnscopedSibling = false;
+};
+
+enum class CaptionTransition {
+    Unchanged,
+    StartupPlaceholder,
+    SamePrefix,
+    SameSuffix,
+    Replaced,
+};
+
+CaptionTransition classifyCaptionTransition(const QString &windowClass,
+                                            const QString &previous,
+                                            const QString &current,
+                                            QString *commonPrefix = nullptr,
+                                            QString *commonDelimiter = nullptr);
+
+WindowMatcher windowScopedMatcher(const WindowQuery &query,
+                                  const QStringList &siblingCaptions = {});
+
 MatchScope matcherScope(const WindowMatcher &matcher);
 MatchScope initialAdjustScope(const WindowQuery &query,
                               const std::optional<WindowMatcher> &existingMatcher,
-                              bool hasDistinctSibling);
+                              const WindowScopeContext &context);
 WindowMatcher resolvedAdjustMatcher(const WindowQuery &query, MatchScope scope,
-                                    const std::optional<WindowMatcher> &existingMatcher);
+                                    const std::optional<WindowMatcher> &existingMatcher,
+                                    const QStringList &siblingCaptions = {});
 
 // Per-window presentation override stored alongside geometry.
 enum class OverlayMode {
@@ -100,6 +132,24 @@ struct GeometryRule {
     PanelGeometry geometry;
     OverlayMode overlayMode = OverlayMode::Cover;
 };
+
+struct CaptionAdaptation {
+    enum class Kind {
+        None,
+        UpgradeToPrefixRegex,
+        PromoteToApp,
+        PinInSession,
+    };
+    Kind kind = Kind::None;
+    WindowMatcher targetMatcher;
+};
+
+CaptionAdaptation adaptRuleForCaptionChange(
+    const WindowQuery &previousQuery,
+    const WindowQuery &currentQuery,
+    const GeometryRule &previousRule,
+    const std::optional<GeometryRule> &currentMatchedRule,
+    const WindowScopeContext &context);
 
 // The machine-written rules file.
 //

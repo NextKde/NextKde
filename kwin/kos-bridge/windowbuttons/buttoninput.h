@@ -5,9 +5,11 @@
 #include <QRectF>
 
 #include <memory>
+#include <optional>
 
 #include <input.h>
 
+#include "buttonconfig.h"
 #include "buttonrenderer.h"
 #include "tilemenu.h"
 
@@ -24,7 +26,6 @@ namespace KOS
 {
 
 class AdjustSession;
-class ButtonConfig;
 
 // Intercepts pointer and key events that belong to one of our panels: the press
 // performs the window action and is consumed so it never reaches the
@@ -55,6 +56,11 @@ public:
 
     // The window is going away: an adjust session on it is over.
     void forgetWindow(KWin::EffectWindow *window);
+    // Track live window creation order and captions for scope/adaptation.
+    void trackWindow(KWin::EffectWindow *window);
+    void captionChanged(KWin::EffectWindow *window);
+    void reconfigured();
+    AppConfig configForWindow(KWin::EffectWindow *window) const;
     // Fullscreen has no controls: drop transient input state immediately.
     void fullscreenChanged(KWin::EffectWindow *window);
 
@@ -71,13 +77,26 @@ private:
     void startSession(KWin::EffectWindow *window);
     // Ends the running session, writing what was adjusted.
     void finishSession();
+    void resetSession();
+    WindowScopeContext scopeContextFor(KWin::EffectWindow *window,
+                                       const WindowQuery &query) const;
     // A press while a session is running.
     bool sessionPress(KWin::PointerButtonEvent *event, KWin::EffectWindow *window,
                       bool insidePanel);
 
+    struct WindowTrackState {
+        quint64 order = 0;
+        QString lastCaption;
+        bool dynamicCaption = false;
+        std::optional<GeometryRule> pinnedRule;
+    };
+
     ButtonRenderer *m_renderer;
     ButtonConfig *m_config;
     std::unique_ptr<AdjustSession> m_session;
+    quint64 m_windowOrderSeq = 0;
+    QHash<KWin::EffectWindow *, WindowTrackState> m_windowStates;
+    KWin::EffectWindow *m_pendingActionWindow = nullptr;
 
     // The buttons whose presses were swallowed, and whose releases therefore have to
     // be swallowed too: an application that receives a button-up for a

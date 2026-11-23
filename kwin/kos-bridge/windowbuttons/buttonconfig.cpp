@@ -251,7 +251,8 @@ void ButtonConfig::load()
             << "machine-written rules from" << m_store.path();
 }
 
-AppConfig ButtonConfig::getAppConfig(const WindowQuery &query) const
+AppConfig ButtonConfig::getAppConfig(const WindowQuery &query,
+                                     const std::optional<GeometryRule> &pinnedRule) const
 {
     // 1. The default, carrying every key.
     AppConfig config = m_default;
@@ -278,9 +279,18 @@ AppConfig ButtonConfig::getAppConfig(const WindowQuery &query) const
     // (`transparent` or `hidden`) applies on top.
     GeometryRule rule;
     if (m_store.foundRule(query, &rule)) {
+        if (pinnedRule && matcherScope(rule.matcher) == MatchScope::App) {
+            rule = *pinnedRule;
+        }
         config.geometry = rule.geometry;
         config.overlayMode = rule.overlayMode;
         if (rule.overlayMode == OverlayMode::Hidden) {
+            config.showButtons = false;
+        }
+    } else if (pinnedRule) {
+        config.geometry = pinnedRule->geometry;
+        config.overlayMode = pinnedRule->overlayMode;
+        if (pinnedRule->overlayMode == OverlayMode::Hidden) {
             config.showButtons = false;
         }
     }
