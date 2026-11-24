@@ -383,16 +383,20 @@ without a jump. The wheel leaves `offset` alone, so the panel grows away from th
 edge it is pinned to rather than away from its own middle.
 
 Saving matches the **window class and type**, plus the window role when one
-is available. Without a role (including Wayland), starting a new adjustment when
-no distinct sibling of the same class and type is open defaults to class and
-type so changing document or tab titles keep the cover; when a distinct sibling
-is also open (for example a QQ or WeChat image viewer alongside the main
-window), it defaults to the exact caption so the override scopes to that
-secondary window without disturbing the main one. In either case, the adjust
-bar lets you explicitly toggle between title/role scope and app scope, and your
-selection is always honored on save. Use a hand-written `titleRegex` for
-changing secondary captions when appropriate. A window with no class cannot be
-adjusted.
+is available. Without a role (including Wayland), the adjust bar defaults to
+class and type for standalone or primary dynamic-title windows so changing
+document or tab titles keep the cover, and defaults to window scope for
+newly opened secondary siblings that do not yet share a dynamic-title rule (even
+when an app-scoped rule already exists). When saving window scope on a
+delimited title whose trailing segments match an open sibling or the app class
+(such as Obsidian's `设置 - ob-vault - Obsidian 1.15.1`), Bridge generalizes
+the matcher to a structured title-prefix `titleRegex` rather than locking onto a
+single vault or version. If a window matching a machine-written title rule
+later switches captions, Bridge automatically upgrades shared-prefix changes to
+a prefix regex, promotes document-title changes to app scope when safe, or pins
+the previous rule for that live window session so an open sibling's layout is
+never overwritten. The adjust bar always honors an explicit scope toggle on
+save, and a window with no class cannot be adjusted.
 
 Every session ends in a line in the journal, because the file is the only readout
 an adjustment has:
