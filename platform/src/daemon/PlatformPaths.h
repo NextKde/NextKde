@@ -18,6 +18,13 @@ QString cleanPath(const QString &path);
 
 QStringList cleanPaths(const QJsonValue &value);
 
+// Canonicalises the parent directory but keeps the final directory entry
+// unresolved, so rename/transfer/trash operate on a shortcut symlink itself
+// instead of the installed file it points at.
+QString cleanEntryPath(const QString &path);
+
+QStringList cleanEntryPaths(const QJsonValue &value);
+
 QJsonArray jsonPaths(const QStringList &paths);
 
 QStringList localClipboardPaths(const QMimeData *mime);

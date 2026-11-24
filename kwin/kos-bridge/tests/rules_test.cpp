@@ -383,6 +383,19 @@ void testGeometry()
         shape.offset = AppOffset{1.01, 1.01};
         CHECK(panelFlushMask(shape) == 0);
     }
+    // Continuous-corner contour uses both visual radii (tangent extent) and smoothness.
+    shape.position = ButtonPosition::Right;
+    shape.offset = AppOffset{0, 0};
+    const qreal extent = WindowAppearance::cornerExtent(20.0, 0.6);
+    const PanelWindowContour continuous{rounded.size, {extent, extent, extent, extent}, 0.6};
+    const PanelWindowContour arcSameExtent{rounded.size, {extent, extent, extent, extent}, 0.0};
+    // At the top-right corner, (98, 2) is outside the continuous corner (diagonal inset ~5.86),
+    // while (94, 6) is inside the superellipse (diagonal inset ~5.86) yet outside a circle of
+    // radius `extent` (diagonal inset ~8.64).
+    CHECK(!panelBackgroundPath(box, shape, continuous).contains(QPointF(98, 2)));
+    CHECK(panelBackgroundPath(box, shape, continuous).contains(QPointF(94, 6)));
+    CHECK(!panelBackgroundPath(box, shape, arcSameExtent).contains(QPointF(94, 6)));
+    CHECK(panelBackgroundKey(shape, continuous) != panelBackgroundKey(shape, arcSameExtent));
     CHECK(panelBackgroundPath(QRectF(), shape, rounded).isEmpty());
 
 }
@@ -1303,6 +1316,120 @@ void testAdjustBar()
           != AdjustAction::Reset);
 }
 
+void testAdjustScopeResolution()
+{
+    const WindowQuery docWindow = query(
+        QStringLiteral("md.obsidian.Obsidian"), QStringLiteral("Notes - Obsidian"), 0);
+    const WindowQuery settingsWindow = query(
+        QStringLiteral("md.obsidian.Obsidian"), QStringLiteral("设置 - Obsidian"), 0);
+    const WindowQuery roledWindow = query(
+        QStringLiteral("qq"), QStringLiteral("QQ"), 0, QStringLiteral("main"));
+    const WindowQuery blankCaption = query(
+        QStringLiteral("md.obsidian.Obsidian"), QString(), 0);
+
+    // 1. New roleless window without distinct sibling defaults to App,
+    //    but explicitly choosing Window (This Title) honors title scoping.
+    CHECK(initialAdjustScope(docWindow, std::nullopt, false) == MatchScope::App);
+    CHECK(initialAdjustScope(blankCaption, std::nullopt, true) == MatchScope::App);
+
+    const WindowMatcher defaultApp =
+        resolvedAdjustMatcher(docWindow, MatchScope::App, std::nullopt);
+    CHECK(matcherScope(defaultApp) == MatchScope::App);
+    CHECK(defaultApp.canonicalKey() == appMatcher(docWindow).canonicalKey());
+
+    const WindowMatcher explicitTitle =
+        resolvedAdjustMatcher(docWindow, MatchScope::Window, std::nullopt);
+    CHECK(matcherScope(explicitTitle) == MatchScope::Window);
+    CHECK(explicitTitle.title == docWindow.caption);
+    CHECK(explicitTitle.canonicalKey() == adjustmentMatcher(docWindow).canonicalKey());
+    CHECK(explicitTitle.matches(docWindow));
+    CHECK(!explicitTitle.matches(settingsWindow));
+
+    // 2. New roleless window with a distinct open sibling defaults to Window,
+    //    and explicitly choosing App resolves to class+type.
+    CHECK(initialAdjustScope(settingsWindow, std::nullopt, true) == MatchScope::Window);
+    const WindowMatcher siblingTitle =
+        resolvedAdjustMatcher(settingsWindow, MatchScope::Window, std::nullopt);
+    CHECK(siblingTitle.title == settingsWindow.caption);
+    const WindowMatcher siblingApp =
+        resolvedAdjustMatcher(settingsWindow, MatchScope::App, std::nullopt);
+    CHECK(matcherScope(siblingApp) == MatchScope::App);
+    CHECK(siblingApp.canonicalKey() == appMatcher(settingsWindow).canonicalKey());
+
+    // 3. Window with a role (X11) defaults to Window even without siblings,
+    //    and preserves role when resolving Window scope.
+    CHECK(initialAdjustScope(roledWindow, std::nullopt, false) == MatchScope::Window);
+    const WindowMatcher roledMatcher =
+        resolvedAdjustMatcher(roledWindow, MatchScope::Window, std::nullopt);
+    CHECK(matcherScope(roledMatcher) == MatchScope::Window);
+    CHECK(roledMatcher.role == QStringLiteral("main"));
+    CHECK(roledMatcher.title.isEmpty());
+
+    // 4. Existing App rule (both class+type and legacy class-only) stays App
+    //    initially regardless of sibling presence; keeping App preserves the
+    //    existing matcher, while switching to Window produces a title rule
+    //    that refines without deleting the app rule.
+    const WindowMatcher existingApp = appMatcher(docWindow);
+    WindowMatcher legacyClassOnly;
+    legacyClassOnly.className = docWindow.windowClass;
+
+    CHECK(initialAdjustScope(settingsWindow, existingApp, true) == MatchScope::App);
+    CHECK(initialAdjustScope(settingsWindow, legacyClassOnly, true) == MatchScope::App);
+    CHECK(resolvedAdjustMatcher(settingsWindow, MatchScope::App, legacyClassOnly).canonicalKey()
+          == legacyClassOnly.canonicalKey());
+
+    const WindowMatcher narrowedTitle =
+        resolvedAdjustMatcher(settingsWindow, MatchScope::Window, existingApp);
+    CHECK(matcherScope(narrowedTitle) == MatchScope::Window);
+    CHECK(narrowedTitle.title == settingsWindow.caption);
+
+    removeRulesFile();
+    WindowRuleStore refineStore;
+    PanelGeometry mainGeom;
+    mainGeom.offset = AppOffset{10, 6};
+    PanelGeometry settingsGeom = mainGeom;
+    settingsGeom.offset = AppOffset{24, 12};
+
+    CHECK(refineStore.replace(WindowMatcher{}, existingApp, mainGeom));
+    CHECK(refineStore.replace(existingApp, narrowedTitle, settingsGeom));
+    CHECK(refineStore.count() == 2);
+    PanelGeometry resolved;
+    CHECK(refineStore.found(docWindow, &resolved) && sameGeometry(resolved, mainGeom));
+    CHECK(refineStore.found(settingsWindow, &resolved) && sameGeometry(resolved, settingsGeom));
+
+    // 5. Existing Window rules (title, titleRegex, role) stay Window even when
+    //    no sibling is open; keeping Window preserves them, while switching
+    //    to App promotes to appMatcher and removes the old title rule.
+    WindowMatcher regexRule;
+    regexRule.className = docWindow.windowClass;
+    regexRule.hasType = true;
+    regexRule.type = docWindow.type;
+    regexRule.titleRegex = QStringLiteral("^设置");
+
+    CHECK(initialAdjustScope(settingsWindow, narrowedTitle, false) == MatchScope::Window);
+    CHECK(initialAdjustScope(settingsWindow, regexRule, false) == MatchScope::Window);
+    CHECK(initialAdjustScope(roledWindow, roledMatcher, false) == MatchScope::Window);
+
+    CHECK(resolvedAdjustMatcher(settingsWindow, MatchScope::Window, narrowedTitle).canonicalKey()
+          == narrowedTitle.canonicalKey());
+    CHECK(resolvedAdjustMatcher(settingsWindow, MatchScope::Window, regexRule).canonicalKey()
+          == regexRule.canonicalKey());
+    CHECK(resolvedAdjustMatcher(roledWindow, MatchScope::Window, roledMatcher).canonicalKey()
+          == roledMatcher.canonicalKey());
+
+    const WindowMatcher promotedApp =
+        resolvedAdjustMatcher(settingsWindow, MatchScope::App, narrowedTitle);
+    CHECK(promotedApp.canonicalKey() == appMatcher(settingsWindow).canonicalKey());
+
+    removeRulesFile();
+    WindowRuleStore promoteStore;
+    CHECK(promoteStore.replace(WindowMatcher{}, narrowedTitle, settingsGeom));
+    CHECK(promoteStore.replace(narrowedTitle, promotedApp, settingsGeom));
+    CHECK(promoteStore.count() == 1);
+    CHECK(promoteStore.found(docWindow, &resolved) && sameGeometry(resolved, settingsGeom));
+    CHECK(promoteStore.found(settingsWindow, &resolved) && sameGeometry(resolved, settingsGeom));
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -1349,6 +1476,7 @@ int main(int argc, char **argv)
     testIndependentBackground();
     testOverlayModesAndScopes();
     testAdjustBar();
+    testAdjustScopeResolution();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

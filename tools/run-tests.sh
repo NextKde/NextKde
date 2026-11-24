@@ -87,6 +87,14 @@ fi
 label_regex=$(IFS='|'; echo "${layers[*]}")
 
 printf '==> configuring %s\n' "$build_dir"
+# Reuse identical translation units across runs when ccache is available. It
+# hashes the preprocessed source and compiler options, so a changed file can
+# never reuse a stale object; the build itself still runs on every invocation.
+cmake_launcher=()
+if command -v ccache >/dev/null 2>&1; then
+    cmake_launcher=(-DCMAKE_C_COMPILER_LAUNCHER=ccache
+                    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
+fi
 # Reused core test caches must not retain retired bundled-application switches.
 cmake -S "$project_dir" -B "$build_dir" -G Ninja \
     -U KOS_BUILD_CALENDAR -U KOS_BUILD_TODO -U KOS_BUILD_WEATHER \
@@ -95,7 +103,7 @@ cmake -S "$project_dir" -B "$build_dir" -G Ninja \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DKOS_BUILD_KWIN_PLUGINS=OFF \
     -DKOS_BUILD_SPATIAL="${KOS_BUILD_SPATIAL:-AUTO}" \
-    -DBUILD_TESTING=ON >/dev/null
+    -DBUILD_TESTING=ON "${cmake_launcher[@]}" >/dev/null
 
 printf '==> building (--parallel %s)\n' "$build_jobs"
 cmake --build "$build_dir" --parallel "$build_jobs"

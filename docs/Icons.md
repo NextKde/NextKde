@@ -56,8 +56,9 @@ BundledIcon {
 "desktop.menu.copy": "edit-copy",
 ```
 
-桌面和 Dock 菜单通过 `reserveIconSpace: true` 保留统一的图标列，
-空白项目的文字仍与其他项目对齐。勾选标记和子菜单箭头分别由
+Dock 与桌面菜单都不预留图标列：只有带图标的操作项显示图标，
+其余项目的文字直接从左侧开始，避免整列空白被误读成加载失败的图标。
+勾选标记和子菜单箭头分别由
 `menu.trailing.checked`、`menu.trailing.submenu` 控制。
 
 功能映射不控制点击范围或排版。`size` 决定字形大小，调用方的

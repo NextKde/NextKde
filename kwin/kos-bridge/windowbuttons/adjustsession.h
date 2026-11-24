@@ -42,10 +42,10 @@ public:
                                       const PanelGeometry &, OverlayMode)>;
     using Remove = std::function<bool(const WindowMatcher &)>;
     // True when another managed window of the same class and type is open
-    // under a different caption. A roleless window with no such sibling
-    // commits as class+type so changing document or tab captions keep the
-    // cover; with a sibling (a QQ/WeChat image viewer beside the main window)
-    // the caption scopes the override to that secondary window.
+    // under a different non-empty caption. Used when starting a new session on
+    // a roleless window to choose its initial scope (MatchScope::Window when a
+    // distinct open sibling exists, MatchScope::App when alone); explicit
+    // scope choices made in the adjust bar are always honored on commit.
     using SiblingProbe = std::function<bool(const WindowQuery &)>;
 
     AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove = {},

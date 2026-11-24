@@ -153,6 +153,7 @@ PanelWindow {
     property bool timerRunning: false
     property bool timerHasStarted: false
     property bool timerView: false
+    property string systemTimeZone: ""
     property bool editMode: false
     property bool widgetLibraryOpen: false
     property var activeDragCard: null
@@ -222,6 +223,15 @@ PanelWindow {
             root.depthPointerX = 0
             root.depthPointerY = 0
         }
+    }
+    Component.onCompleted: PlatformClient.request("system.timezone", {}, function(response) {
+        if (response?.ok)
+            root.systemTimeZone = String(response.result?.timeZone || "")
+    })
+
+    function toggleClockStyle() {
+        DeskCenterConfigService.setClockStyle(
+            DeskCenterConfigService.clockStyle === "analog" ? "digital" : "analog")
     }
 
     function formattedTimer() {
@@ -351,7 +361,11 @@ PanelWindow {
         // re-evaluates this property, and `placements` packs whatever is left.
         const hidden = AppearanceConfigService.hiddenDeskCenterWidgets
         const definitions = [
-            configuredWidget("clock", 100, "#536783", "#35465f"),
+            configuredWidget("clock", 100,
+                DeskCenterConfigService.clockStyle === "digital"
+                    ? AppearanceTokens.widget.digitalClock.artworkStart : "#536783",
+                DeskCenterConfigService.clockStyle === "digital"
+                    ? AppearanceTokens.widget.digitalClock.artworkEnd : "#35465f"),
             configuredWidget("weather", 90, "#536b94", "#394b70"),
             configuredWidget("calendar", 80, "#fff8fa", "#f3e8ed"),
             configuredWidget("todo", 75, "#f2faf7", "#e2f1eb"),
@@ -834,11 +848,10 @@ PanelWindow {
             opacity: StartupReveal.widgetProgress
             enabled: StartupReveal.widgetProgress > 0
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
-            // The clock is the one card whose glass outline is a shape rather
-            // than a rectangle: it draws MaterialFlower, so its surface has to
-            // be the flower itself — no card fill, no rectangular KWin material,
-            // and frost clipped to the petal outline.
+            // The analog clock uses MaterialFlower's petal outline; the digital
+            // clock uses the regular rounded widget surface.
             flowerShapedSurface: modelData.id === "clock"
+                && DeskCenterConfigService.clockStyle === "analog"
             materialSurfaceColor: root.materialWidgetSurface(modelData.id)
             // The grouped view keeps the compositor material even when the
             // colour-artwork widget style is active.
@@ -1066,6 +1079,37 @@ PanelWindow {
                 }
             }
 
+            Rectangle {
+                objectName: card.modelData.id === "clock" ? "widget-clock-style" : ""
+                z: 80
+                visible: root.editMode && card.modelData.id === "clock"
+                activeFocusOnTab: visible
+                Accessible.role: Accessible.Button
+                Accessible.name: clockStyleLabel.text
+                Accessible.description: I18n.tr("Clock")
+                Accessible.onPressAction: root.toggleClockStyle()
+                anchors { left: parent.left; top: parent.top; leftMargin: 8; topMargin: 40 }
+                width: clockStyleLabel.implicitWidth + 16
+                height: 26
+                radius: 9
+                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, Qt.rgba(0, 0, 0, 0.56))
+                border.width: activeFocus ? 2 : 0
+                border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, "white")
+                Keys.onSpacePressed: root.toggleClockStyle()
+                Keys.onReturnPressed: root.toggleClockStyle()
+                Keys.onEnterPressed: root.toggleClockStyle()
+                Text {
+                    id: clockStyleLabel
+                    objectName: "widget-clock-style-label"
+                    anchors.centerIn: parent
+                    text: DeskCenterConfigService.clockStyle === "analog"
+                        ? I18n.tr("Digital") : I18n.tr("Analog")
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
+                    font { family: AppearanceTokens.typography.textFamily; pixelSize: 10; weight: Font.DemiBold }
+                }
+                TapHandler { onTapped: root.toggleClockStyle() }
+            }
+
             WidgetResizeHandle {
                 id: resizeHandle
                 z: 80
@@ -1189,6 +1233,7 @@ PanelWindow {
                 // including while a newly loaded card grows from zero height.
                 property real pageProgress: root.timerView ? 1 : 0
                 Behavior on pageProgress {
+                    enabled: !AppearanceConfigService.reduceMotion
                     NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
 
@@ -1198,16 +1243,13 @@ PanelWindow {
                     height: parent.height
                     y: -height * clockPages.pageProgress
 
-                // The flower itself is not drawn here: this card is a regular
-                // Material card whose outline happens to be the flower, so its
-                // paint comes from the card surface like every other card's.
-                // Painting a second flower here is what made the clock read as a
-                // different surface -- its own colour, its own opacity, its own
-                // outline. The clock only adds its face below.
+                // Neither face paints its card surface: DeskWidgetCard owns the
+                // analog flower outline and the digital rounded outline.
 
                 DeskClockFace {
                     id: analogClock
                     objectName: "desktop-clock-face"
+                    visible: DeskCenterConfigService.clockStyle === "analog"
                     anchors.fill: parent
                     anchors.margins: 14
                     date: clock.date
@@ -1221,6 +1263,25 @@ PanelWindow {
                     minuteColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.tertiary : markColor
                     secondColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#ee7659")
                     hubColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ee7659")
+                }
+
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    active: DeskCenterConfigService.clockStyle === "digital"
+                    sourceComponent: Component {
+                        DeskDigitalClockFace {
+                            anchors.fill: parent
+                            date: clock.date
+                            systemTimeZone: root.systemTimeZone
+                            monochrome: AppearanceConfigService.widgetStyle === "glass"
+                            cornerRadius: Math.max(0, AppearanceTokens.widget.radius - 14)
+                            cityColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            timeColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            offsetColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            ringColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                        }
+                    }
                 }
 
 	                Rectangle {
@@ -1629,7 +1690,7 @@ PanelWindow {
                     text: WeatherService.forecastDays.length > 0
                         ? I18n.tr("High %1°  Low %2°").arg(WeatherService.forecastDays[0].high)
                             .arg(WeatherService.forecastDays[0].low)
-                        : I18n.tr("Updating forecast")
+                        : (WeatherService.loading ? I18n.tr("Updating forecast") : "")
 	                    color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.74), 0.74)
                     font.pixelSize: 11
                 }
@@ -2617,7 +2678,7 @@ PanelWindow {
                         readonly property string widgetSize: card.displayRows > 1 ? "large"
                             : card.displayColumns > 1 ? "medium" : "small"
                         readonly property int itemLimit: widgetSize === "large" ? 6
-                            : widgetSize === "medium" ? 3 : 0
+                            : widgetSize === "medium" ? (PimWidgetService.errorMessage ? 2 : 3) : 0
                         readonly property var tasks:
                             PimWidgetService.pendingTodos(itemLimit)
                         // In the shared glass modes the card material is the
@@ -2669,7 +2730,7 @@ PanelWindow {
                             font { pixelSize: 13; weight: Font.Bold }
                         }
                         Text {
-                            visible: todoContent.widgetSize === "small"
+                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
                             anchors.centerIn: parent
                             anchors.verticalCenterOffset: 12
                             text: String(PimWidgetService.pendingTodos(99).length)
@@ -2677,15 +2738,15 @@ PanelWindow {
                             font { pixelSize: 38; weight: Font.DemiBold }
                         }
                         Text {
-                            visible: todoContent.widgetSize === "small"
+                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
                             anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
-                            text: I18n.tr("todos")
+                            text: PimWidgetService.cached ? I18n.tr("Cached data") : I18n.tr("todos")
                             color: AppearanceTokens.content.ink("#686873", 0.6)
                             font.pixelSize: 10
                         }
                         Column {
                             visible: todoContent.widgetSize !== "small"
-                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: 10 }
+                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: todoStatus.visible ? todoStatus.height + 14 : 10 }
                             spacing: 4
                             Repeater {
                                 model: todoContent.tasks
@@ -2737,7 +2798,7 @@ PanelWindow {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 // Only a ready snapshot can mean all tasks are done.
                                 // App installation is handled when the card is opened.
-                                text: PimWidgetService.ready
+                                text: PimWidgetService.ready && !PimWidgetService.errorMessage
                                     ? I18n.tr("All done for today")
                                     : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
                                 width: Math.max(0, parent.width - 16)
@@ -2748,6 +2809,19 @@ PanelWindow {
                                 color: AppearanceTokens.content.ink("#6c6c75", 0.6)
                                 font.pixelSize: 11
                             }
+                        }
+                        Text {
+                            id: todoStatus
+                            visible: todoContent.widgetSize === "small" ? !PimWidgetService.available
+                                : todoContent.tasks.length > 0 && !!PimWidgetService.errorMessage
+                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; bottomMargin: 10 }
+                            text: PimWidgetService.errorMessage || I18n.tr("Todo service not connected")
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            maximumLineCount: todoContent.widgetSize === "small" ? 3 : 2
+                            elide: Text.ElideRight
+                            color: AppearanceTokens.content.ink("#6c6c75", 0.6)
+                            font.pixelSize: todoContent.widgetSize === "small" ? 11 : 9
                         }
                     }
                 }
@@ -2873,6 +2947,17 @@ PanelWindow {
                         font.pixelSize: 9
                     }
                 }
+                Text {
+                    visible: calendarContent.narrow && PimWidgetService.state !== "not-installed"
+                        && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
+                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 100 }
+                    text: PimWidgetService.errorMessage
+                    maximumLineCount: 2
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideRight
+                    color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
+                    font.pixelSize: 9
+                }
                 Item {
                     id: monthGrid
                     visible: !calendarContent.narrow || card.displayRows > 1
@@ -2955,12 +3040,6 @@ PanelWindow {
         height: root.height - y - root.bottomInset
         clip: false
         readonly property int iconSize: desktopLayout.iconSize
-        // Keep the label optically paired with the three user-selectable
-        // icon sizes instead of leaving it at a fixed desktop-small size.
-        readonly property int fileNameFontSize: iconSize === 72 ? 14
-            : iconSize === 56 ? 11 : 9
-        readonly property int fileNameFontWeight: iconSize === 72 ? Font.Bold
-            : iconSize === 56 ? Font.DemiBold : Font.Medium
         // Reserve real gutters around every icon.  The gaps are not merely
         // visual: they belong to the desktop background so users can start a
         // rubber-band selection between neighbouring files.
@@ -3172,7 +3251,7 @@ PanelWindow {
 
         function gridPositionForIndex(index) {
             return {
-                x: (columnCount - 1 - Math.floor(index / rowCount)) * itemWidth,
+                x: columnForIndex(index) * itemWidth,
                 y: (index % rowCount) * itemHeight
             }
         }
@@ -3237,7 +3316,7 @@ PanelWindow {
             const previousPositions = ({})
             for (let index = 0; index < next.length; ++index) {
                 previousPositions[next[index].path] = ({
-                    x: (columnCount - 1 - Math.floor(index / rowCount)) * itemWidth,
+                    x: columnForIndex(index) * itemWidth,
                     y: (index % rowCount) * itemHeight
                 })
             }
@@ -3250,7 +3329,7 @@ PanelWindow {
                 return candidate.path === path
             })
             previousPositions[path] = ({
-                x: (columnCount - 1 - Math.floor(sourceNewIndex / rowCount)) * itemWidth,
+                x: columnForIndex(sourceNewIndex) * itemWidth,
                 y: (sourceNewIndex % rowCount) * itemHeight
             })
             if (!wasPreviewed) {
@@ -3317,7 +3396,7 @@ PanelWindow {
         }
 
         function setIconSize(size) {
-            if (size !== 40 && size !== 56 && size !== 72)
+            if (size !== 32 && size !== 40 && size !== 56 && size !== 72)
                 return
             desktopLayout.iconSize = size
             desktopLayout.sync()
@@ -3328,6 +3407,22 @@ PanelWindow {
                 return
             desktopLayout.iconSpacing = spacing
             desktopLayout.sync()
+        }
+
+        function setShortcutAlignment(alignment) {
+            if (alignment !== "left" && alignment !== "right")
+                return
+            desktopLayout.shortcutAlignment = alignment
+            desktopLayout.sync()
+        }
+
+        function columnForIndex(index) {
+            return DesktopGridMetrics.columnForSlot(index, rowCount,
+                columnCount, desktopLayout.shortcutAlignment)
+        }
+        function indexForCell(column, row) {
+            return DesktopGridMetrics.slotForCell(column, row, rowCount,
+                columnCount, desktopLayout.shortcutAlignment)
         }
 
         function displayName(entry) {
@@ -3470,7 +3565,7 @@ PanelWindow {
             const next = additive ? selectionBase.slice() : []
             for (let index = 0; index < orderedEntries.length; ++index) {
                 const entry = orderedEntries[index]
-                const column = columnCount - 1 - Math.floor(index / rowCount)
+                const column = columnForIndex(index)
                 const row = index % rowCount
                 if (column < 0)
                     continue
@@ -3711,13 +3806,20 @@ PanelWindow {
                     _ctxAct(I18n.tr("By Name"), "arrangeByName"),
                     _ctxAct(I18n.tr("By Type"), "arrangeByType"),
                     _ctxAct(I18n.tr("By Modified (newest)"), "arrangeModifiedNew"),
-                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld")
+                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld"),
+                    { separator: true },
+                    _ctxCheck(I18n.tr("Align Left"), "setShortcutAlignment", "left",
+                        desktopLayout.shortcutAlignment === "left"),
+                    _ctxCheck(I18n.tr("Align Right"), "setShortcutAlignment", "right",
+                        desktopLayout.shortcutAlignment === "right")
                 ]
                 items.push(_ctxSub(I18n.tr("Arrange"), arrange, "arrange"))
                 items.push(_ctxAct(I18n.tr("Reset icon order"), "resetLayout"))
                 items.push(_ctxCheck(I18n.tr("Show file extensions"), "toggleExtensions", null,
                     desktopLayout.showExtensions))
-                const sizeKids = [[40, I18n.tr("Small")], [56, I18n.tr("Medium")], [72, I18n.tr("Large")]]
+                const sizeKids = [[32, I18n.tr("Extra Small")],
+                    [40, I18n.tr("Small")], [56, I18n.tr("Medium")],
+                    [72, I18n.tr("Large")]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
                         iconSize === px))
                 items.push(_ctxSub(I18n.tr("Icon Size"), sizeKids, "iconSize"))
@@ -3777,6 +3879,7 @@ PanelWindow {
                 break
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
+            case "setShortcutAlignment": setShortcutAlignment(v); break
             case "toggleGroupsWidget": {
                 AppearanceConfigService.setDeskCenterWidgetVisible("groups",
                     !root.groupsWidgetVisible)
@@ -3799,7 +3902,7 @@ PanelWindow {
         function indexAt(pointX, pointY) {
             const column = Math.max(0, Math.min(columnCount - 1, Math.floor(pointX / itemWidth)))
             const row = Math.max(0, Math.min(rowCount - 1, Math.floor(pointY / itemHeight)))
-            const index = (columnCount - 1 - column) * rowCount + row
+            const index = indexForCell(column, row)
             return Math.max(0, Math.min(orderedEntries.length - 1, index))
         }
 
@@ -3987,6 +4090,7 @@ PanelWindow {
             baseCellWidth: desktopFileGrid.preferredItemWidth
             baseCellHeight: desktopFileGrid.itemHeight
             density: desktopFileGrid.desktopLayout.iconSpacing
+            alignment: desktopFileGrid.desktopLayout.shortcutAlignment
             iconVisualSize: desktopFileGrid.iconSize + 12
             showExtensions: desktopFileGrid.desktopLayout.showExtensions
             folderCustomizations: desktopFileGrid._folderCustomCache
@@ -4047,8 +4151,7 @@ PanelWindow {
         Rectangle {
             id: reorderInsertionMarker
             readonly property int markerColumn: desktopFileGrid.reorderInsertionIndex < 0 ? 0
-                : desktopFileGrid.columnCount - 1
-                    - Math.floor(desktopFileGrid.reorderInsertionIndex / desktopFileGrid.rowCount)
+                : desktopFileGrid.columnForIndex(desktopFileGrid.reorderInsertionIndex)
             readonly property int markerRow: desktopFileGrid.reorderInsertionIndex < 0 ? 0
                 : desktopFileGrid.reorderInsertionIndex % desktopFileGrid.rowCount
             x: markerColumn * desktopFileGrid.itemWidth + 7
@@ -4068,7 +4171,6 @@ PanelWindow {
 
         ContextMenu {
             id: desktopContextMenu
-            reserveIconSpace: true
             capsuleReveal: true
             // The anchor is only a 4px cursor marker; use the Wi-Fi pill size.
             capsuleSourceWidth: 137

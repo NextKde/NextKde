@@ -36,6 +36,7 @@ QtObject {
         property string slotLayoutsJson: "{}"
         property int iconSize: 56
         property string iconSpacing: "comfortable"
+        property string shortcutAlignment: "right"
         property bool showExtensions: true
         property string folderCustomJson: "{}"
         // The grouped view is a desktop component. Its visibility lives in

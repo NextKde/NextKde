@@ -120,11 +120,17 @@ def main():
             ("settings.open", {"module": "unsupported"}, "invalid-settings-module"),
             ("theme.sync-dock-animation", {"style": "unsupported"}, "invalid-style"),
             ("kwin.layout.update", {}, "invalid-payload"),
+            ("kwin.layout.update", {"outputName": "test-output",
+                "outputRect": {"x": 0, "y": 0, "width": 800, "height": 600},
+                "dockRect": {"x": 200, "y": 540, "width": 400, "height": 60},
+                "barReservedHeight": 0, "workspaceGap": 0,
+                "dockPosition": "bottom", "dockReserved": "false"}, "invalid-payload"),
             ("application.launch", {}, "invalid-desktop-id"),
             ("file.copy", {}, "invalid-path"),
             ("state.read", {}, "invalid-state-path"),
             ("clipboard.set", {}, "invalid-clipboard-request"),
             ("display.unknown-operation", {}, "unknown-operation"),
+            ("system.timezone", {}, None),
             ("platform.ping", {}, None),
         ]
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as routed:
@@ -145,6 +151,9 @@ def main():
                         error = response.get("error", {})
                         if error.get("code") != code or error.get("retryable") is not False:
                             fail("domain error changed for " + operation + ": " + str(response), output)
+                    if operation == "system.timezone" and not isinstance(
+                            response.get("result", {}).get("timeZone"), str):
+                        fail("system.timezone omitted its zone ID: " + str(response), output)
 
         # Malformed replies must obey the same write cap as events and normal
         # replies. Keep each input batch small and never drain this peer's

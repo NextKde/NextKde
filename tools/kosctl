@@ -190,6 +190,41 @@ fedora_optional_runtime_packages=(
     wl-clipboard cliphist glib2 xdg-utils spectacle
 )
 
+# OpenSUSE Tumbleweed package names for the same default build. The KWin list
+# stays separate because compositor plugins are optional, while the spatial
+# list follows KOS_BUILD_SPATIAL. Flatpak/OSTree and Fcitx5 development files
+# are core requirements so Settings always receives its app worker and panel.
+opensuse_core_build_packages=(
+    git python313 cmake ninja gcc-c++ go curl patchelf
+    pkgconf-pkg-config gettext-tools
+    quickshell
+    flatpak-devel libostree-devel fcitx5-devel
+    qt6-base-common-devel qt6-declarative-devel qt6-declarative-imports
+    qt6-tools-devel qt6-linguist-devel qt6-translations
+    qt6-quick3d-devel qt6-quick3d-imports qt6-svg-devel qt6-imageformats
+    qt6-wayland-devel qt6-wayland-imports
+    qt6-qt5compat-devel qt6-qt5compat-imports
+    qt6-base-private-devel qt6-declarative-private-devel
+    kf6-extra-cmake-modules
+    wayland-devel wayland-protocols-devel
+    libxkbcommon-devel libxkbcommon-x11-devel
+    kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel
+    kf6-kio-devel kf6-kcalendarcore-devel kf6-kcmutils-devel
+)
+opensuse_spatial_build_packages=(
+    opencv-devel
+)
+opensuse_kwin_build_packages=(
+    kf6-kconfig-devel kf6-ki18n-devel kf6-kguiaddons-devel
+    kf6-kcoreaddons-devel kwin6-devel kdecoration6-devel libplasma6-devel
+    libdrm-devel libgbm-devel libepoxy-devel libxcb-devel libX11-devel
+    vulkan-devel zlib-devel
+)
+opensuse_optional_runtime_packages=(
+    NetworkManager wireplumber bluez brightnessctl
+    wl-clipboard cliphist xdg-utils spectacle
+)
+
 fedora_package_installed() {
     rpm -q --whatprovides "$1" >/dev/null 2>&1
 }
@@ -477,6 +512,28 @@ doctor() {
                 debian_quickshell_hint
             fi
         fi
+    elif command -v zypper >/dev/null 2>&1; then
+        local package
+        local -a required_packages=("${opensuse_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${opensuse_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${opensuse_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if rpm -q "$package" >/dev/null 2>&1; then
+                printf 'ok   pkg:%-8s installed\n' "$package"
+            else
+                printf 'miss pkg:%-8s required to build the default configuration\n' "$package"
+                failed=1
+            fi
+        done
+        for package in "${opensuse_optional_runtime_packages[@]}"; do
+            if ! rpm -q "$package" >/dev/null 2>&1; then
+                printf 'warn pkg:%-8s optional runtime integration unavailable\n' "$package"
+            fi
+        done
     elif command -v dnf >/dev/null 2>&1; then
         local package
         local -a required_packages=("${fedora_core_build_packages[@]}")
@@ -500,7 +557,7 @@ doctor() {
             fi
         done
     else
-        printf 'info %-12s library/package checks are currently available on Arch, Debian, Fedora and NixOS only\n' packages
+        printf 'info %-12s library/package checks are currently available on Arch, Debian, Fedora, OpenSUSE and NixOS only\n' packages
     fi
     if [[ -n "${WAYLAND_DISPLAY:-}" || -n "${DISPLAY:-}" ]]; then
         printf 'ok   %-12s graphical session detected\n' session
@@ -549,6 +606,37 @@ configure_if_needed() {
     fi
     cmake -S "$source_dir" -B "$target_dir" -G Ninja "$@"
     printf '%s\n' "$inputs" > "$stamp"
+}
+
+opensuse_build_dependency_signature() {
+    local package
+    local -a required_packages=("${opensuse_core_build_packages[@]}")
+    if kwin_plugins_enabled; then
+        required_packages+=("${opensuse_kwin_build_packages[@]}")
+    fi
+    if spatial_requested; then
+        required_packages+=("${opensuse_spatial_build_packages[@]}")
+    fi
+    for package in "${required_packages[@]}"; do
+        rpm -q --qf '%{NAME}=%{VERSION}-%{RELEASE}\n' "$package" 2>/dev/null \
+            || printf '%s=missing\n' "$package"
+    done
+}
+
+refresh_opensuse_cmake_configuration() {
+    # CMake caches failed find_package/pkg-config probes. Reconfigure when an
+    # OpenSUSE-only required package is installed or upgraded so AUTO detection
+    # cannot keep the worker or Fcitx5 panel missing after dependencies change.
+    command -v zypper >/dev/null 2>&1 || return 0
+
+    local stamp="$build_dir/opensuse-build-dependencies"
+    local current
+    current=$(opensuse_build_dependency_signature)
+    if [[ -f "$stamp" && "$(<"$stamp")" == "$current" ]]; then
+        return 0
+    fi
+    rm -f -- "$build_dir/kos-configure-inputs"
+    printf '%s\n' "$current" > "$stamp"
 }
 
 configure_build() {
@@ -779,6 +867,26 @@ ensure_build_dependencies() {
                 kos_sudo env DEBIAN_FRONTEND=noninteractive apt-get install -y "${missing_packages[@]}"
             fi
         fi
+    elif command -v zypper >/dev/null 2>&1; then
+        local package
+        local -a missing_packages=()
+        local -a required_packages=("${opensuse_core_build_packages[@]}")
+        if kwin_plugins_enabled; then
+            required_packages+=("${opensuse_kwin_build_packages[@]}")
+        fi
+        if spatial_requested; then
+            required_packages+=("${opensuse_spatial_build_packages[@]}")
+        fi
+        for package in "${required_packages[@]}"; do
+            if ! rpm -q "$package" >/dev/null 2>&1; then
+                missing_packages+=("$package")
+            fi
+        done
+        if (( ${#missing_packages[@]} > 0 )); then
+            printf 'KOS build dependencies require administrator permission:\n'
+            printf '  %s\n' "${missing_packages[*]}"
+            sudo zypper --non-interactive install -- "${missing_packages[@]}"
+        fi
     elif command -v dnf >/dev/null 2>&1; then
         local package
         local -a missing_packages=()
@@ -835,6 +943,7 @@ build_kwin_glass() {
 
 build() {
     detect_kwin_plugin_api_version
+    refresh_opensuse_cmake_configuration
     if (( kwin_plugin_rebuild_required )); then
         # A KWin package upgrade changes the imported library's absolute path
         # (for example libkwin.so.6.8.0 -> libkwin.so.6.8.1). Cleaning object

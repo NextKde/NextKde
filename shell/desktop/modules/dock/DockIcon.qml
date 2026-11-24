@@ -531,7 +531,6 @@ Item {
     property Component _contextMenuComponent: Component {
         ContextMenu {
             capsuleReveal: true
-            reserveIconSpace: true
             property bool hasBeenVisible: false
             anchorItem: icon
             position: ConfigService.position
@@ -935,8 +934,12 @@ Item {
         transformOrigin: Item.Center
         color: "#ff3b30"
         border.width: 0
+        // Activity badges only describe live tasks. A pinned app with no
+        // windows is a launcher entry; a badge there suggests content that is
+        // already open, while clicking would just start a new window.
         opacity: ConfigService.showNotificationBadges
-            && (hasCount || icon.isUrgent) && !icon.editMode ? 1 : 0
+            && icon.isRunning && (hasCount || icon.isUrgent)
+            && !icon.editMode ? 1 : 0
         scale: opacity > 0 ? 1 : 0
         visible: opacity > 0.01
         z: 3

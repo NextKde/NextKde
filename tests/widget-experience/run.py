@@ -20,6 +20,10 @@ from PIL import Image
 
 REPO = Path(__file__).resolve().parents[2]
 WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music", "groups"]
+DIGITAL_CAPTURES = [
+    "digital-light-small", "digital-dark-large", "digital-glass-fixed-light",
+    "digital-glass-follow-light-large", "digital-glass-follow-dark",
+]
 state = {
     "appearance/config.json": json.dumps({"version": 28, "shellStyle": "macos", "useSystemFont": False}),
     "appearance/icon-appearance.json": json.dumps({"version": 1, "mode": "grayscale"}),
@@ -35,6 +39,8 @@ class Platform(socketserver.StreamRequestHandler):
             operation = request["operation"]
             if operation == "state.read":
                 result = {"exists": key in state, "data": state.get(key, "")}
+            elif operation == "system.timezone":
+                result = {"timeZone": "Europe/London"}
             elif operation == "state.write":
                 state[key] = payload["data"]
                 result = {}
@@ -47,6 +53,27 @@ class Platform(socketserver.StreamRequestHandler):
 
 class Server(socketserver.ThreadingUnixStreamServer):
     daemon_threads = True
+
+
+def check_digital_pixels(directory):
+    frames = {}
+    for name in DIGITAL_CAPTURES:
+        with Image.open(directory / f"{name}.png") as image:
+            frame = image.convert("RGBA")
+        assert frame.width > 40 and frame.height > 40, (name, "invalid card geometry")
+        visible = [pixel for pixel in frame.getdata() if pixel[3] > 32]
+        opaque = [pixel for pixel in visible if pixel[3] > 240]
+        assert len(visible) > 20 and len(set(visible)) > 20, (name, "digital content was not rendered")
+        if name in ("digital-light-small", "digital-dark-large"):
+            assert len(opaque) > frame.width * frame.height // 2, (name, "card was not painted")
+            average = sum(sum(pixel[:3]) for pixel in opaque) / (len(opaque) * 3)
+            if name == "digital-light-small":
+                assert average > 210, (name, "light card is not white", average)
+            else:
+                assert average < 160, (name, "dark card is not dark", average)
+        frames[name] = frame
+    assert frames["digital-dark-large"].width > frames["digital-light-small"].width
+    assert frames["digital-glass-follow-light-large"].height > frames["digital-glass-fixed-light"].height
 
 
 def check_bell_pixels(directory):
@@ -88,12 +115,13 @@ def run(base_env=None):
                        # These assertions inspect the legacy blur-region transport.
                        # Keep them stable when the compositor also advertises v8.
                        KOS_SURFACE_SHAPE_MAX_VERSION="7")
-            # First load migrates grayscale -> glass. The second must respect
-            # an explicit colour widget style despite those same legacy icons.
-            for expected in ["glass", "color"]:
+            # The first load defaults to analog and toggles digital. The second
+            # must restore digital before switching back to analog.
+            for expected, clock_style in [("glass", "analog"), ("color", "digital")]:
                 result = subprocess.run(["quickshell", "--path", str(root), "--no-color"],
-                                        env=dict(env, EXPECTED_WIDGET_STYLE=expected),
-                                        capture_output=True, text=True, timeout=25)
+                                        env=dict(env, EXPECTED_WIDGET_STYLE=expected,
+                                                 EXPECTED_CLOCK_STYLE=clock_style),
+                                        capture_output=True, text=True, timeout=120)
                 output = result.stdout + result.stderr
                 qa = Path(base_env["KOS_WIDGET_QA"]) / expected if base_env.get("KOS_WIDGET_QA") else None
                 if qa:
@@ -104,6 +132,7 @@ def run(base_env=None):
                 assert result.returncode == 0, output
                 assert "WIDGET_EXPERIENCE_PASS" in output, output
                 assert not re.search(r"WIDGET_EXPERIENCE_FAIL|ReferenceError|TypeError|Cannot assign|Unable to assign|is not a type", output), output
+                check_digital_pixels(root / "captures")
                 check_bell_pixels(root / "captures")
                 saved = json.loads(state["appearance/config.json"])
                 assert saved["version"] == 35 and saved["widgetStyle"] == "color", saved
@@ -113,7 +142,7 @@ def run(base_env=None):
                 # Each launch must render its own frames, not reuse the first run.
                 for capture in (root / "captures").glob("*.png"):
                     capture.unlink()
-                print(f"PASS: {expected} load, empty desktop recovery, gestures, edit-mode dismissal, 18 appearance combinations, countdown colour pixels, persistence")
+                print(f"PASS: {expected} load, empty desktop recovery, {clock_style} clock restore and pointer/keyboard toggle, exact digital time/offset/elapsed ticks, reduced motion, 5 real-span digital appearance captures, gestures, edit-mode dismissal, 18 appearance combinations, countdown colour pixels, persistence")
             server.shutdown()
 
 

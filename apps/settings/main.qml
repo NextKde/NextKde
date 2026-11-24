@@ -53,6 +53,20 @@ ApplicationWindow {
     property bool restoringHistory: false
     readonly property bool canGoBack: historyIndex > 0
     readonly property bool canGoForward: historyIndex < pageHistory.length - 1
+    // Start in the persisted language instead of the system locale, applied
+    // while the root is being created so pages built below already translate.
+    // The Shell owns the value and its i18n snapshot still confirms it, but
+    // waiting for that IPC reply flashes the wrong language on every launch —
+    // and leaves it wrong whenever the Shell is restarting, which is exactly
+    // what an update does.
+    readonly property bool _languageApplied: {
+        if (typeof settingsBridge !== "undefined" && settingsBridge) {
+            const saved = String(settingsBridge.savedLanguage || "")
+            if (saved.length > 0)
+                I18n.language = saved === "auto" ? I18n.systemDefault() : saved
+        }
+        return true
+    }
     Component.onCompleted: {
         pageHistory = currentPage === 14 ? [1, 14] : [currentPage]
         historyIndex = pageHistory.length - 1

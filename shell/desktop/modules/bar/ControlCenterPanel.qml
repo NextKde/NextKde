@@ -278,7 +278,15 @@ PersistentPanelWindow {
     Connections {
         target: WindowService
         function onGlobalPointerPressed(x, y, button, timestamp) {
-            if (!popupMotion.interactive)
+            // The session confirmation lives on its own full-screen surface,
+            // centred well away from the panel. A press on either of its
+            // buttons is therefore *outside* our rect, and closing here would
+            // clear pendingConfirmAction before the button's release can run
+            // the action — the dialog flashed away and logout/reboot/poweroff
+            // silently did nothing. The same exemption onActiveWindowIdChanged
+            // already applies. Backdrop presses still cancel: the dialog
+            // handles those itself (onBackdropClicked).
+            if (!popupMotion.interactive || panel.pendingConfirmAction !== "")
                 return
             if (x < panel.globalX || x > panel.globalX + panel.width
                     || y < panel.globalY || y > panel.globalY + panel.height) {

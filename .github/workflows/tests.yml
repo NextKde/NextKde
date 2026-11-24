@@ -10,9 +10,11 @@ on:
   pull_request:
   workflow_dispatch:
 
-# A superseded run on the same branch tells us nothing, so cancel it.
+# A superseded run on the same branch tells us nothing, so cancel it. Keying
+# pull requests by number keeps that working when a fork branch name differs
+# from the local one.
 concurrency:
-  group: tests-${{ github.ref }}
+  group: tests-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -132,6 +134,15 @@ jobs:
       KOS_EXPECT_FONT_DPI: ${{ matrix.font_dpi }}
     container: archlinux:base-devel
     steps:
+      # The pinned snapshot only serves packages from archive.archlinux.org,
+      # whose slow downloads are the recurring false failure in these jobs.
+      # Cache the package archives per series and snapshot; pacman still
+      # verifies every package, so a stale entry is simply re-downloaded.
+      - name: Mount package cache
+        uses: actions/cache@v6
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ matrix.series }}-${{ matrix.snapshot }}
       # Pin the entire Qt/KF/Plasma runtime, not just headers or a mocked KCM.
       - name: Select the Plasma ${{ matrix.series }} runtime snapshot
         env:
@@ -148,6 +159,10 @@ jobs:
             cmake ninja gcc qt6-base qt6-declarative kconfig kcmutils \
             plasma-workspace kio kservice dbus gtk3 wayland pkgconf \
             flatpak ostree xorg-server-xvfb xorg-xauth
+      # Keep the saved cache to what this snapshot actually installed: the
+      # image upgrade leaves superseded archives that only cost quota.
+      - name: Prune superseded package archives
+        run: pacman -Sc --noconfirm
       - name: Assert Plasma series and record the actual runtime
         env:
           PLASMA_SERIES: ${{ matrix.series }}
@@ -211,6 +226,46 @@ jobs:
           done < /tmp/kos-fedora-packages
           rpm -q --whatprovides zlib-devel
 
+  opensuse-dependencies:
+    name: OpenSUSE Tumbleweed dependency packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    container: opensuse/tumbleweed:latest
+    steps:
+      - name: Install package query tools
+        run: zypper --non-interactive install git python3
+      - name: Add the Quickshell package repository
+        run: |
+          zypper --non-interactive addrepo --refresh --priority 120 \
+            https://download.opensuse.org/repositories/home:/AvengeMedia:/danklinux/openSUSE_Tumbleweed/ \
+            danklinux-obs
+          zypper --non-interactive --gpg-auto-import-keys refresh danklinux-obs
+      - uses: actions/checkout@v7
+      - name: Check OpenSUSE package names and installer selection
+        shell: bash
+        run: |
+          python3 tools/tests/test_kosctl_opensuse.py
+          mapfile -t packages < <(
+            python3 tools/tests/test_kosctl_opensuse.py --packages
+          )
+          found=$(
+            zypper --non-interactive --xmlout search --type package \
+              --match-exact "${packages[@]}" \
+              | grep -oE 'name="[^"]+"' \
+              | sed 's/^name="//;s/"$//' \
+              | sort -u
+          )
+          missing=$(
+            comm -23 \
+              <(printf '%s\n' "${packages[@]}" | sort -u) \
+              <(printf '%s\n' "$found")
+          )
+          if [ -n "$missing" ]; then
+            echo "Missing OpenSUSE packages:" >&2
+            echo "$missing" >&2
+            exit 1
+          fi
+
   fcitx-panel-old-headers:
     name: Fcitx panel (Ubuntu 26.04 headers)
     runs-on: ubuntu-24.04
@@ -272,6 +327,8 @@ jobs:
         run: python3 tools/tests/test_shell_qml_deploy.py
       - name: Test userspace Fcitx panel installation
         run: python3 tools/tests/test_fcitx_panel_install.py
+      - name: Test OpenSUSE required dependency selection
+        run: python3 tools/tests/test_kosctl_opensuse.py
       - name: Check KMusic catalogue preparation
         run: python3 -m unittest discover -s tools/tests -p 'test_kmusic_catalog.py'
       - name: Check project contracts and documentation
@@ -285,6 +342,15 @@ jobs:
     runs-on: ubuntu-24.04
     env:
       QT_FORCE_STDERR_LOGGING: "1"
+      # ccache: content-hashed compiler cache. A translation unit is reused
+      # only when its preprocessed source and compiler options are identical,
+      # so a changed file always recompiles and every build still runs; this
+      # only stops paying for the same compilation twice.
+      CCACHE_DIR: ${{ github.workspace }}/.build/ccache
+      CCACHE_BASEDIR: ${{ github.workspace }}
+      CCACHE_NOHASHDIR: "true"
+      CCACHE_COMPILERCHECK: content
+      CCACHE_MAXSIZE: 2G
 
     # Arch, not Ubuntu: `tools/kosctl` provisions `arch_core_build_packages`
     # from `pacman`, and this image gives those packages the same names and the
@@ -318,7 +384,8 @@ jobs:
             extra-cmake-modules wayland plasma-workspace libplasma kpackage \
             kwindowsystem kiconthemes kglobalaccel kio kconfig \
             go dbus nodejs python opencv onnxruntime-cpu xorg-server-xvfb xorg-xauth \
-            quickshell kwin fcitx5 python-pillow python-dbus python-gobject mesa vulkan-swrast libcap
+            quickshell kwin fcitx5 python-pillow python-dbus python-gobject mesa vulkan-swrast libcap \
+            ccache
 
       # Arch gives KWin CAP_SYS_NICE, which Docker's default capability
       # bounding set excludes. execve then fails with EPERM before KWin starts.
@@ -344,6 +411,18 @@ jobs:
           key: gocache-${{ runner.os }}-${{ hashFiles('services/data-service/go.sum') }}
           restore-keys: |
             gocache-${{ runner.os }}-
+
+      # Warm compiler cache. The key only decides what gets saved; any restore
+      # hit through the prefix lets ccache reuse unchanged translation units,
+      # while the build step still recompiles everything the commit changed.
+      - name: Mount compiler cache
+        id: ccache
+        uses: actions/cache@v6
+        with:
+          path: .build/ccache
+          key: ccache-${{ runner.os }}-${{ hashFiles('**/*.c', '**/*.cc', '**/*.cpp', '**/*.h', '**/CMakeLists.txt', 'tools/run-tests.sh') }}
+          restore-keys: |
+            ccache-${{ runner.os }}-
 
       # Build once, then let each test group run even if another group fails.
       # Spatial dependencies are mandatory: AUTO could silently omit coverage.
@@ -373,8 +452,10 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
+          # Every logic test is its own short-lived node process; four at a
+          # time is well inside the per-test TIMEOUT budget.
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^logic$' \
+            --parallel 4 -L '^logic$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/logic.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/logic.xml"
 
@@ -412,8 +493,11 @@ jobs:
         if: ${{ !cancelled() && steps.prepare.outcome == 'success' }}
         run: |
           mkdir -p .build/tests/test-results
+          # Each suite runs its own offscreen process. Two at a time keeps
+          # CPU contention from tripping the tighter per-test TIMEOUTs while
+          # still overlapping the two-minute tail.
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^headless$' \
+            --parallel 2 -L '^headless$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/headless.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/headless.xml"
 
@@ -425,7 +509,7 @@ jobs:
         run: |
           mkdir -p .build/tests/test-results
           ctest --test-dir .build/tests --output-on-failure --no-tests=error \
-            -L '^widgets$' \
+            --parallel 2 -L '^widgets$' \
             --output-log "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.log" \
             --output-junit "$GITHUB_WORKSPACE/.build/tests/test-results/widgets.xml"
 
@@ -484,6 +568,15 @@ jobs:
     container: archlinux:base-devel
 
     steps:
+      # Shared with the matching fonts series: both jobs install from the same
+      # pinned snapshot, and archive.archlinux.org downloads are the slow,
+      # flaky part. pacman verifies every package, so stale archives are just
+      # re-downloaded.
+      - name: Mount package cache
+        uses: actions/cache@v6
+        with:
+          path: /var/cache/pacman/pkg
+          key: pacman-${{ matrix.series }}-${{ matrix.snapshot }}
       # A complete repository snapshot keeps Qt/KF/KDecoration and KWin in
       # agreement. Alternate headers on a rolling SDK alone do not prove a
       # plugin can compile and link on each supported series.
@@ -511,6 +604,9 @@ jobs:
             qt6-base qt6-declarative qt6-wayland qt6-tools qt6-translations \
             extra-cmake-modules kwin kconfig ki18n kguiaddons kcmutils \
             kcoreaddons kdecoration gettext libxcb vulkan-headers wayland python
+      # Keep the saved cache to what this snapshot actually installed.
+      - name: Prune superseded package archives
+        run: pacman -Sc --noconfirm
 
       - name: Assert SDK series and record package versions
         env:

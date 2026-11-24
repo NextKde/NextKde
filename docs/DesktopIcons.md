@@ -2,10 +2,62 @@
 
 [简体中文](DesktopIcons.zh-CN.md)
 
+## Desktop shortcuts
+
+Right-click an application icon in the launcher and choose **Send to Desktop** to
+create a symbolic link named after the installed `.desktop` entry in the XDG
+desktop directory. The link points at the installed entry, so the shortcut
+follows application updates. A launcher custom icon still applies through the
+file-name lookup; a custom display name is not written into the shortcut.
+
+Sending the same application again does not replace a file or link that already
+exists; the launcher reports "Shortcut already exists on Desktop". A missing or
+unwritable desktop directory fails with a notification. If the platform daemon
+is unavailable the action is refused and the failure is logged, because no
+fallback writes desktop files from QML. After a successful creation the Shell
+requests `desktop.refresh`, so the icon appears even when the data service's
+directory watcher was not installed. Opening, renaming, cutting/moving and
+trashing continue to use the existing desktop file operations; rename, move and
+trash act on the shortcut link itself and never modify the installed `.desktop`
+file it points at.
+
+## Spacing
+
 Right-click the desktop background and choose icon spacing: loose, compact or tighter.
 Spacing is independent of icon size, display scaling and files. Labels keep at most two lines,
 using actual font height. The preference is `DesktopFiles/iconSpacing` in
 `deskcenter-desktop-files.ini`; old configurations default to loose.
+
+## Icon size
+
+Right-click the desktop background and choose **Icon Size**: **Extra Small**, Small,
+Medium or Large. The four tiers are 32, 40, 56 and 72 logical pixels; the rendered
+artwork is 12 px larger, so Extra Small draws a 44 px icon. File-name labels use the
+desktop font; icon size changes the artwork and cell geometry, not the label size.
+The preference is `DesktopFiles/iconSize` in `deskcenter-desktop-files.ini`;
+existing values remain valid.
+
+Icon size and icon spacing are independent. Sizes are logical pixels and follow the
+system scale, which makes Extra Small useful on high-DPI outputs. The grid uses spare
+height for another row when it can keep at least a 3 px gutter; only when that is not
+possible does it leave a bottom remainder. The extra row fills the columns from the
+current alignment edge, so the column at the opposite edge may be shorter. Compact and
+denser spacing keep their
+108/96 px cell-width floors, so Extra Small mainly adds rows in those modes; whether
+it adds a column depends on the actual font line height and the available width.
+
+## Shortcut alignment
+
+Right-click the desktop background and choose **Arrange**, then **Align Left** or
+**Align Right** below the sort entries. The default is right alignment. Alignment
+applies inside the desktop file area: left alignment starts at the widget boundary,
+right alignment at the right edge. The preference is
+`DesktopFiles/shortcutAlignment` in `deskcenter-desktop-files.ini`; old
+configurations default to right.
+
+Changing the alignment remaps the grid by column: slots still fill one column
+top-to-bottom before the next, starting from the chosen edge. Box selection, drag
+and drop, insertion markers and folder merging use the same mapping.
 
 ## Copying and dropping files
 
@@ -156,6 +208,10 @@ widget content alive when another widget is moved.
 The clock animates a shared page-selection fraction for its face and countdown,
 then derives each page's position from the current height. Height changes alone
 must keep the hidden countdown below the face rather than replaying a slide.
+In edit mode, the clock's Analog/Digital control switches its face without replacing
+the countdown. `DeskCenterConfigService` persists the choice as `analog` or `digital`;
+missing or invalid values use analog. Both faces use the shared clock and appearance
+tokens, with digital retaining the regular rounded card and analog using the flower outline.
 `kos-deskcenter.widget-layout` covers geometry and migration-compatible sizes;
 `kos-ui.widget-resize` exercises pointer input, glass-anchor geometry after the lift
 animation finishes, retained card/clock instances across layout saves and reorder,

@@ -1,6 +1,7 @@
 import QtQuick
 import Quickshell
 import Quickshell.Wayland
+import "PanelPlacement.mjs" as PanelPlacement
 
 // A panel window that stays mapped for the shell's whole lifetime and hides by
 // transparency, mirroring how DockWindow treats its own surface. KOS popups that
@@ -69,19 +70,28 @@ PanelWindow {
         right: window.panelEdge === "right"
     })
     margins {
+        // The along-edge position is clamped at both ends by PanelPlacement
+        // (tested): a side dock puts cells low, and these panels are nearly
+        // screen-tall, so an unclamped centre pushed them off the bottom.
         top: window.panelEdge === "top"
             ? window.panelOffset
             : (window.verticalEdge
-                ? Math.max(window.edgeMargin, Math.round(window.panelCenter
-                    - window.implicitHeight / 2)) : 0)
+                ? PanelPlacement.clampedCenterOffset({
+                    center: window.panelCenter,
+                    size: window.implicitHeight,
+                    screenSize: window.targetScreen ? window.targetScreen.height : 1080,
+                    edgeMargin: window.edgeMargin })
+                : 0)
         bottom: window.panelEdge === "bottom" ? window.panelOffset : 0
         left: window.panelEdge === "left"
             ? window.panelOffset
             : (!window.verticalEdge
-                ? Math.max(window.edgeMargin, Math.min(
-                    Math.round(window.panelCenter - window.implicitWidth / 2),
-                    (window.targetScreen ? window.targetScreen.width : 1920)
-                        - window.implicitWidth - window.edgeMargin)) : 0)
+                ? PanelPlacement.clampedCenterOffset({
+                    center: window.panelCenter,
+                    size: window.implicitWidth,
+                    screenSize: window.targetScreen ? window.targetScreen.width : 1920,
+                    edgeMargin: window.edgeMargin })
+                : 0)
         right: window.panelEdge === "right" ? window.panelOffset : 0
     }
 
