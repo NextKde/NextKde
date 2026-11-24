@@ -710,11 +710,19 @@ Item {
             return JSON.stringify({
                 displayMode: AppLauncherConfigService.displayMode,
                 layoutProfiles: AppLauncherConfigService.layoutProfiles,
+                motion: AppLauncherConfigService.motionSettings,
             })
         }
 
         function updateDisplayMode(mode: string): string {
             AppLauncherConfigService.updateDisplayMode(mode)
+            return snapshot()
+        }
+
+        function updateMotion(enabled: bool, speed: real, distance: int): string {
+            if (!AppLauncherConfigService.isValidMotion(enabled, speed, distance))
+                return JSON.stringify({error: "Invalid launcher animation settings"})
+            AppLauncherConfigService.updateMotion(enabled, speed, distance)
             return snapshot()
         }
 

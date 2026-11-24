@@ -57,7 +57,20 @@ Shell 图案在 `BundledIcons` 用稳定名称登记，通过 `BundledIcon` 或�
 Dock、Bar、组件统一使用几何/动效 Token。窗口动画目标使用合成器全局坐标中的稳定槽位中心及静态图标尺寸，悬停放大不改变最小化落点。
 桌面间距见[桌面图标](DesktopIcons.zh-CN.md)。Material 表面与连续窗口圆角渲染所有者不同，不重复裁剪或阴影。
 
-## 启动器文件夹层次
+## 启动器动画与文件夹层次
+
+`AppLauncherConfigService.qml` 在版本 5 的启动台独立配置中保存 `motion.enabled`、
+`motion.speed`（0.5–2，默认 1）和 `motion.distance`（0–240 逻辑像素，默认 96）。
+旧文件缺少字段时沿用默认值；持久化值无效时记录警告并保留默认值。
+无效 IPC 更新返回错误且不改变状态。设置页通过 `SettingsBridge` 调用
+`applauncher-settings.snapshot` 与 `updateMotion(enabled, speed, distance)` 读写。
+
+`LauncherMotion.qml` 驱动整个卡片从正 Y 偏移向上出现，关闭时向下收回。
+网格布局与整体缩放保持固定，原生玻璃跟随布局的平移。独立速度同时调整面板弹簧、
+玻璃淡变与图标散开，不影响其他弹窗；快速反向保留弹簧位置和速度。
+窗口保持映射直至退场结束，输入则等待入场几何、淡变及图标任务完成；关闭动画或启用全局减少动态效果时，
+三类动画直接到达目标。三个选项均位于启动台设置页。弹窗回归覆盖几何、反向与配置校验，
+交互控制回归覆盖动画生命周期和速度，设置页契约夹具覆盖预览、取消、提交及快照刷新。
 
 `modules/applauncher/AppLauncherWindow.qml` 在文件夹打开时模糊主应用页，替代黑色压暗蒙版。
 文件夹页位于被过滤的主应用页子树之外，文件夹内图标、文字及输入保持清晰。

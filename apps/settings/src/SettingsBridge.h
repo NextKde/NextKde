@@ -137,6 +137,7 @@ public:
     Q_INVOKABLE void updateShortcut(const QString& id, const QString& combo);
     Q_INVOKABLE void resetShortcut(const QString& id);
     Q_INVOKABLE void updateLauncherDisplayMode(const QString& mode);
+    Q_INVOKABLE void updateLauncherMotion(bool enabled, double speed, int distance);
     Q_INVOKABLE void updateLauncherProfileIconSize(const QString& mode, const QString& size);
     Q_INVOKABLE void updateLauncherProfileDensity(const QString& mode, const QString& density);
     Q_INVOKABLE void updateLauncherProfileFontWeight(const QString& mode, const QString& weight);

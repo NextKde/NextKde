@@ -153,6 +153,13 @@ void SettingsBridge::updateLauncherDisplayMode(const QString& mode)
     callLauncher({ QStringLiteral("updateDisplayMode"), mode });
 }
 
+void SettingsBridge::updateLauncherMotion(bool enabled, double speed, int distance)
+{
+    callLauncher({ QStringLiteral("updateMotion"),
+        enabled ? QStringLiteral("true") : QStringLiteral("false"),
+        QString::number(speed, 'g', 12), QString::number(distance) });
+}
+
 void SettingsBridge::updateLauncherProfileIconSize(const QString& mode, const QString& size)
 {
     callLauncher({ QStringLiteral("updateProfileIconSize"), mode, size });
@@ -311,6 +318,10 @@ QVariantMap SettingsBridge::launcherSnapshotFromReply(const QString& payload)
     }
 
     const QJsonObject object = document.object();
+    if (object.contains(QStringLiteral("error"))) {
+        setLastError(object.value(QStringLiteral("error")).toString());
+        return { };
+    }
     if (!object.contains(QStringLiteral("displayMode"))) {
         setLastError(QStringLiteral(
             "The launcher configuration from the desktop environment is incomplete"));
@@ -322,6 +333,7 @@ QVariantMap SettingsBridge::launcherSnapshotFromReply(const QString& payload)
         { QStringLiteral("displayMode"), object.value(QStringLiteral("displayMode")).toString() },
         { QStringLiteral("layoutProfiles"),
             object.value(QStringLiteral("layoutProfiles")).toObject().toVariantMap() },
+        { QStringLiteral("motion"), object.value(QStringLiteral("motion")).toObject().toVariantMap() },
     };
 }
 

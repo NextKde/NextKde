@@ -1,11 +1,15 @@
 import QtQuick
 import "../../../shared/qml/foundation" as Foundation
 
-// Tile progress animations keep the original spread effect. The stationary glass
-// fades independently and reaches full opacity before the tiles settle.
+// Tile progress animations keep the original spread effect. The whole panel
+// slides vertically while its glass fades on the same launcher-local speed.
 Item {
     id: motion
     property var motionPolicy: Foundation.AppTheme.motion
+    property bool reduceMotion: Foundation.AppTheme.reduceMotion
+    property bool animationEnabled: true
+    property real speed: 1
+    readonly property bool animate: animationEnabled && !reduceMotion
     required property Item target
     parent: target.parent
     property bool requestedOpen: false
@@ -16,6 +20,25 @@ Item {
     property int pendingIcons: 0
     property bool changing: false
     property bool glassFinished: false
+    readonly property real geometryProgress: geometry.value
+
+    property Foundation.SpringMotion geometry: Foundation.SpringMotion {
+        target: motion.requestedOpen ? 1 : 0
+        response: 0.28 / motion.speed
+        enabled: motion.mapped && motion.animate
+        // Retire the panel after the spring's binding evaluation completes;
+        // unmapping here synchronously would snap that same spring mid-update.
+        onAnimatingChanged: if (!animating) Qt.callLater(motion.finishIfSettled)
+    }
+
+    onAnimateChanged: {
+        if (!animate && mapped) {
+            glassFade.stop();
+            glassOpacity = requestedOpen ? 1 : 0;
+            glassFinished = true;
+            finishIfSettled();
+        }
+    }
 
     function prepare() {
         changing = true;
@@ -45,9 +68,14 @@ Item {
     }
 
     function startGlassFade(value, duration, curve) {
+        if (!animate) {
+            glassOpacity = value;
+            glassFinished = true;
+            return;
+        }
         glassFade.from = glassOpacity;
         glassFade.to = value;
-        glassFade.duration = duration;
+        glassFade.duration = Math.max(1, Math.round(duration / speed * Math.abs(value - glassOpacity)));
         glassFade.easing.type = curve;
         glassFade.start();
     }
@@ -58,7 +86,7 @@ Item {
         finishIfSettled();
     }
     function finishIfSettled() {
-        if (changing || !glassFinished || pendingIcons !== 0)
+        if (changing || !glassFinished || pendingIcons !== 0 || (animate && geometry.animating))
             return;
         settledOpen = requestedOpen;
         if (!requestedOpen) mapped = false;

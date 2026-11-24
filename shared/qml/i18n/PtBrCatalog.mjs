@@ -3,6 +3,12 @@
 // Keys mirror ZhCatalog.mjs; when an English source string changes, update
 // the key here too. Date patterns use Qt format strings (quote literals).
 export const catalog = {
+    "Launcher animation": "Animação do inicializador",
+    "Slide up and down": "Deslizar para cima e para baixo",
+    "Slide up from below when opening and slide down when closing": "Desliza de baixo para cima ao abrir e para baixo ao fechar",
+    "Animation speed": "Velocidade da animação",
+    "Vertical travel": "Deslocamento vertical",
+    "Invalid launcher animation settings": "Configurações de animação do inicializador inválidas",
     "Input method activation failed": "Falha ao ativar a interface do método de entrada",
     "Reloading input method…": "Recarregando método de entrada…",
     "No version has been approved in this catalog.": "Nenhuma versão foi aprovada neste catálogo.",

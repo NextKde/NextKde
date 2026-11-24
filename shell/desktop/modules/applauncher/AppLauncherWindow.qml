@@ -159,6 +159,9 @@ PanelWindow {
 
     LauncherMotion {
         motionPolicy: AppearanceTokens.motion
+        reduceMotion: AppearanceConfigService.reduceMotion
+        animationEnabled: AppLauncherConfigService.motionSettings.enabled
+        speed: AppLauncherConfigService.motionSettings.speed
         id: popupMotion
         target: launcherContent
         onSettledOpenChanged: {
@@ -1321,6 +1324,7 @@ PanelWindow {
             objectName: "launcher-motion-frame"
             width: launcherRevealClip.width
             height: launcherRevealClip.height
+            y: (1 - popupMotion.geometryProgress) * AppLauncherConfigService.motionSettings.distance
             visible: root.panelVisible
             // Defer input until the tile jobs finish so clicks and hover
             // cannot interrupt the entrance motion.
@@ -1356,7 +1360,7 @@ PanelWindow {
                     scrimEnabled: AppearanceTokens.surface.usesBackdrop
                     // Adaptive tint, one preset above the Dock's subtle level.
                     scrimLevel: "transparent"
-                    // Keep the outline fixed and soften only the complete finish.
+                    // Fade the finish while the parent slides glass and content together.
                     materialOpacity: popupMotion.glassOpacity
                     // QML-painted themes have their own matching fade. The
                     // native effect fades separately through protocol metadata.
@@ -1372,7 +1376,7 @@ PanelWindow {
                     y: 0
                     scale: 1
                     focus: root.open && !root.externalDialogOpen
-                    opacity: 1
+                    opacity: popupMotion.glassOpacity
                     // Keys is an Item attachment. Keeping the handler on the
                     // common visual ancestor lets Escape bubble up from the
                     // search, folder and editor controls without attaching it
