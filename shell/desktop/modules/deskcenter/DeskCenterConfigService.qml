@@ -18,17 +18,20 @@ QtObject {
         todo: "medium",
         system: "medium",
         activity: "medium",
-        music: "medium"
+        music: "medium",
+        groups: "medium"
     })
     readonly property var sizeOrder: WidgetLayout.sizeOrder
     readonly property var defaultOrder: [
-        "clock", "weather", "calendar", "todo", "system", "activity", "music"
+        "clock", "weather", "calendar", "todo", "system", "activity", "music",
+        "groups"
     ]
 
     property Settings _settings: Settings {
         location: "file://" + Quickshell.stateDir + "/deskcenter-widgets.ini"
         category: "Widgets"
         property int schemaVersion: 2
+        property string clockStyle: "analog"
         property string sizesJson: "{}"
         property string orderJson: "[]"
         property string positionsJson: "{}"
@@ -41,6 +44,16 @@ QtObject {
         desktopLyricsEnabled = _settings.desktopLyricsEnabled
         desktopLyricsX = Math.max(0, Math.min(1, _settings.desktopLyricsX))
         desktopLyricsY = Math.max(0, Math.min(1, _settings.desktopLyricsY))
+    }
+
+    readonly property string clockStyle: _settings.clockStyle === "digital" ? "digital" : "analog"
+
+    function setClockStyle(style) {
+        if (style !== "analog" && style !== "digital") return false
+        if (clockStyle === style) return false
+        _settings.clockStyle = style
+        _settings.sync()
+        return true
     }
 
     function parsedSizes() {
@@ -123,11 +136,15 @@ QtObject {
     function sizeFor(widgetId) {
         const sizes = parsedSizes()
         const value = String(sizes[widgetId] ?? defaultSizes[widgetId] ?? "medium")
-        return WidgetLayout.normalizedSize(value)
+        // A hand-edited span must still respect each widget's size ceiling:
+        // the grouped view accepts 2x3/3x2/3x3 and never goes below 2x2, and
+        // weather's three-column layouts are valid explicit spans.
+        return WidgetLayout.isValidSize(widgetId, value)
+            ? WidgetLayout.normalizedSize(value) : "medium"
     }
 
     function setSize(widgetId, size) {
-        if (sizeOrder.indexOf(size) < 0)
+        if (!WidgetLayout.isValidSize(widgetId, size))
             return false
         const sizes = parsedSizes()
         if (sizes[widgetId] === size)

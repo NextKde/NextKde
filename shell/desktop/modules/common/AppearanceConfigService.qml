@@ -186,7 +186,8 @@ QtObject {
     // cell appears by default and an upgrade never silently removes one.
     // The ids are validated against the known sets below before being written,
     // so a hand-edited config file cannot make a surface disappear entirely.
-    property var hiddenDeskCenterWidgets: []
+    property var hiddenDeskCenterWidgets:
+        VisibilityPolicy.defaultHiddenDeskCenterWidgets.slice()
     property var hiddenStatusCells: []
     // Which shell surfaces keep the glass pointer effects (hover light, lens
     // parallax and the click ripple). The ids are fixed by the shell; a
@@ -697,7 +698,7 @@ QtObject {
         if (!service._widgetStyleResolved)
             return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 34,
+            version: 35,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -838,10 +839,16 @@ QtObject {
                     service.desktopFontFamily = typeof object.desktopFontFamily === "string"
                         ? object.desktopFontFamily.trim() : ""
                     // v28 adds per-surface visibility. Files written before it
-                    // carry neither key, and the empty arrays they fall back to
-                    // mean "everything visible" -- the behaviour those
-                    // installations already had.
-                    const hiddenWidgets = object.hiddenDeskCenterWidgets
+                    // carry neither key. v35 adds the grouped widget, which is
+                    // opt-in: older files cannot contain an explicit choice for
+                    // it, so add it to the hidden set while normalising. A v35
+                    // file respects whatever the user chose.
+                    const hiddenWidgets = Array.isArray(object.hiddenDeskCenterWidgets)
+                        ? object.hiddenDeskCenterWidgets.slice()
+                        : VisibilityPolicy.defaultHiddenDeskCenterWidgets.slice()
+                    if (Number(object.version) < 35
+                            && hiddenWidgets.indexOf("groups") < 0)
+                        hiddenWidgets.push("groups")
                     const hiddenCells = object.hiddenStatusCells
                     // v34 adds the per-surface pointer-effect allow list. A
                     // file written before it keeps the tuned default set; an
@@ -1021,7 +1028,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 34
+                    if (Number(object.version) !== 35
                             || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)

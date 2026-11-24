@@ -109,7 +109,16 @@ ShellRoot {
                 WeatherService.applyWeather({ schemaVersion: 1, status: "idle", locations: [] })
                 test.check(!WeatherService.available && WeatherService.forecastDays.length === 0,
                     "explicit empty selection clears weather")
-                console.log("WEATHER_REFRESH_PASS: core polls, delegate stability, reconnects, inspection failures, app recovery, source/city/units changes, empty selection")
+                IndependentAppWidgetService.weather = { state: "unavailable" }
+                test.check(!WeatherService.available && !WeatherService.loading,
+                    "failed startup inspection reports an error without pretending to load")
+                IndependentAppWidgetService.weather = {
+                    state: "ready", sourceToken: "app-c", payload: test.forecast("city-c", 13)
+                }
+                test.check(WeatherService.available && !WeatherService.stale
+                    && WeatherService.cityName === "city-c" && WeatherService.temperature === "13°",
+                    "a valid app summary recovers an empty startup failure")
+                console.log("WEATHER_REFRESH_PASS: core polls, delegate stability, reconnects, inspection failures, app recovery, source/city/units changes, empty selection, startup recovery")
             } catch (error) {
                 console.error("WEATHER_REFRESH_FAIL: " + error)
             }

@@ -115,7 +115,6 @@ PanelWindow {
     // widget uses integer spans, giving desktop cards the intentional, large
     // iPadOS scale rather than a collection of small floating macOS tiles.
     readonly property int columns: 10
-    readonly property int widgetColumns: widgetLayout.columns
     readonly property real sideMargin: 20
     // Keep card sizing tied to the original grid metrics. The larger visual
     // insets should consume the flexible desktop-file field on the right,
@@ -154,9 +153,25 @@ PanelWindow {
     property bool timerRunning: false
     property bool timerHasStarted: false
     property bool timerView: false
+    property string systemTimeZone: ""
     property bool editMode: false
     property bool widgetLibraryOpen: false
     property var activeDragCard: null
+    // The loaded grouped content, if the card is on screen. Its own editor is
+    // the only visible rename surface while the normal icon field is hidden.
+    property var groupsContentItem: null
+
+    function beginGroupsRename(entry) {
+        const path = entry?.path ?? ""
+        if (!path || !groupsContentItem)
+            return
+        // The context menu owns focus while closing; defer the editor's grab
+        // by one turn, like beginInlineRename does for the normal icon field.
+        Qt.callLater(function() {
+            if (root.groupsContentItem)
+                root.groupsContentItem.beginRename(path)
+        })
+    }
 
     function enterWidgetEditMode(openLibrary) {
         desktopFileGrid.clearDesktopSelection()
@@ -184,7 +199,7 @@ PanelWindow {
         clock: I18n.tr("Clock"), weather: I18n.tr("Weather"),
         calendar: I18n.tr("Calendar"), todo: I18n.tr("To-Do"),
         system: I18n.tr("System"), activity: I18n.tr("Activity"),
-        music: I18n.tr("Music")
+        music: I18n.tr("Music"), groups: I18n.tr("Grouped View")
     })
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
@@ -208,6 +223,15 @@ PanelWindow {
             root.depthPointerX = 0
             root.depthPointerY = 0
         }
+    }
+    Component.onCompleted: PlatformClient.request("system.timezone", {}, function(response) {
+        if (response?.ok)
+            root.systemTimeZone = String(response.result?.timeZone || "")
+    })
+
+    function toggleClockStyle() {
+        DeskCenterConfigService.setClockStyle(
+            DeskCenterConfigService.clockStyle === "analog" ? "digital" : "analog")
     }
 
     function formattedTimer() {
@@ -320,7 +344,16 @@ PanelWindow {
             priority: priority, startColor: startColor, endColor: endColor,
             surface: false }
     }
-    readonly property var widgetDefinitions: {
+    readonly property bool groupsWidgetVisible:
+        !AppearanceConfigService.isDeskCenterWidgetHidden("groups")
+    // Widgets are authored on the active output only; the grouped view follows
+    // that rule, and only its own output hides the normal file icons.
+    readonly property bool groupsWidgetShown:
+        groupsWidgetVisible
+        && !!groupsPlacement
+        && root.screen?.name === ScreenLifecycle.activeScreen?.name
+
+    readonly property var flowWidgetDefinitions: {
         // Make the binding depend on persisted configuration changes.
         const revision = DeskCenterConfigService.revision
         // Reading the visibility list here is what makes the switch in the
@@ -328,7 +361,11 @@ PanelWindow {
         // re-evaluates this property, and `placements` packs whatever is left.
         const hidden = AppearanceConfigService.hiddenDeskCenterWidgets
         const definitions = [
-            configuredWidget("clock", 100, "#536783", "#35465f"),
+            configuredWidget("clock", 100,
+                DeskCenterConfigService.clockStyle === "digital"
+                    ? AppearanceTokens.widget.digitalClock.artworkStart : "#536783",
+                DeskCenterConfigService.clockStyle === "digital"
+                    ? AppearanceTokens.widget.digitalClock.artworkEnd : "#35465f"),
             configuredWidget("weather", 90, "#536b94", "#394b70"),
             configuredWidget("calendar", 80, "#fff8fa", "#f3e8ed"),
             configuredWidget("todo", 75, "#f2faf7", "#e2f1eb"),
@@ -341,11 +378,32 @@ PanelWindow {
             byId[widget.id] = widget
         const ordered = []
         for (const id of DeskCenterConfigService.orderedIds()) {
+            // The grouped view is anchored to the top-right below; it must not
+            // join the left flow or shift the file area.
+            if (id === "groups")
+                continue
             if (byId[id] && hidden.indexOf(id) < 0)
                 ordered.push(byId[id])
         }
         return ordered
     }
+    readonly property var groupsWidgetDefinition: {
+        const revision = DeskCenterConfigService.revision
+        if (!groupsWidgetVisible)
+            return null
+        const widget = configuredWidget("groups", 110, "#51415d", "#332a3d")
+        // Compact only this output's projection on a short screen; the saved
+        // medium (2x3) span remains untouched. Below two rows the grouped
+        // content cannot draw its tabs and member grid, so a screen that
+        // short keeps the normal icon view instead of a broken card.
+        const rows = Math.min(widget.rows, usableRows)
+        if (rows < 2)
+            return null
+        return Object.assign({}, widget, { rows: rows })
+    }
+    readonly property var widgetDefinitions: groupsWidgetDefinition
+        ? flowWidgetDefinitions.concat([groupsWidgetDefinition])
+        : flowWidgetDefinitions
     readonly property var weatherTheme: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay)
 
     function packWidgets(definitions, columnCount, rowCount) {
@@ -364,15 +422,31 @@ PanelWindow {
             / (reservedFileMetrics.cellHeight + reservedFileMetrics.gap)))
     readonly property string widgetGeometry: maximumWidgetColumns + ":" + usableRows
 
-    readonly property var widgetLayout: WidgetLayout.fitWidgets(
-        widgetDefinitions, 4, maximumWidgetColumns, usableRows)
-    readonly property var placements: widgetLayout.placements
+    readonly property var flowWidgetLayout: WidgetLayout.fitWidgets(
+        flowWidgetDefinitions, 4, maximumWidgetColumns, usableRows)
+    readonly property var flowPlacements: flowWidgetLayout.placements
+    readonly property var groupsPlacement: groupsWidgetDefinition
+        ? WidgetLayout.placeAnchoredWidget(groupsWidgetDefinition,
+            flowPlacements, columns, usableRows)
+        : null
+    readonly property var placements: groupsPlacement
+        ? flowPlacements.concat([groupsPlacement])
+        : flowPlacements
+    // The file area starts after the left flow only; the anchored grouped view
+    // does not consume a file column.
+    readonly property int widgetColumns: flowWidgetLayout.columns
+
     function resizeWidget(widgetId, columns, rows) {
         const placement = placementFor(widgetId)
-        if (![1, 2].includes(columns) || ![1, 2].includes(rows)
-                || !placement || !WidgetLayout.canPlace(placements, widgetId,
+        const limit = WidgetLayout.maxSpanFor(widgetId)
+        const minimum = WidgetLayout.minSpanFor(widgetId)
+        const maxColumns = widgetId === "groups"
+            ? root.columns : maximumWidgetColumns
+        if (columns < minimum[0] || rows < minimum[1] || columns > limit[0]
+                || rows > limit[1] || !placement
+                || !WidgetLayout.canPlace(placements, widgetId,
                 placement.column, placement.row, columns, rows,
-                maximumWidgetColumns, usableRows)) return false
+                maxColumns, usableRows)) return false
         DeskCenterConfigService.savePosition(desktopOutput, placements,
             widgetId, placement.column, placement.row, widgetGeometry)
         DeskCenterConfigService.setSpan(widgetId, columns, rows)
@@ -505,7 +579,13 @@ PanelWindow {
         visible: root.editMode || opacity > 0
         enabled: root.editMode
         Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
-        anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
+        // Editing chrome lives on the free bottom edge. The top corners belong
+        // to the widget layout (left flow, top-right grouped card), so a
+        // corner-anchored toolbar moved whenever a card was shown or resized.
+        x: (parent.width - width) / 2
+        y: parent.height - root.bottomInset - height
+        width: implicitWidth
+        height: implicitHeight
         spacing: 8
 
         Repeater {
@@ -557,10 +637,15 @@ PanelWindow {
         visible: (root.editMode && root.widgetLibraryOpen) || opacity > 0
         enabled: root.editMode && root.widgetLibraryOpen
         scale: 0.96 + 0.04 * opacity
-        transformOrigin: Item.TopRight
+        // Centered like the toolbar, opening upward from it so the bottom
+        // dock area stays clear.
+        transformOrigin: Item.Bottom
         Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.normalDuration; easing.type: AppearanceTokens.motion.enterCurve } }
-        anchors { top: widgetEditToolbar.bottom; right: widgetEditToolbar.right; topMargin: 10 }
-        width: 430
+        x: (parent.width - width) / 2
+        y: widgetEditToolbar.y - height - 10
+        // Keep the tiles clear of the rounded edges as the library grows or
+        // shrinks, instead of a fixed width that only fits today's eight.
+        width: libraryRow.implicitWidth + 32
         height: 116
         radius: AppearanceTokens.isMaterial ? 24 : 18
         color: AppearanceTokens.surface.pick(
@@ -575,6 +660,7 @@ PanelWindow {
                 ThemeService.foregroundColor.b, 0.16))
 
         Row {
+            id: libraryRow
             anchors.centerIn: parent
             spacing: 6
             Repeater {
@@ -639,7 +725,9 @@ PanelWindow {
         // last target geometry and colour for the entire fade-out.
         property rect lastGeometry: Qt.rect(0, 0, 0, 0)
         readonly property rect previewGeometry: dragged !== null
-            ? Qt.rect(root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+            ? Qt.rect(WidgetLayout.insetRightEdge(
+                    root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+                    root.spanSize(dragged.displayColumns), root.width, root.rightInset),
                 root.topInset + dragged.dropPosition.row * (root.cellSize + root.gap),
                 root.spanSize(dragged.displayColumns), root.spanSize(dragged.displayRows))
             : lastGeometry
@@ -737,25 +825,37 @@ PanelWindow {
             // jump. This flag is assigned by that handler itself, so it is
             // already exact when the writes happen.
             property bool pointerHeld: false
+            // Per-card resize limits. The grouped view and the weather card
+            // are the two widgets whose declared spans exceed the ordinary
+            // two-cell ceiling, so the handle reads both the ceiling and the
+            // floor from WidgetLayout instead of hard-coding "groups ? 3 : 2".
+            readonly property var sizeLimit: WidgetLayout.maxSpanFor(modelData.id)
+            readonly property var sizeFloor: WidgetLayout.minSpanFor(modelData.id)
+            // The anchored grouped view may move across the whole grid; every
+            // other card stays inside the left widget field.
+            readonly property int maxDropColumns: modelData.id === "groups"
+                ? root.columns : root.maximumWidgetColumns
             readonly property var dropPosition: WidgetLayout.snappedPosition(
                 x - root.leftInset, y - root.topInset,
                 displayColumns, displayRows, root.cellSize, root.gap,
-                root.maximumWidgetColumns, root.usableRows)
+                maxDropColumns, root.usableRows)
             readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
                 modelData.id, dropPosition.column, dropPosition.row,
-                displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
+                displayColumns, displayRows, maxDropColumns, root.usableRows)
             visible: placement !== null
             // Desktop widgets are part of the login arrival, not a static
             // layer that appears before the wallpaper, bar and dock.
             opacity: StartupReveal.widgetProgress
             enabled: StartupReveal.widgetProgress > 0
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
-            // The clock is the one card whose glass outline is a shape rather
-            // than a rectangle: it draws MaterialFlower, so its surface has to
-            // be the flower itself — no card fill, no rectangular KWin material,
-            // and frost clipped to the petal outline.
+            // The analog clock uses MaterialFlower's petal outline; the digital
+            // clock uses the regular rounded widget surface.
             flowerShapedSurface: modelData.id === "clock"
+                && DeskCenterConfigService.clockStyle === "analog"
             materialSurfaceColor: root.materialWidgetSurface(modelData.id)
+            // The grouped view keeps the compositor material even when the
+            // colour-artwork widget style is active.
+            allowColorArtwork: modelData.id !== "groups"
             title: modelData.title
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
             endColor: modelData.id === "weather" ? root.weatherTheme.secondary : modelData.endColor
@@ -768,8 +868,15 @@ PanelWindow {
             // Behaviors on these bindings: Qt's SpringAnimation integrates at a
             // fixed 16 ms step, so on a 240 Hz output a released card moved in
             // ~60 Hz quanta while the compositor kept presenting every frame.
-            readonly property real targetX: root.leftInset
-                + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
+            // The grid is laid out from the left inset but still sized with the
+            // original 8 px layout margins, so its rightmost column overflows
+            // the right inset. Cap the committed cell here: the top-right
+            // anchored grouped view then keeps the same visible margin as every
+            // other card. The committed span (not the resize preview) decides
+            // the cap so a resize drag never drags the card's left edge along.
+            readonly property real targetX: WidgetLayout.insetRightEdge(
+                root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap),
+                root.spanSize(displayColumns), root.width, root.rightInset) + dragOffsetX
             readonly property real targetY: root.topInset
                 + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
             // The card and every widget inside it lay themselves out for the
@@ -972,6 +1079,37 @@ PanelWindow {
                 }
             }
 
+            Rectangle {
+                objectName: card.modelData.id === "clock" ? "widget-clock-style" : ""
+                z: 80
+                visible: root.editMode && card.modelData.id === "clock"
+                activeFocusOnTab: visible
+                Accessible.role: Accessible.Button
+                Accessible.name: clockStyleLabel.text
+                Accessible.description: I18n.tr("Clock")
+                Accessible.onPressAction: root.toggleClockStyle()
+                anchors { left: parent.left; top: parent.top; leftMargin: 8; topMargin: 40 }
+                width: clockStyleLabel.implicitWidth + 16
+                height: 26
+                radius: 9
+                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, Qt.rgba(0, 0, 0, 0.56))
+                border.width: activeFocus ? 2 : 0
+                border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, "white")
+                Keys.onSpacePressed: root.toggleClockStyle()
+                Keys.onReturnPressed: root.toggleClockStyle()
+                Keys.onEnterPressed: root.toggleClockStyle()
+                Text {
+                    id: clockStyleLabel
+                    objectName: "widget-clock-style-label"
+                    anchors.centerIn: parent
+                    text: DeskCenterConfigService.clockStyle === "analog"
+                        ? I18n.tr("Digital") : I18n.tr("Analog")
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
+                    font { family: AppearanceTokens.typography.textFamily; pixelSize: 10; weight: Font.DemiBold }
+                }
+                TapHandler { onTapped: root.toggleClockStyle() }
+            }
+
             WidgetResizeHandle {
                 id: resizeHandle
                 z: 80
@@ -979,10 +1117,14 @@ PanelWindow {
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
+                maximumColumns: card.sizeLimit[0]
+                maximumRows: card.sizeLimit[1]
+                minimumColumns: card.sizeFloor[0]
+                minimumRows: card.sizeFloor[1]
                 animate: !AppTheme.reduceMotion
                 previewAllowed: card.placement !== null && WidgetLayout.canPlace(
                     root.placements, card.modelData.id, card.placement.column, card.placement.row,
-                    previewColumns, previewRows, root.maximumWidgetColumns, root.usableRows)
+                    previewColumns, previewRows, card.maxDropColumns, root.usableRows)
                 onCommitted: function(columns, rows) {
                     root.resizeWidget(card.modelData.id, columns, rows)
                 }
@@ -1024,13 +1166,58 @@ PanelWindow {
                 enabled: !root.editMode
                 // The clock resolves monochrome ink in its face. Keep its text
                 // out of the extra saturation texture so it renders at the
-                // window's resolution. Other glass artwork is desaturated.
+                // window's resolution. Other glass artwork is desaturated; the
+                // grouped view carries full-colour app icons, so it stays out.
                 layer.enabled: AppearanceConfigService.widgetStyle === "glass"
                     && card.modelData.id !== "clock"
+                    && card.modelData.id !== "groups"
 	                layer.effect: MultiEffect {
 	                    saturation: -1.0
 	                    colorization: 0.0
                 }
+
+            Loader {
+                id: groupsContentLoader
+                anchors.fill: parent
+                active: card.visible && card.modelData.id === "groups"
+                onLoaded: root.groupsContentItem = item
+                onActiveChanged: {
+                    if (!active)
+                        root.groupsContentItem = null
+                }
+                sourceComponent: Component {
+                    DesktopGroupsContent {
+                        objectName: "desktop-groups-content"
+                        entries: desktopFileGrid.orderedEntries
+                        initialCategory: root.desktopFiles.layout.groupSelectedCategory
+                        editing: root.editMode
+                        // Keep the member labels and folder artwork in sync
+                        // with the desktop's own display settings.
+                        showExtensions: desktopFileGrid.desktopLayout.showExtensions
+                        folderCustomizations: desktopFileGrid._folderCustomCache
+                        iconSize: desktopFileGrid.desktopLayout.iconSize
+                        renameCallback: function(entry, name) {
+                            return desktopFileGrid.commitRename(entry, name)
+                        }
+                        onCategorySelected: function(category) {
+                            root.desktopFiles.setGroupSelectedCategory(category)
+                        }
+                        onOpenEntryRequested: function(entry) {
+                            root.desktopFiles.openEntry(entry)
+                        }
+                        onContextMenuRequested: function(entry, x, y) {
+                            // The shared menu reads the desktop selection, so
+                            // make the right-clicked member the only selection
+                            // before building its items.
+                            desktopFileGrid.setSelectedPaths(
+                                entry?.path ? [entry.path] : [])
+                            desktopFileGrid.showMenu(entry,
+                                Qt.point(x - desktopFileGrid.x,
+                                    y - desktopFileGrid.y))
+                        }
+                    }
+                }
+            }
 
             Loader {
                 anchors.fill: parent
@@ -1046,6 +1233,7 @@ PanelWindow {
                 // including while a newly loaded card grows from zero height.
                 property real pageProgress: root.timerView ? 1 : 0
                 Behavior on pageProgress {
+                    enabled: !AppearanceConfigService.reduceMotion
                     NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
 
@@ -1055,16 +1243,13 @@ PanelWindow {
                     height: parent.height
                     y: -height * clockPages.pageProgress
 
-                // The flower itself is not drawn here: this card is a regular
-                // Material card whose outline happens to be the flower, so its
-                // paint comes from the card surface like every other card's.
-                // Painting a second flower here is what made the clock read as a
-                // different surface -- its own colour, its own opacity, its own
-                // outline. The clock only adds its face below.
+                // Neither face paints its card surface: DeskWidgetCard owns the
+                // analog flower outline and the digital rounded outline.
 
                 DeskClockFace {
                     id: analogClock
                     objectName: "desktop-clock-face"
+                    visible: DeskCenterConfigService.clockStyle === "analog"
                     anchors.fill: parent
                     anchors.margins: 14
                     date: clock.date
@@ -1078,6 +1263,25 @@ PanelWindow {
                     minuteColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.tertiary : markColor
                     secondColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#ee7659")
                     hubColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ee7659")
+                }
+
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    active: DeskCenterConfigService.clockStyle === "digital"
+                    sourceComponent: Component {
+                        DeskDigitalClockFace {
+                            anchors.fill: parent
+                            date: clock.date
+                            systemTimeZone: root.systemTimeZone
+                            monochrome: AppearanceConfigService.widgetStyle === "glass"
+                            cornerRadius: Math.max(0, AppearanceTokens.widget.radius - 14)
+                            cityColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            timeColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            offsetColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            ringColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                        }
+                    }
                 }
 
 	                Rectangle {
@@ -1486,7 +1690,7 @@ PanelWindow {
                     text: WeatherService.forecastDays.length > 0
                         ? I18n.tr("High %1°  Low %2°").arg(WeatherService.forecastDays[0].high)
                             .arg(WeatherService.forecastDays[0].low)
-                        : I18n.tr("Updating forecast")
+                        : (WeatherService.loading ? I18n.tr("Updating forecast") : "")
 	                    color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.74), 0.74)
                     font.pixelSize: 11
                 }
@@ -2474,7 +2678,7 @@ PanelWindow {
                         readonly property string widgetSize: card.displayRows > 1 ? "large"
                             : card.displayColumns > 1 ? "medium" : "small"
                         readonly property int itemLimit: widgetSize === "large" ? 6
-                            : widgetSize === "medium" ? 3 : 0
+                            : widgetSize === "medium" ? (PimWidgetService.errorMessage ? 2 : 3) : 0
                         readonly property var tasks:
                             PimWidgetService.pendingTodos(itemLimit)
                         // In the shared glass modes the card material is the
@@ -2526,7 +2730,7 @@ PanelWindow {
                             font { pixelSize: 13; weight: Font.Bold }
                         }
                         Text {
-                            visible: todoContent.widgetSize === "small"
+                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
                             anchors.centerIn: parent
                             anchors.verticalCenterOffset: 12
                             text: String(PimWidgetService.pendingTodos(99).length)
@@ -2534,15 +2738,15 @@ PanelWindow {
                             font { pixelSize: 38; weight: Font.DemiBold }
                         }
                         Text {
-                            visible: todoContent.widgetSize === "small"
+                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
                             anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
-                            text: I18n.tr("todos")
+                            text: PimWidgetService.cached ? I18n.tr("Cached data") : I18n.tr("todos")
                             color: AppearanceTokens.content.ink("#686873", 0.6)
                             font.pixelSize: 10
                         }
                         Column {
                             visible: todoContent.widgetSize !== "small"
-                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: 10 }
+                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: todoStatus.visible ? todoStatus.height + 14 : 10 }
                             spacing: 4
                             Repeater {
                                 model: todoContent.tasks
@@ -2594,7 +2798,7 @@ PanelWindow {
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 // Only a ready snapshot can mean all tasks are done.
                                 // App installation is handled when the card is opened.
-                                text: PimWidgetService.ready
+                                text: PimWidgetService.ready && !PimWidgetService.errorMessage
                                     ? I18n.tr("All done for today")
                                     : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
                                 width: Math.max(0, parent.width - 16)
@@ -2605,6 +2809,19 @@ PanelWindow {
                                 color: AppearanceTokens.content.ink("#6c6c75", 0.6)
                                 font.pixelSize: 11
                             }
+                        }
+                        Text {
+                            id: todoStatus
+                            visible: todoContent.widgetSize === "small" ? !PimWidgetService.available
+                                : todoContent.tasks.length > 0 && !!PimWidgetService.errorMessage
+                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; bottomMargin: 10 }
+                            text: PimWidgetService.errorMessage || I18n.tr("Todo service not connected")
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            maximumLineCount: todoContent.widgetSize === "small" ? 3 : 2
+                            elide: Text.ElideRight
+                            color: AppearanceTokens.content.ink("#6c6c75", 0.6)
+                            font.pixelSize: todoContent.widgetSize === "small" ? 11 : 9
                         }
                     }
                 }
@@ -2730,6 +2947,17 @@ PanelWindow {
                         font.pixelSize: 9
                     }
                 }
+                Text {
+                    visible: calendarContent.narrow && PimWidgetService.state !== "not-installed"
+                        && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
+                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 100 }
+                    text: PimWidgetService.errorMessage
+                    maximumLineCount: 2
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideRight
+                    color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
+                    font.pixelSize: 9
+                }
                 Item {
                     id: monthGrid
                     visible: !calendarContent.narrow || card.displayRows > 1
@@ -2812,12 +3040,6 @@ PanelWindow {
         height: root.height - y - root.bottomInset
         clip: false
         readonly property int iconSize: desktopLayout.iconSize
-        // Keep the label optically paired with the three user-selectable
-        // icon sizes instead of leaving it at a fixed desktop-small size.
-        readonly property int fileNameFontSize: iconSize === 72 ? 14
-            : iconSize === 56 ? 11 : 9
-        readonly property int fileNameFontWeight: iconSize === 72 ? Font.Bold
-            : iconSize === 56 ? Font.DemiBold : Font.Medium
         // Reserve real gutters around every icon.  The gaps are not merely
         // visual: they belong to the desktop background so users can start a
         // rubber-band selection between neighbouring files.
@@ -3029,7 +3251,7 @@ PanelWindow {
 
         function gridPositionForIndex(index) {
             return {
-                x: (columnCount - 1 - Math.floor(index / rowCount)) * itemWidth,
+                x: columnForIndex(index) * itemWidth,
                 y: (index % rowCount) * itemHeight
             }
         }
@@ -3094,7 +3316,7 @@ PanelWindow {
             const previousPositions = ({})
             for (let index = 0; index < next.length; ++index) {
                 previousPositions[next[index].path] = ({
-                    x: (columnCount - 1 - Math.floor(index / rowCount)) * itemWidth,
+                    x: columnForIndex(index) * itemWidth,
                     y: (index % rowCount) * itemHeight
                 })
             }
@@ -3107,7 +3329,7 @@ PanelWindow {
                 return candidate.path === path
             })
             previousPositions[path] = ({
-                x: (columnCount - 1 - Math.floor(sourceNewIndex / rowCount)) * itemWidth,
+                x: columnForIndex(sourceNewIndex) * itemWidth,
                 y: (sourceNewIndex % rowCount) * itemHeight
             })
             if (!wasPreviewed) {
@@ -3174,7 +3396,7 @@ PanelWindow {
         }
 
         function setIconSize(size) {
-            if (size !== 40 && size !== 56 && size !== 72)
+            if (size !== 32 && size !== 40 && size !== 56 && size !== 72)
                 return
             desktopLayout.iconSize = size
             desktopLayout.sync()
@@ -3185,6 +3407,22 @@ PanelWindow {
                 return
             desktopLayout.iconSpacing = spacing
             desktopLayout.sync()
+        }
+
+        function setShortcutAlignment(alignment) {
+            if (alignment !== "left" && alignment !== "right")
+                return
+            desktopLayout.shortcutAlignment = alignment
+            desktopLayout.sync()
+        }
+
+        function columnForIndex(index) {
+            return DesktopGridMetrics.columnForSlot(index, rowCount,
+                columnCount, desktopLayout.shortcutAlignment)
+        }
+        function indexForCell(column, row) {
+            return DesktopGridMetrics.slotForCell(column, row, rowCount,
+                columnCount, desktopLayout.shortcutAlignment)
         }
 
         function displayName(entry) {
@@ -3327,7 +3565,7 @@ PanelWindow {
             const next = additive ? selectionBase.slice() : []
             for (let index = 0; index < orderedEntries.length; ++index) {
                 const entry = orderedEntries[index]
-                const column = columnCount - 1 - Math.floor(index / rowCount)
+                const column = columnForIndex(index)
                 const row = index % rowCount
                 if (column < 0)
                     continue
@@ -3419,8 +3657,12 @@ PanelWindow {
                 createNewFile()
             else if (kind === "openEntry")
                 root.desktopFiles.openEntry(entry)
-            else if (kind === "rename")
-                beginInlineRename(entry)
+            else if (kind === "rename") {
+                if (root.groupsWidgetShown)
+                    root.beginGroupsRename(entry)
+                else
+                    beginInlineRename(entry)
+            }
             else if (kind === "openWithMore")
                 openWithDialog.show(entry)
             else if (kind === "trash") {
@@ -3553,17 +3795,31 @@ PanelWindow {
                 items.push(_ctxAct(I18n.tr("New File"), "newFile"))
                 items.push(_ctxAct(I18n.tr("New Folder"), "newFolder"))
                 items.push(_ctxAct(I18n.tr("Paste"), "paste"))
+                items.push({ separator: true })
+                // One click, remembered state: the grouped view is a
+                // projection of the same entries, never a change to the
+                // underlying files or their saved slots.
+                items.push(_ctxCheck(I18n.tr("Grouped View"), "toggleGroupsWidget",
+                    null, root.groupsWidgetVisible))
+                items.push({ separator: true })
                 const arrange = [
                     _ctxAct(I18n.tr("By Name"), "arrangeByName"),
                     _ctxAct(I18n.tr("By Type"), "arrangeByType"),
                     _ctxAct(I18n.tr("By Modified (newest)"), "arrangeModifiedNew"),
-                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld")
+                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld"),
+                    { separator: true },
+                    _ctxCheck(I18n.tr("Align Left"), "setShortcutAlignment", "left",
+                        desktopLayout.shortcutAlignment === "left"),
+                    _ctxCheck(I18n.tr("Align Right"), "setShortcutAlignment", "right",
+                        desktopLayout.shortcutAlignment === "right")
                 ]
                 items.push(_ctxSub(I18n.tr("Arrange"), arrange, "arrange"))
                 items.push(_ctxAct(I18n.tr("Reset icon order"), "resetLayout"))
                 items.push(_ctxCheck(I18n.tr("Show file extensions"), "toggleExtensions", null,
                     desktopLayout.showExtensions))
-                const sizeKids = [[40, I18n.tr("Small")], [56, I18n.tr("Medium")], [72, I18n.tr("Large")]]
+                const sizeKids = [[32, I18n.tr("Extra Small")],
+                    [40, I18n.tr("Small")], [56, I18n.tr("Medium")],
+                    [72, I18n.tr("Large")]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
                         iconSize === px))
                 items.push(_ctxSub(I18n.tr("Icon Size"), sizeKids, "iconSize"))
@@ -3623,6 +3879,13 @@ PanelWindow {
                 break
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
+            case "setShortcutAlignment": setShortcutAlignment(v); break
+            case "toggleGroupsWidget": {
+                AppearanceConfigService.setDeskCenterWidgetVisible("groups",
+                    !root.groupsWidgetVisible)
+                desktopFileGrid.clearDesktopSelection()
+                break
+            }
             case "refresh": triggerContextAction("refresh"); break
             // Session entries live in a submenu; without these the menu closes
             // and the command is dropped.
@@ -3639,7 +3902,7 @@ PanelWindow {
         function indexAt(pointX, pointY) {
             const column = Math.max(0, Math.min(columnCount - 1, Math.floor(pointX / itemWidth)))
             const row = Math.max(0, Math.min(rowCount - 1, Math.floor(pointY / itemHeight)))
-            const index = (columnCount - 1 - column) * rowCount + row
+            const index = indexForCell(column, row)
             return Math.max(0, Math.min(orderedEntries.length - 1, index))
         }
 
@@ -3708,7 +3971,10 @@ PanelWindow {
             id: externalDesktopDrop
             anchors.fill: parent
             z: 20
-            enabled: false
+            // The free-slot surface owns external drops while it is visible.
+            // The grouped widget hides it, so this fallback keeps
+            // "copy to desktop" working over the widget.
+            enabled: root.groupsWidgetShown
             onEntered: function(drag) {
                 // Ignore a desktop icon's own outgoing URI drag.
                 drag.accepted = drag.hasUrls && !drag.source
@@ -3810,7 +4076,9 @@ PanelWindow {
 
         FreeSlotDesktopDemo {
             id: freeSlotDesktop
-            visible: !root.isDashboardMode
+            // The grouped widget hides the icon field but never touches its
+            // slots or order, so hiding the widget restores it exactly.
+            visible: !root.groupsWidgetShown
             x: -desktopFileGrid.x
             y: -desktopFileGrid.y
             width: root.width
@@ -3822,6 +4090,7 @@ PanelWindow {
             baseCellWidth: desktopFileGrid.preferredItemWidth
             baseCellHeight: desktopFileGrid.itemHeight
             density: desktopFileGrid.desktopLayout.iconSpacing
+            alignment: desktopFileGrid.desktopLayout.shortcutAlignment
             iconVisualSize: desktopFileGrid.iconSize + 12
             showExtensions: desktopFileGrid.desktopLayout.showExtensions
             folderCustomizations: desktopFileGrid._folderCustomCache
@@ -3882,8 +4151,7 @@ PanelWindow {
         Rectangle {
             id: reorderInsertionMarker
             readonly property int markerColumn: desktopFileGrid.reorderInsertionIndex < 0 ? 0
-                : desktopFileGrid.columnCount - 1
-                    - Math.floor(desktopFileGrid.reorderInsertionIndex / desktopFileGrid.rowCount)
+                : desktopFileGrid.columnForIndex(desktopFileGrid.reorderInsertionIndex)
             readonly property int markerRow: desktopFileGrid.reorderInsertionIndex < 0 ? 0
                 : desktopFileGrid.reorderInsertionIndex % desktopFileGrid.rowCount
             x: markerColumn * desktopFileGrid.itemWidth + 7

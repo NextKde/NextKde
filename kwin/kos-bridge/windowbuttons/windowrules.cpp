@@ -10,6 +10,7 @@
 #include <QLockFile>
 #include <QRegularExpression>
 #include <QSaveFile>
+#include <QSet>
 #include <QStandardPaths>
 #include <QStringList>
 
@@ -117,6 +118,80 @@ PanelGeometry geometryFromJson(const QJsonObject &object)
     // Through the same clamp the gesture goes through, because this file is
     // editable text and a typo in it must not produce an absurd panel.
     return clamped(geometry);
+}
+
+const QStringList &titleDelimiters()
+{
+    static const QStringList delimiters = {
+        QStringLiteral(" - "),
+        QStringLiteral(" \u2014 "),
+        QStringLiteral(" \u2013 "),
+        QStringLiteral(" | "),
+        QStringLiteral(" \u00B7 "),
+    };
+    return delimiters;
+}
+
+QStringList classTokens(const QString &windowClass)
+{
+    static const QSet<QString> noise = {
+        QStringLiteral("org"),     QStringLiteral("com"),    QStringLiteral("net"),
+        QStringLiteral("app"),     QStringLiteral("io"),     QStringLiteral("md"),
+        QStringLiteral("kde"),     QStringLiteral("gnome"),  QStringLiteral("github"),
+        QStringLiteral("desktop"),
+    };
+    QStringList tokens;
+    QString current;
+    for (const QChar ch : windowClass) {
+        if (ch.isLetterOrNumber()) {
+            current.append(ch.toLower());
+        } else if (!current.isEmpty()) {
+            if (current.size() >= 3 && !noise.contains(current)
+                && !tokens.contains(current)) {
+                tokens.append(current);
+            }
+            current.clear();
+        }
+    }
+    if (current.size() >= 3 && !noise.contains(current)
+        && !tokens.contains(current)) {
+        tokens.append(current);
+    }
+    return tokens;
+}
+
+bool isPureDigitsOrPunct(const QString &text)
+{
+    const QString trimmed = text.trimmed();
+    if (trimmed.isEmpty()) {
+        return true;
+    }
+    for (const QChar ch : trimmed) {
+        if (ch.isLetter()) {
+            return false;
+        }
+    }
+    return true;
+}
+
+QString makePrefixRegex(const QString &head, const QString &delimiter)
+{
+    return QStringLiteral("^") + QRegularExpression::escape(head)
+        + QStringLiteral("(?:") + QRegularExpression::escape(delimiter)
+        + QStringLiteral("|$)");
+}
+
+bool matchesNoSibling(const QRegularExpression &re, const QStringList &siblingCaptions)
+{
+    if (!re.isValid()) {
+        return false;
+    }
+    for (const QString &sibling : siblingCaptions) {
+        if (re.match(sibling).hasMatch()) {
+            return false;
+        }
+    }
+    return true;
 }
 
 } // namespace
@@ -284,24 +359,224 @@ MatchScope matcherScope(const WindowMatcher &matcher)
         : MatchScope::Window;
 }
 
+CaptionTransition classifyCaptionTransition(const QString &windowClass,
+                                            const QString &previous,
+                                            const QString &current,
+                                            QString *commonPrefix,
+                                            QString *commonDelimiter)
+{
+    if (commonPrefix) {
+        commonPrefix->clear();
+    }
+    if (commonDelimiter) {
+        commonDelimiter->clear();
+    }
+    if (previous == current) {
+        return CaptionTransition::Unchanged;
+    }
+    const QString prevTrimmed = previous.trimmed();
+    const QString curTrimmed = current.trimmed();
+    if (prevTrimmed.isEmpty() || curTrimmed.isEmpty()) {
+        return CaptionTransition::StartupPlaceholder;
+    }
+
+    const QStringList &delimiters = titleDelimiters();
+    bool prevHasDelimiter = false;
+    for (const QString &sep : delimiters) {
+        if (previous.contains(sep)) {
+            prevHasDelimiter = true;
+            break;
+        }
+    }
+    if (!prevHasDelimiter) {
+        const QStringList tokens = classTokens(windowClass);
+        const QString prevLower = prevTrimmed.toLower();
+        if (tokens.contains(prevLower)) {
+            return CaptionTransition::StartupPlaceholder;
+        }
+        for (const QString &sep : delimiters) {
+            const qsizetype idx = current.lastIndexOf(sep);
+            if (idx < 0) {
+                continue;
+            }
+            const QString tail = current.mid(idx + sep.size()).trimmed();
+            if (tail.compare(prevTrimmed, Qt::CaseInsensitive) == 0
+                || (prevTrimmed.size() >= 3
+                    && tail.contains(prevTrimmed, Qt::CaseInsensitive))) {
+                return CaptionTransition::StartupPlaceholder;
+            }
+        }
+    }
+
+    for (const QString &sep : delimiters) {
+        if (!previous.contains(sep) || !current.contains(sep)) {
+            continue;
+        }
+        const QStringList partsPrev = previous.split(sep, Qt::KeepEmptyParts);
+        const QStringList partsCur = current.split(sep, Qt::KeepEmptyParts);
+        const qsizetype maxCommon = std::min(partsPrev.size(), partsCur.size()) - 1;
+        if (maxCommon < 1) {
+            continue;
+        }
+
+        qsizetype commonLead = 0;
+        while (commonLead < maxCommon
+               && !partsPrev[commonLead].trimmed().isEmpty()
+               && partsPrev[commonLead].trimmed() == partsCur[commonLead].trimmed()) {
+            ++commonLead;
+        }
+
+        qsizetype commonTail = 0;
+        while (commonTail < maxCommon) {
+            const QString a = partsPrev[partsPrev.size() - 1 - commonTail].trimmed();
+            const QString b = partsCur[partsCur.size() - 1 - commonTail].trimmed();
+            if (a.isEmpty() || a != b) {
+                break;
+            }
+            ++commonTail;
+        }
+
+        if (commonLead >= 1 && partsPrev.first().trimmed() == partsCur.first().trimmed()) {
+            const QString prefix = partsPrev.mid(0, commonLead).join(sep).trimmed();
+            if (!isPureDigitsOrPunct(prefix)) {
+                if (commonPrefix) {
+                    *commonPrefix = prefix;
+                }
+                if (commonDelimiter) {
+                    *commonDelimiter = sep;
+                }
+                return CaptionTransition::SamePrefix;
+            }
+        }
+        if (commonTail >= 1) {
+            return CaptionTransition::SameSuffix;
+        }
+    }
+
+    return CaptionTransition::Replaced;
+}
+
+WindowMatcher windowScopedMatcher(const WindowQuery &query,
+                                  const QStringList &siblingCaptions)
+{
+    if (!query.role.isEmpty()) {
+        return adjustmentMatcher(query);
+    }
+    if (query.caption.isEmpty()) {
+        return appMatcher(query);
+    }
+
+    const QStringList &delimiters = titleDelimiters();
+
+    // Strategy 1: strip the longest delimited tail shared with an open sibling.
+    for (const QString &sep : delimiters) {
+        if (!query.caption.contains(sep)) {
+            continue;
+        }
+        const QStringList parts = query.caption.split(sep, Qt::KeepEmptyParts);
+        if (parts.size() < 2) {
+            continue;
+        }
+        qsizetype bestTail = 0;
+        for (const QString &sibling : siblingCaptions) {
+            if (!sibling.contains(sep)) {
+                continue;
+            }
+            const QStringList sibParts = sibling.split(sep, Qt::KeepEmptyParts);
+            if (sibParts.size() < 2) {
+                continue;
+            }
+            const qsizetype maxTail = std::min(parts.size(), sibParts.size()) - 1;
+            qsizetype tail = 0;
+            while (tail < maxTail) {
+                const QString a = parts[parts.size() - 1 - tail].trimmed();
+                const QString b = sibParts[sibParts.size() - 1 - tail].trimmed();
+                if (a.isEmpty() || a != b) {
+                    break;
+                }
+                ++tail;
+            }
+            if (tail > bestTail) {
+                bestTail = tail;
+            }
+        }
+        if (bestTail >= 1) {
+            const QString head = parts.mid(0, parts.size() - bestTail).join(sep).trimmed();
+            if (!isPureDigitsOrPunct(head)) {
+                const QString pattern = makePrefixRegex(head, sep);
+                const QRegularExpression re(pattern);
+                if (re.isValid() && re.match(query.caption).hasMatch()
+                    && matchesNoSibling(re, siblingCaptions)) {
+                    WindowMatcher matcher = appMatcher(query);
+                    matcher.titleRegex = pattern;
+                    matcher.compiledTitleRegex = re;
+                    return matcher;
+                }
+            }
+        }
+    }
+
+    // Strategy 2: when the trailing segment names the app from windowClass,
+    // generalize to the leading window-kind segment.
+    const QStringList tokens = classTokens(query.windowClass);
+    if (!tokens.isEmpty()) {
+        for (const QString &sep : delimiters) {
+            if (!query.caption.contains(sep)) {
+                continue;
+            }
+            const QStringList parts = query.caption.split(sep, Qt::KeepEmptyParts);
+            if (parts.size() < 2) {
+                continue;
+            }
+            const QString lastLower = parts.last().trimmed().toLower();
+            const bool lastIsApp = std::any_of(
+                tokens.cbegin(), tokens.cend(),
+                [&](const QString &tok) { return lastLower.contains(tok); });
+            if (!lastIsApp) {
+                continue;
+            }
+            const QString head = parts.first().trimmed();
+            if (!isPureDigitsOrPunct(head) && !tokens.contains(head.toLower())) {
+                const QString pattern = makePrefixRegex(head, sep);
+                const QRegularExpression re(pattern);
+                if (re.isValid() && re.match(query.caption).hasMatch()
+                    && matchesNoSibling(re, siblingCaptions)) {
+                    WindowMatcher matcher = appMatcher(query);
+                    matcher.titleRegex = pattern;
+                    matcher.compiledTitleRegex = re;
+                    return matcher;
+                }
+            }
+        }
+    }
+
+    return adjustmentMatcher(query);
+}
+
 MatchScope initialAdjustScope(const WindowQuery &query,
                               const std::optional<WindowMatcher> &existingMatcher,
-                              bool hasDistinctSibling)
+                              const WindowScopeContext &context)
 {
-    if (existingMatcher && !existingMatcher->isEmpty()) {
-        return matcherScope(*existingMatcher);
-    }
     if (!query.role.isEmpty()) {
         return MatchScope::Window;
     }
-    if (!query.caption.isEmpty() && hasDistinctSibling) {
+    if (existingMatcher && !existingMatcher->isEmpty()
+        && matcherScope(*existingMatcher) == MatchScope::Window) {
+        return MatchScope::Window;
+    }
+    const bool isSecondarySibling = !query.caption.isEmpty()
+        && !context.dynamicCaption
+        && context.hasUnscopedSibling
+        && (context.hasOlderSibling || context.hasDynamicSibling);
+    if (isSecondarySibling) {
         return MatchScope::Window;
     }
     return MatchScope::App;
 }
 
 WindowMatcher resolvedAdjustMatcher(const WindowQuery &query, MatchScope scope,
-                                    const std::optional<WindowMatcher> &existingMatcher)
+                                    const std::optional<WindowMatcher> &existingMatcher,
+                                    const QStringList &siblingCaptions)
 {
     const bool hasExisting = existingMatcher && !existingMatcher->isEmpty();
     if (scope == MatchScope::App) {
@@ -310,10 +585,75 @@ WindowMatcher resolvedAdjustMatcher(const WindowQuery &query, MatchScope scope,
         }
         return appMatcher(query);
     }
-    if (hasExisting && matcherScope(*existingMatcher) == MatchScope::Window) {
+    if (hasExisting && matcherScope(*existingMatcher) == MatchScope::Window
+        && (!existingMatcher->role.isEmpty() || !existingMatcher->titleRegex.isEmpty())) {
         return *existingMatcher;
     }
-    return adjustmentMatcher(query);
+    return windowScopedMatcher(query, siblingCaptions);
+}
+
+CaptionAdaptation adaptRuleForCaptionChange(
+    const WindowQuery &previousQuery,
+    const WindowQuery &currentQuery,
+    const GeometryRule &previousRule,
+    const std::optional<GeometryRule> &currentMatchedRule,
+    const WindowScopeContext &context)
+{
+    CaptionAdaptation result;
+    if (previousRule.matcher.isEmpty()
+        || matcherScope(previousRule.matcher) != MatchScope::Window
+        || !previousRule.matcher.role.isEmpty()) {
+        return result;
+    }
+    if (previousRule.matcher.matches(currentQuery)) {
+        return result;
+    }
+    if (currentMatchedRule
+        && matcherScope(currentMatchedRule->matcher) == MatchScope::Window) {
+        return result;
+    }
+
+    QString commonPrefix;
+    QString commonDelim;
+    const CaptionTransition transition = classifyCaptionTransition(
+        currentQuery.windowClass, previousQuery.caption, currentQuery.caption,
+        &commonPrefix, &commonDelim);
+    if (transition == CaptionTransition::Unchanged
+        || transition == CaptionTransition::StartupPlaceholder) {
+        return result;
+    }
+
+    if (transition == CaptionTransition::SamePrefix
+        && previousRule.matcher.matches(previousQuery)) {
+        const QString pattern = makePrefixRegex(commonPrefix, commonDelim);
+        const QRegularExpression re(pattern);
+        const bool matchesOrigin = previousRule.matcher.title.isEmpty()
+            || re.match(previousRule.matcher.title).hasMatch();
+        if (re.isValid() && matchesOrigin
+            && re.match(previousQuery.caption).hasMatch()
+            && re.match(currentQuery.caption).hasMatch()
+            && matchesNoSibling(re, context.siblingCaptions)) {
+            WindowMatcher upgraded = appMatcher(currentQuery);
+            upgraded.titleRegex = pattern;
+            upgraded.compiledTitleRegex = re;
+            result.kind = CaptionAdaptation::Kind::UpgradeToPrefixRegex;
+            result.targetMatcher = upgraded;
+            return result;
+        }
+    }
+
+    const bool hasExistingAppRule = currentMatchedRule
+        && matcherScope(currentMatchedRule->matcher) == MatchScope::App;
+    if (!context.hasUnscopedSibling
+        && (!hasExistingAppRule || !context.hasOlderSibling)) {
+        result.kind = CaptionAdaptation::Kind::PromoteToApp;
+        result.targetMatcher = appMatcher(currentQuery);
+        return result;
+    }
+
+    result.kind = CaptionAdaptation::Kind::PinInSession;
+    result.targetMatcher = previousRule.matcher;
+    return result;
 }
 
 QString overlayModeToString(OverlayMode mode)

@@ -7,6 +7,7 @@ import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import "DesktopOutputs.mjs" as DesktopOutputs
+import "DesktopGroups.mjs" as DesktopGroups
 
 // Presentation-facing desktop file model. All filesystem, MIME, clipboard,
 // and launcher work is delegated to the two resident services; this object
@@ -35,8 +36,22 @@ QtObject {
         property string slotLayoutsJson: "{}"
         property int iconSize: 56
         property string iconSpacing: "comfortable"
+        property string shortcutAlignment: "right"
         property bool showExtensions: true
         property string folderCustomJson: "{}"
+        // The grouped view is a desktop component. Its visibility lives in
+        // AppearanceConfigService.hiddenDeskCenterWidgets; only the selected
+        // tab remains here because it belongs to the content, not the layout.
+        property string groupSelectedCategory: "shortcuts"
+    }
+
+    function setGroupSelectedCategory(category) {
+        if (DesktopGroups.CATEGORY_ORDER.indexOf(category) < 0)
+            return
+        if (layout.groupSelectedCategory === category)
+            return
+        layout.groupSelectedCategory = category
+        layout.sync()
     }
 
     function entriesForOutput(output) {
@@ -339,7 +354,9 @@ QtObject {
             const result = response?.ok ? response.result || ({}) : ({})
             const paths = Array.isArray(result.paths) ? result.paths : []
             if (!paths.length) {
-                service.lastError = I18n.tr("No files to paste in the clipboard")
+                // A browser or screenshot puts image data, not a file path, on
+                // the clipboard. Save it as a PNG in the desktop directory.
+                service.pasteImageToDesktop(output)
                 return
             }
             const mode = result.mode === "cut" ? "move" : "copy"
@@ -349,6 +366,24 @@ QtObject {
                     service.clipboardPaths = []
                 }
             }, output)
+        })
+    }
+
+    function pasteImageToDesktop(output) {
+        if (!directory)
+            return
+        const stamp = Qt.formatDateTime(new Date(), "yyyyMMdd-HHmmss-zzz")
+        const destination = directory + "/" + I18n.tr("Clipboard image")
+            + " " + stamp + ".png"
+        PlatformClient.request("clipboard.save-image", { destination: destination },
+            function(response) {
+            const path = response?.ok ? (response.result?.path || "") : ""
+            if (!path) {
+                service.lastError = I18n.tr(
+                    "No files or images to paste in the clipboard")
+                return
+            }
+            service.placeEntries([path], output)
         })
     }
 

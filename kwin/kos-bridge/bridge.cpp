@@ -176,7 +176,11 @@ BridgeEffect::BridgeEffect()
 #endif
     m_cooperative = std::make_unique<CooperativeControls>(
         KWin::waylandServer() ? KWin::waylandServer()->display() : nullptr,
-        [this](KWin::EffectWindow *window) { return m_config->getAppConfig(windowQueryFor(window)); }, this);
+        [this](KWin::EffectWindow *window) {
+            return m_input ? m_input->configForWindow(window)
+                           : m_config->getAppConfig(windowQueryFor(window));
+        },
+        this);
     connect(m_cooperative.get(), &CooperativeControls::changed, this, [this](KWin::SurfaceInterface *surface) {
         for (auto *window : KWin::effects->stackingOrder()) {
             if (!window->window() || (surface && window->window()->surface() != surface)) continue;
@@ -188,20 +192,26 @@ BridgeEffect::BridgeEffect()
     });
 
     const auto watchWindowState = [this](KWin::EffectWindow *window) {
+        if (m_input) {
+            m_input->trackWindow(window);
+        }
         connect(window, &KWin::EffectWindow::windowDamaged, this,
                 [this, window] { m_renderer->contentChanged(window); });
         if (auto *native = window->window()) {
             const QPointer<KWin::EffectWindow> guarded(window);
             connect(native, &KWin::Window::captionChanged, this,
                     [this, guarded] {
+                        if (guarded && m_input) {
+                            m_input->captionChanged(guarded);
+                        }
                         // Captions change at frame rate in a terminal, and
                         // resolving a configuration walks the rule lists. Only
                         // a window the renderer has panel state for can need
                         // anything from that walk: for the rest, the paint
                         // path resolves the configuration when it draws.
-                        if (guarded && m_renderer && m_config
+                        if (guarded && m_renderer && m_input
                             && m_renderer->tracksWindow(guarded)) {
-                            m_renderer->captionChanged(guarded, m_config->getAppConfig(windowQueryFor(guarded)));
+                            m_renderer->captionChanged(guarded, m_input->configForWindow(guarded));
                         }
                     });
         }
@@ -329,7 +339,7 @@ void BridgeEffect::reconfigure(ReconfigureFlags flags)
 {
     Q_UNUSED(flags)
     // An in-flight draft must not retain the previous geometry policy.
-    if (m_input) m_input->cancelAdjustment();
+    if (m_input) m_input->reconfigured();
     if (m_config) {
         m_config->load();
     }
@@ -361,7 +371,8 @@ QString BridgeEffect::debug(const QString &parameter) const
     QJsonArray windows;
     for (auto *window : KWin::effects->stackingOrder()) {
         if (!window->window()) continue;
-        AppConfig config = m_config->getAppConfig(windowQueryFor(window));
+        AppConfig config = m_input ? m_input->configForWindow(window)
+                                   : m_config->getAppConfig(windowQueryFor(window));
         const bool declared = m_cooperative && m_cooperative->configureWindow(window, config);
         auto entry = m_renderer->controlDiagnostics(window);
         entry.insert("declared", declared);
@@ -701,7 +712,8 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     // the caption, the role and the type. Read here rather than inside the
     // configuration so that the configuration stays a lookup and does not have
     // to know what an effect window is.
-    AppConfig config = m_config->getAppConfig(windowQueryFor(window));
+    AppConfig config = m_input ? m_input->configForWindow(window)
+                               : m_config->getAppConfig(windowQueryFor(window));
     if (m_cooperative) m_cooperative->configureWindow(window, config);
     if (config.usesClientControls(window->hasDecoration())
         || (!window->hasDecoration() && !config.cooperativeControls && m_gtkNativeWindows.contains(window))) {

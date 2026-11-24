@@ -41,15 +41,14 @@ public:
                                       const WindowMatcher &target,
                                       const PanelGeometry &, OverlayMode)>;
     using Remove = std::function<bool(const WindowMatcher &)>;
-    // True when another managed window of the same class and type is open
-    // under a different non-empty caption. Used when starting a new session on
-    // a roleless window to choose its initial scope (MatchScope::Window when a
-    // distinct open sibling exists, MatchScope::App when alone); explicit
-    // scope choices made in the adjust bar are always honored on commit.
-    using SiblingProbe = std::function<bool(const WindowQuery &)>;
+    // Collects open-sibling and caption-history context for a window. Used
+    // when starting a session to choose the initial adjust scope and to
+    // generalize structured title matchers without colliding with siblings.
+    using ScopeContextProbe =
+        std::function<WindowScopeContext(KWin::EffectWindow *, const WindowQuery &)>;
 
     AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove = {},
-                  SiblingProbe siblingProbe = {});
+                  ScopeContextProbe scopeContextProbe = {});
 
     bool active() const { return m_window != nullptr; }
     KWin::EffectWindow *window() const { return m_window; }
@@ -112,10 +111,11 @@ private:
     ButtonRenderer *m_renderer;
     Commit m_commit;
     Remove m_remove;
-    SiblingProbe m_siblingProbe;
+    ScopeContextProbe m_scopeContextProbe;
 
     KWin::EffectWindow *m_window = nullptr;
     WindowQuery m_query;
+    WindowScopeContext m_scopeContext;
     // The geometry the configuration resolved to when the session started, for
     // the repaint when the draft is dropped and for deciding whether the draft
     // is worth writing at all.

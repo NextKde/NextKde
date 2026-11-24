@@ -27,6 +27,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QTimeZone>
 #include <QTimer>
 #include <functional>
 
@@ -588,6 +589,12 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("keepawake"),
                 QStringLiteral("inputmethod.kimpanel"),
             }},
+        });
+        return;
+    }
+    if (op == QStringLiteral("system.timezone")) {
+        respond(socket, request, true, QJsonObject{
+            {QStringLiteral("timeZone"), QString::fromUtf8(QTimeZone::systemTimeZoneId())},
         });
         return;
     }

@@ -10,11 +10,11 @@ namespace KOS
 {
 
 AdjustSession::AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove,
-                             SiblingProbe siblingProbe)
+                             ScopeContextProbe scopeContextProbe)
     : m_renderer(renderer)
     , m_commit(std::move(commit))
     , m_remove(std::move(remove))
-    , m_siblingProbe(std::move(siblingProbe))
+    , m_scopeContextProbe(std::move(scopeContextProbe))
 {
 }
 
@@ -45,23 +45,23 @@ bool AdjustSession::begin(KWin::EffectWindow *window, const WindowQuery &query,
     m_geometry = base;
     m_dragging = false;
     m_resizeEdge.reset();
+    m_scopeContext = m_scopeContextProbe
+        ? m_scopeContextProbe(window, m_query)
+        : WindowScopeContext{};
 
     if (existingRule) {
         m_hasExistingRule = true;
         m_existingMatcher = existingRule->matcher;
         m_baseOverlayMode = existingRule->overlayMode;
         m_overlayMode = existingRule->overlayMode;
-        m_baseScope = matcherScope(existingRule->matcher);
+        m_baseScope = initialAdjustScope(m_query, m_existingMatcher, m_scopeContext);
         m_scope = m_baseScope;
     } else {
         m_hasExistingRule = false;
         m_existingMatcher = WindowMatcher{};
         m_baseOverlayMode = OverlayMode::Cover;
         m_overlayMode = OverlayMode::Cover;
-        const bool hasDistinctSibling = m_query.role.isEmpty()
-            && !m_query.caption.isEmpty()
-            && m_siblingProbe && m_siblingProbe(m_query);
-        m_baseScope = initialAdjustScope(m_query, std::nullopt, hasDistinctSibling);
+        m_baseScope = initialAdjustScope(m_query, std::nullopt, m_scopeContext);
         m_scope = m_baseScope;
     }
 
@@ -179,7 +179,8 @@ WindowMatcher AdjustSession::targetMatcher() const
 {
     return resolvedAdjustMatcher(
         m_query, m_scope,
-        m_hasExistingRule ? std::optional<WindowMatcher>(m_existingMatcher) : std::nullopt);
+        m_hasExistingRule ? std::optional<WindowMatcher>(m_existingMatcher) : std::nullopt,
+        m_scopeContext.siblingCaptions);
 }
 
 void AdjustSession::syncOptions()
@@ -202,7 +203,9 @@ bool AdjustSession::commit()
     const WindowMatcher matcher = targetMatcher();
     const WindowMatcher previous = m_hasExistingRule ? m_existingMatcher : WindowMatcher{};
     const bool scopeChanged = m_hasExistingRule
-        && matcher.canonicalKey() != m_existingMatcher.canonicalKey();
+        && (m_scope != m_baseScope
+            || (matcherScope(m_existingMatcher) == MatchScope::Window
+                && matcher.canonicalKey() != m_existingMatcher.canonicalKey()));
     const bool changed = !sameGeometry(m_base, geometry)
         || overlayMode != m_baseOverlayMode || scopeChanged;
 
@@ -261,6 +264,7 @@ void AdjustSession::forgetWindow(KWin::EffectWindow *window)
     m_resizeEdge.reset();
     m_hasExistingRule = false;
     m_existingMatcher = WindowMatcher{};
+    m_scopeContext = WindowScopeContext{};
 }
 
 void AdjustSession::apply(const PanelGeometry &geometry)
@@ -281,6 +285,7 @@ void AdjustSession::endSession()
     m_resizeEdge.reset();
     m_hasExistingRule = false;
     m_existingMatcher = WindowMatcher{};
+    m_scopeContext = WindowScopeContext{};
 }
 
 } // namespace KOS

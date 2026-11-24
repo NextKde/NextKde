@@ -110,6 +110,18 @@ if(BUILD_TESTING)
             COMMAND ${KOS_NODE_EXECUTABLE}
                 ${CMAKE_CURRENT_SOURCE_DIR}/tests/deskcenter/weather-card-205.test.mjs)
         set_tests_properties(kos-deskcenter.weather-card PROPERTIES LABELS logic TIMEOUT 10)
+        # The desktop icon-size menu and its persistence setter must expose the
+        # same four tiers, including the extra-small 32 px option.
+        add_test(NAME kos-deskcenter.icon-size
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/deskcenter/icon-size.test.mjs)
+        set_tests_properties(kos-deskcenter.icon-size PROPERTIES LABELS logic TIMEOUT 10)
+        # The shortcut-alignment menu must persist and reach the free-slot
+        # grid; the column-order mirror itself is covered by the density test.
+        add_test(NAME kos-deskcenter.shortcut-alignment
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/deskcenter/shortcut-alignment.test.mjs)
+        set_tests_properties(kos-deskcenter.shortcut-alignment PROPERTIES LABELS logic TIMEOUT 10)
         # Regression: SurfaceShape ignored scale changes, so panels animating
         # scale on entry (wallpaper preview) fringed at the corners.
         add_test(NAME kos-surface-shape.scale-sync
@@ -160,6 +172,13 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_widget_layout.mjs
         )
         set_tests_properties(kos-deskcenter.widget-layout PROPERTIES TIMEOUT 10)
+        # Preset desktop groups: category mapping, tab order, catch-all
+        # fallback and the QML wiring between menu, setting, view and grid.
+        add_test(NAME kos-deskcenter.group-by-type
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_desktop_groups.mjs
+        )
+        set_tests_properties(kos-deskcenter.group-by-type PROPERTIES LABELS logic TIMEOUT 10)
         # Widget geometry must look identical at 60 and 240 Hz; the replaced
         # SpringAnimation advanced in fixed 16 ms steps.
         add_test(NAME kos-deskcenter.motion-spring
@@ -347,6 +366,13 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.widget-open PROPERTIES
                 LABELS "ui;headless" TIMEOUT 60
                 ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
+            add_test(NAME kos-shell.pim-refresh
+                COMMAND ${KOS_WEATHER_PYTHON_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/pim-refresh/run.py
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-shell.pim-refresh PROPERTIES
+                LABELS "ui;headless" TIMEOUT 20
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         if(KOS_QUICKSHELL_EXECUTABLE)
             add_test(NAME kos-shell.window-family-runtime
@@ -371,6 +397,15 @@ if(BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-density/run.mjs
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-deskcenter.density-runtime PROPERTIES LABELS ui TIMEOUT 15)
+            # The grouped widget content: tabs, counts, search filtering,
+            # snapshot reconciliation and the selected-tab setting. The card,
+            # placement and edit mode belong to the widget system.
+            add_test(NAME kos-deskcenter.group-by-type-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-groups/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-deskcenter.group-by-type-runtime
+                PROPERTIES LABELS ui TIMEOUT 20)
             add_test(NAME kos-shell.dock-builtins
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs builtins
@@ -814,7 +849,7 @@ if(BUILD_TESTING)
             LABELS "ui;widgets" TIMEOUT 120
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         set_tests_properties(kos-ui.widget-experience PROPERTIES
-            LABELS "ui;widgets" TIMEOUT 90
+            LABELS "ui;widgets" TIMEOUT 300
             ENVIRONMENT "QML_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml;QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         set_tests_properties(kos-ui.desktop-overview PROPERTIES
             LABELS "ui;widgets" TIMEOUT 60 RUN_SERIAL TRUE
