@@ -19,7 +19,7 @@ import time
 from PIL import Image
 
 REPO = Path(__file__).resolve().parents[2]
-WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music"]
+WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music", "groups"]
 DIGITAL_CAPTURES = [
     "digital-light-small", "digital-dark-large", "digital-glass-fixed-light",
     "digital-glass-follow-light-large", "digital-glass-follow-dark",
@@ -135,7 +135,7 @@ def run(base_env=None):
                 check_digital_pixels(root / "captures")
                 check_bell_pixels(root / "captures")
                 saved = json.loads(state["appearance/config.json"])
-                assert saved["version"] == 34 and saved["widgetStyle"] == "color", saved
+                assert saved["version"] == 35 and saved["widgetStyle"] == "color", saved
                 assert "useSystemFont" not in saved and isinstance(saved["desktopFontFamily"], str) and saved["desktopFontFamily"], saved
                 assert set(saved["hiddenDeskCenterWidgets"]) == set(WIDGETS) - {"clock"}, saved
                 assert json.loads(state["appearance/icon-appearance.json"])["mode"] == "grayscale"

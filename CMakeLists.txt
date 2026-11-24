@@ -172,6 +172,13 @@ if(BUILD_TESTING)
                 ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_widget_layout.mjs
         )
         set_tests_properties(kos-deskcenter.widget-layout PROPERTIES TIMEOUT 10)
+        # Preset desktop groups: category mapping, tab order, catch-all
+        # fallback and the QML wiring between menu, setting, view and grid.
+        add_test(NAME kos-deskcenter.group-by-type
+            COMMAND ${KOS_NODE_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/shell/desktop/modules/deskcenter/test_desktop_groups.mjs
+        )
+        set_tests_properties(kos-deskcenter.group-by-type PROPERTIES LABELS logic TIMEOUT 10)
         # Widget geometry must look identical at 60 and 240 Hz; the replaced
         # SpringAnimation advanced in fixed 16 ms steps.
         add_test(NAME kos-deskcenter.motion-spring
@@ -390,6 +397,15 @@ if(BUILD_TESTING)
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-density/run.mjs
                     ${KOS_QUICKSHELL_EXECUTABLE})
             set_tests_properties(kos-deskcenter.density-runtime PROPERTIES LABELS ui TIMEOUT 15)
+            # The grouped widget content: tabs, counts, search filtering,
+            # snapshot reconciliation and the selected-tab setting. The card,
+            # placement and edit mode belong to the widget system.
+            add_test(NAME kos-deskcenter.group-by-type-runtime
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/desktop-groups/run.mjs
+                    ${KOS_QUICKSHELL_EXECUTABLE})
+            set_tests_properties(kos-deskcenter.group-by-type-runtime
+                PROPERTIES LABELS ui TIMEOUT 20)
             add_test(NAME kos-shell.dock-builtins
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs builtins

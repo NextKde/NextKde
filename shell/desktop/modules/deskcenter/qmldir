@@ -8,6 +8,8 @@ DeskDigitalClockFace 1.0 DeskDigitalClockFace.qml
 DeskMediaButton 1.0 DeskMediaButton.qml
 FreeSlotDesktopDemo 1.0 FreeSlotDesktopDemo.qml
 DesktopFolderIcon 1.0 DesktopFolderIcon.qml
+DesktopGroupsContent 1.0 DesktopGroupsContent.qml
+DesktopGroupMemberIcon 1.0 DesktopGroupMemberIcon.qml
 
 singleton ActivityUsageService 1.0 ActivityUsageService.qml
 singleton DesktopFilesService 1.0 DesktopFilesService.qml

@@ -31,6 +31,31 @@ namespace {
 
 constexpr int kClipboardHistoryCacheTtlMs = 1500;
 
+// QClipboard in this background daemon cannot see a foreign Wayland
+// selection: the data device is tied to keyboard focus, which a resident
+// service does not have. wl-paste speaks the data-control protocol and is
+// already required for clipboard history, so it is the authoritative fallback
+// for file lists copied in another application.
+QStringList localUriListPaths(const QByteArray &output)
+{
+    QStringList paths;
+    QSet<QString> seen;
+    for (QByteArray line : output.split('\n')) {
+        line = line.trimmed();
+        if (line.isEmpty() || line.startsWith('#'))
+            continue;
+        const QUrl url = QUrl::fromEncoded(line);
+        if (!url.isLocalFile())
+            continue;
+        const QString path = cleanPath(url.toLocalFile());
+        if (!path.isEmpty() && !seen.contains(path)) {
+            seen.insert(path);
+            paths.append(path);
+        }
+    }
+    return paths;
+}
+
 QString clipboardThumbsDir()
 {
     return clipboardStateDir() + QStringLiteral("/thumbs");
@@ -448,14 +473,33 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
     }
     if (op == QStringLiteral("clipboard.read")) {
         const QMimeData *mime = clipboard->mimeData(QClipboard::Clipboard);
-        if (!mime) {
-            respond(socket, request, false, {}, QStringLiteral("clipboard-unavailable"),
-                    QStringLiteral("剪贴板不可用"), true);
+        const QStringList direct = mime ? localClipboardPaths(mime) : QStringList();
+        if (!direct.isEmpty()) {
+            respond(socket, request, true,
+                    QJsonObject{{QStringLiteral("mode"), mimeOperation(mime)},
+                                {QStringLiteral("paths"), jsonPaths(direct)}});
             return true;
         }
-        respond(socket, request, true,
-                QJsonObject{{QStringLiteral("mode"), mimeOperation(mime)},
-                            {QStringLiteral("paths"), jsonPaths(localClipboardPaths(mime))}});
+        // The daemon often cannot read a foreign Wayland selection through
+        // QClipboard. Ask wl-paste for the standard file-list format instead;
+        // this is what makes "copy in Dolphin, paste on the desktop" work.
+        const QString wlPaste = QStandardPaths::findExecutable(
+            QStringLiteral("wl-paste"));
+        if (wlPaste.isEmpty()) {
+            respond(socket, request, true,
+                    QJsonObject{{QStringLiteral("mode"), QStringLiteral("copy")},
+                                {QStringLiteral("paths"), jsonPaths(QStringList())}});
+            return true;
+        }
+        runCommand(socket, request, wlPaste,
+            {QStringLiteral("--no-newline"), QStringLiteral("--type"),
+             QStringLiteral("text/uri-list")},
+            [](const QByteArray &output, int) {
+                return QJsonObject{
+                    {QStringLiteral("mode"), QStringLiteral("copy")},
+                    {QStringLiteral("paths"), jsonPaths(localUriListPaths(output))}};
+            },
+            2000);
         return true;
     }
     if (op == QStringLiteral("clipboard.save-image")) {
@@ -464,19 +508,46 @@ bool PlatformServer::handleClipboard(QLocalSocket *socket, const QJsonObject &re
                                                   .value(QStringLiteral("destination"))
                                                   .toString());
         const QMimeData *mime = clipboard->mimeData(QClipboard::Clipboard);
-        if (destination.isEmpty() || !mime) {
+        if (destination.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("invalid-clipboard-request"),
                     QStringLiteral("剪贴板请求无效"), false);
             return true;
         }
         QImage image;
-        if (mime->hasImage())
+        if (mime && mime->hasImage())
             image = qvariant_cast<QImage>(mime->imageData());
-        if (image.isNull() && mime->hasFormat(QStringLiteral("image/png")))
+        if (image.isNull() && mime && mime->hasFormat(QStringLiteral("image/png")))
             image.loadFromData(mime->data(QStringLiteral("image/png")), "PNG");
         if (image.isNull()) {
-            respond(socket, request, false, {}, QStringLiteral("clipboard-image-unavailable"),
-                    QStringLiteral("剪贴板中没有 PNG 图片"), false);
+            // Same Wayland focus problem as clipboard.read: the daemon's
+            // QClipboard cannot see an image copied in another application.
+            // wl-paste reads the negotiated image type from the compositor.
+            const QString wlPaste = QStandardPaths::findExecutable(
+                QStringLiteral("wl-paste"));
+            if (wlPaste.isEmpty()) {
+                respond(socket, request, false, {},
+                        QStringLiteral("clipboard-image-unavailable"),
+                        QStringLiteral("剪贴板中没有图片"), false);
+                return true;
+            }
+            runCommand(socket, request, wlPaste,
+                {QStringLiteral("--no-newline"), QStringLiteral("--type"),
+                 QStringLiteral("image")},
+                [destination](const QByteArray &bytes, int) {
+                    QImage fallback;
+                    if (!fallback.loadFromData(bytes))
+                        return QJsonObject{};
+                    QSaveFile output(destination);
+                    if (!output.open(QIODevice::WriteOnly)
+                            || !fallback.save(&output, "PNG")
+                            || !output.commit())
+                        return QJsonObject{};
+                    return QJsonObject{
+                        {QStringLiteral("path"), destination},
+                        {QStringLiteral("width"), fallback.width()},
+                        {QStringLiteral("height"), fallback.height()}};
+                },
+                3000);
             return true;
         }
         QSaveFile output(destination);

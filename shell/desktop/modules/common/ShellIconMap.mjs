@@ -173,6 +173,7 @@ export const icons = Object.freeze({
     "desktop.widget.add": "plus",
     "desktop.widget.calendar": "calendar",
     "desktop.widget.clock": "clock",
+    "desktop.widget.groups": "square_grid_2x2",
     "desktop.widget.music": "music_note_2",
     "desktop.widget.remove": "minus",
     "desktop.widget.resize": "arrow_up_left_arrow_down_right",

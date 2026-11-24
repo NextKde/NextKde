@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
-import { canPlace, fitWidgets, magnetizedSize, savedPositionsAfterMove, widgetColumnLimit, packWidgets, sizeOrder, snappedPosition, snappedSpan, spanFor } from "./WidgetLayout.mjs";
+import { canPlace, fitWidgets, insetRightEdge, isValidSize, magnetizedSize,
+    maxSpanFor, minSpanFor, placeAnchoredWidget, savedPositionsAfterMove,
+    widgetColumnLimit, packWidgets, sizeOrder, snappedPosition, snappedSpan,
+    spanFor } from "./WidgetLayout.mjs";
 
 const ids = ["clock", "weather", "calendar", "todo", "system", "activity", "music"];
 
@@ -54,9 +57,26 @@ assert.ok(fitted.columns > 4);
 const music = fitted.placements.find(widget => widget.id === "music");
 assert.deepEqual([music.columns, music.rows], [2, 2]);
 assert.equal(fitWidgets(saved, 4, 9, 3).placements.length, 7);
+assert.deepEqual(spanFor("weather", "small"), [2, 1]);
 assert.deepEqual(spanFor("weather", "medium"), [3, 1], "legacy weather size preserved");
+assert.deepEqual(spanFor("weather", "large"), [3, 2]);
 for (const size of sizeOrder)
     assert.deepEqual(spanFor("weather", size), size.split("x").map(Number));
+// Weather's declared spans are three columns wide, so its handle ceiling and
+// storable explicit spans must match. The old hard-coded two-column ceiling
+// shrank a default 3x1 card the moment its resize handle was pressed.
+assert.deepEqual(maxSpanFor("weather"), [3, 2]);
+assert.deepEqual(minSpanFor("weather"), [1, 1]);
+assert.equal(isValidSize("weather", "3x1"), true);
+assert.equal(isValidSize("weather", "3x2"), true);
+assert.equal(isValidSize("weather", "4x2"), false);
+const weatherLimit = maxSpanFor("weather");
+assert.deepEqual(snappedSpan(560, 180, 180, 10, weatherLimit[0], weatherLimit[1]),
+    [3, 1], "a 3-column weather card keeps its width on press");
+assert.deepEqual(snappedSpan(560, 370, 180, 10, weatherLimit[0], weatherLimit[1]),
+    [3, 2], "weather can be stretched to its full 3x2");
+assert.deepEqual(snappedSpan(100, 100, 180, 10, weatherLimit[0], weatherLimit[1], 1, 1),
+    [1, 1], "weather still shrinks to a single cell");
 
 const reversed = saved.slice().reverse();
 const ordered = fitWidgets(reversed, 4, 9, 4);
@@ -86,6 +106,62 @@ assert.deepEqual(snappedSpan(-900, 9000, 180, 10), [1, 2]);
 assert.deepEqual(snappedSpan(273, 180, 180, 10), [1, 1], "below half-cell threshold");
 assert.deepEqual(snappedSpan(276, 180, 180, 10), [2, 1], "above half-cell threshold");
 
+// The grouped view is the anchored exception: four readable layouts from a
+// 2x2 floor to a 3x3 ceiling, and explicit spans stored in sizesJson.
+assert.deepEqual(spanFor("groups", "small"), [2, 2]);
+assert.deepEqual(spanFor("groups", "medium"), [2, 3]);
+assert.deepEqual(spanFor("groups", "large"), [3, 3]);
+assert.deepEqual(spanFor("groups", "2x3"), [2, 3]);
+assert.deepEqual(spanFor("groups", "3x2"), [3, 2]);
+assert.equal(isValidSize("groups", "2x2"), true);
+assert.equal(isValidSize("groups", "2x3"), true);
+assert.equal(isValidSize("groups", "3x2"), true);
+assert.equal(isValidSize("groups", "3x3"), true);
+assert.equal(isValidSize("groups", "1x1"), false, "the grouped view has a 2x2 floor");
+assert.equal(isValidSize("groups", "1x2"), false);
+assert.equal(isValidSize("groups", "2x1"), false);
+assert.equal(isValidSize("groups", "4x3"), false);
+assert.equal(isValidSize("clock", "2x3"), false, "ordinary widgets stay at 2 rows");
+assert.deepEqual(maxSpanFor("groups"), [3, 3]);
+assert.deepEqual(maxSpanFor("clock"), [2, 2]);
+assert.deepEqual(minSpanFor("groups"), [2, 2]);
+assert.deepEqual(minSpanFor("clock"), [1, 1]);
+assert.deepEqual(snappedSpan(370, 560, 180, 10, 3, 3), [2, 3]);
+assert.deepEqual(snappedSpan(370, 560, 180, 10), [2, 2],
+    "the default clamp still applies to ordinary widgets");
+assert.deepEqual(snappedSpan(100, 100, 180, 10, 3, 3, 2, 2), [2, 2],
+    "the grouped view never snaps below its minimum span");
+assert.deepEqual(snappedSpan(9999, 9999, 180, 10, 3, 3, 2, 2), [3, 3]);
+
+const anchored = placeAnchoredWidget(
+    { id: "groups", columns: 2, rows: 3 }, [], 10, 6);
+assert.deepEqual(anchored,
+    { id: "groups", column: 8, row: 0, columns: 2, rows: 3 },
+    "no saved position lands at the top-right");
+const kept = placeAnchoredWidget(
+    { id: "groups", columns: 2, rows: 3, column: 3, row: 1 }, [], 10, 6);
+assert.deepEqual([kept.column, kept.row], [3, 1],
+    "a valid saved position is kept");
+const shifted = placeAnchoredWidget(
+    { id: "groups", columns: 2, rows: 3 },
+    [{ id: "blocker", column: 8, row: 0, columns: 2, rows: 3 }], 10, 6);
+assert.deepEqual([shifted.column, shifted.row], [6, 0],
+    "an occupied top-right scans left first");
+assert.equal(placeAnchoredWidget(
+    { id: "groups", columns: 2, rows: 7 }, [], 10, 6), null,
+    "an anchored span taller than the output has no placement");
+// The grid is sized with the 8 px layout margins but placed from the 20 px
+// visual inset, so its rightmost column would end 4 px past a 1920 px screen.
+// The anchored card must slide back to the visible margin instead.
+assert.equal(insetRightEdge(1551, 373, 1920, 20), 1527,
+    "the rightmost column stops at the right inset");
+assert.equal(insetRightEdge(20, 373, 1920, 20), 20,
+    "cards already inside the margin do not move");
+assert.equal(insetRightEdge(20, 373, 1920, 200), 20,
+    "a card narrower than the inset margin keeps its left edge");
+assert.equal(insetRightEdge(10, 2000, 1920, 20), 0,
+    "a card wider than the margin never gets a negative left edge");
+
 // The resize drag is magnetic: the corner is held at a cell size and only
 // follows freely once the pointer pulls it half a cell away.
 const held = magnetizedSize(227, 180, 10);
@@ -96,6 +172,10 @@ const attracted = magnetizedSize(340, 180, 10);
 assert.ok(attracted > 340 && attracted < 370, "approaching a cell the magnet pulls the corner in");
 assert.equal(magnetizedSize(9999, 180, 10), 370, "the drag never previews past the supported span");
 assert.equal(magnetizedSize(-100, 180, 10), 180, "the drag never previews below one cell");
+assert.equal(magnetizedSize(-100, 180, 10, 3, 2), 370,
+    "the grouped view's drag is held at its 2x2 floor");
+assert.equal(magnetizedSize(9999, 180, 10, 3, 2), 560,
+    "the grouped view's drag still reaches its 3x3 ceiling");
 
 const positioned = [
     { id: "auto", columns: 2, rows: 1 },
