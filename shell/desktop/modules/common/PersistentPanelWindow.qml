@@ -35,7 +35,15 @@ PanelWindow {
     readonly property bool popupInteractive: !!motion && motion.interactive === true
 
     color: "transparent"
-    visible: true
+    // Keep the surface mapped across open/close while a real output exists,
+    // and hide before Qt tears down screens so the panel never gets stranded
+    // on Qt's synthetic placeholder screen during sleep/hotplug.
+    screen: window.targetScreen
+    visible: ScreenLifecycle.outputAvailable && window.targetScreen !== null
+    onVisibleChanged: {
+        if (!visible && window.motion)
+            window.motion.reset()
+    }
     exclusionMode: ExclusionMode.Ignore
     exclusiveZone: 0
     WlrLayershell.layer: WlrLayer.Top

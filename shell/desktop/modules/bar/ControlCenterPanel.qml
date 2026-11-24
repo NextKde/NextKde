@@ -686,7 +686,24 @@ PersistentPanelWindow {
     // If the display server ever closes the popup behind our back, fold the
     // motion state too: otherwise `coordinator.open` keeps reporting true and
     // the next toggle would "close" a panel that is already gone.
-    onClosed: popupMotion.reset()
+    onClosed: {
+        panel.pendingOpen = false
+        popupMotion.reset()
+    }
+
+    Connections {
+        target: ScreenLifecycle
+        function onOutputAvailableChanged() {
+            if (!ScreenLifecycle.outputAvailable) {
+                panel.pendingOpen = false
+                panel.sessionModalVisible = false
+                panel.submenuOpen = false
+                panel.activeSubmenu = ""
+                panel.pendingConfirmAction = ""
+                popupMotion.reset()
+            }
+        }
+    }
 
     Connections {
         target: WindowService
