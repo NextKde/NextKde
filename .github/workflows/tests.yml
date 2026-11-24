@@ -123,16 +123,24 @@ jobs:
         include:
           - series: '6.6'
             snapshot: '2026/05/15'
+            # The image must not be newer than the snapshot. `-Syyuu` can
+            # downgrade packages, but it cannot resolve a package that has
+            # since been renamed: installing the snapshot's `openssl` fails
+            # because the newer image already ships `openssl-3` owning the
+            # same files. An older image upgrades cleanly to the snapshot.
+            image: 'archlinux:base-devel-20260510.0.525573'
             font_dpi: '1'
           - series: '6.7'
             snapshot: '2026/10/01'
+            image: 'archlinux:base-devel-20260927.0.600689'
             font_dpi: '1'
           - series: '6.8'
             snapshot: '2026/10/18'
+            image: 'archlinux:base-devel-20261018.0.612668'
             font_dpi: '0'
     env:
       KOS_EXPECT_FONT_DPI: ${{ matrix.font_dpi }}
-    container: archlinux:base-devel
+    container: ${{ matrix.image }}
     steps:
       # The pinned snapshot only serves packages from archive.archlinux.org,
       # whose slow downloads are the recurring false failure in these jobs.
@@ -558,14 +566,20 @@ jobs:
         include:
           - series: '6.6'
             snapshot: '2026/05/15'
+            # Dated image at or before the snapshot, for the reason documented
+            # on the matching KDE fonts matrix entry: a floating image can ship
+            # a package rename the snapshot cannot install over.
+            image: 'archlinux:base-devel-20260510.0.525573'
             api_versions: '6.6.0 6.6.6'
           - series: '6.7'
             snapshot: '2026/10/01'
+            image: 'archlinux:base-devel-20260927.0.600689'
             api_versions: '6.7.0 6.7.5'
           - series: '6.8'
             snapshot: '2026/10/18'
+            image: 'archlinux:base-devel-20261018.0.612668'
             api_versions: '6.8.0'
-    container: archlinux:base-devel
+    container: ${{ matrix.image }}
 
     steps:
       # Shared with the matching fonts series: both jobs install from the same
