@@ -186,10 +186,61 @@ PanelWindow {
     // placements/positions/sizes/content resolution; entry.id (the package
     // ID) stays a separate field (widget.packageId below) only used to
     // resolve which package a given instance renders.
-    property int _nextInstanceSeq: 1
+    //
+    // Persisted instance records whose package is not executable right now
+    // stay parked here instead of being re-rendered or forgotten: an upgrade
+    // or a later package deployment can still bring them back (R7), and the
+    // next save writes them back out untouched.
+    property var _retiredInstanceRecords: []
+    property bool _instancesRestored: false
+
+    function persistInstances() {
+        const records = []
+        for (const widget of root.widgetInstances)
+            if (widget.packageId) records.push({ id: widget.id, packageId: widget.packageId })
+        const liveIds = records.map(record => record.id)
+        DeskCenterConfigService.saveInstancesForOutput(root.desktopOutput, records.concat(
+            root._retiredInstanceRecords.filter(record => liveIds.indexOf(record.id) < 0)))
+    }
+
+    // Re-expand the placements saved for this output. Only packages the host
+    // actually maps to a view may render, so anything else is parked rather
+    // than handed to a Loader. Runs once the package catalog has arrived;
+    // before that there is nothing to match records against.
+    function restoreInstances() {
+        if (root._instancesRestored || !root.desktopOutput) return
+        const catalog = root.widgetCatalog
+        if (!Array.isArray(catalog) || catalog.length === 0) return
+        const stored = DeskCenterConfigService.instancesForOutput(root.desktopOutput)
+        const instances = []
+        const retired = []
+        for (const record of stored) {
+            const entry = catalog.find(item => item.id === record.packageId)
+            if (!entry || !root.resolveContentComponent({ packageId: record.packageId })) {
+                retired.push(record)
+                continue
+            }
+            instances.push(Object.assign({}, entry, { id: record.id, packageId: record.packageId }))
+        }
+        root._retiredInstanceRecords = retired
+        root.widgetInstances = instances
+        root._instancesRestored = true
+    }
+
+    onDesktopOutputChanged: restoreInstances()
+    onWidgetCatalogChanged: restoreInstances()
+    Component.onCompleted: {
+        WidgetPackageService.refresh()
+        restoreInstances()
+    }
+
     function addGalleryWidget(entry, size, requestedPosition) {
+        // Defense in depth: the gallery only publishes executable packages,
+        // but a stale/manipulated catalog entry must still not create a card
+        // that can never render.
+        if (!WidgetRegistry.canExecute(entry.id)) return
         const span = WidgetLayout.namedGallerySpan(size)
-        const instanceId = entry.id + "#" + (root._nextInstanceSeq++)
+        const instanceId = entry.id + "#" + DeskCenterConfigService.allocateInstanceSeq()
         let position = requestedPosition
         if (!position) {
             for (let row = 0; row <= usableRows - span[1] && !position; ++row)
@@ -207,6 +258,7 @@ PanelWindow {
             return
         DeskCenterConfigService.setSpan(instanceId, span[0], span[1])
         widgetInstances = widgetInstances.concat([Object.assign({}, entry, { id: instanceId, packageId: entry.id })])
+        persistInstances()
         widgetFeedback = I18n.tr("Widget added to the desktop.")
     }
     function resizeNamedWidget(id, size) {
@@ -216,6 +268,9 @@ PanelWindow {
     }
     function removeWidget(id) {
         widgetInstances = widgetInstances.filter(widget => widget.id !== id)
+        _retiredInstanceRecords = root._retiredInstanceRecords.filter(record => record.id !== id)
+        // Removes the instance record together with its saved position/span.
+        DeskCenterConfigService.removeInstance(root.desktopOutput, id)
     }
     function showWidgetMenu(id, point) {
         contextWidgetId = id
@@ -278,8 +333,9 @@ PanelWindow {
             root.depthPointerY = 0
         }
     }
-    // Package metadata feeds the gallery. Runtime instances remain separately
-    // owned and empty until package loading and placement persistence are wired.
+    // Package metadata feeds the gallery. Runtime instances are restored from
+    // deskcenter-widgets.ini per output (R4) and grown by the gallery's add
+    // requests; only packages on WidgetRegistry's execution allowlist render.
     property var widgetCatalog: WidgetPackageService.packages
     property var widgetInstances: []
     readonly property var widgetDefinitions: {

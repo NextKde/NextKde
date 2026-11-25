@@ -73,18 +73,28 @@ Rectangle {
         if (Array.isArray(size)) return size[0] + "×" + size[1]
         return I18n.tr(size === "small" ? "Small" : size === "large" ? "Large" : "Medium")
     }
-    // First integrated SDK preview: execute only the bundled clock package.
-    // Index discovery alone must never authorize arbitrary installed QML.
+    // First integrated SDK preview: execute only packages the host actually
+    // maps to a view (WidgetRegistry.executablePackages). Index discovery
+    // alone must never authorize arbitrary installed QML.
     Clock.Snapshot { id: clockSnapshot }
+    // Read every executable package's own declared sizes instead of assuming
+    // the example clock's 2x2/3x2 pair. Duck-type the nested arrays on
+    // `.length`: arrays that crossed a QML property boundary may be Qt
+    // sequence wrappers where Array.isArray() is false (see R9).
     function sizeChoices(entry) {
-        if (entry.available !== true || entry.id !== "org.nextkde.example.clock") return []
+        if (entry.available !== true || !WidgetRegistry.canExecute(entry.id)) return []
         const choices = []
         const sizes = entry.sizes ?? []
         for (let i = 0; i < sizes.length; i++) {
             const span = sizes[i]
-            if (!Array.isArray(span) || span.length !== 2
-                    || span[1] !== 2 || (span[0] !== 2 && span[0] !== 3)) continue
-            choices.push({ value: span.join("x"), span: span, label: root.sizeName(span) })
+            if (span == null || span.length !== 2) continue
+            const columns = Number(span[0])
+            const rows = Number(span[1])
+            if (!Number.isInteger(columns) || !Number.isInteger(rows)
+                    || columns < 1 || columns > 4 || rows < 1 || rows > 4) continue
+            const value = columns + "x" + rows
+            if (choices.some(choice => choice.value === value)) continue
+            choices.push({ value: value, span: [columns, rows], label: root.sizeName([columns, rows]) })
         }
         return choices
     }

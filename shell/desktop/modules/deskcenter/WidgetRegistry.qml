@@ -22,6 +22,15 @@ QtObject {
         key: item.id, category: "builtin", categoryName: I18n.tr("Built-in"),
         present: !AppearanceConfigService.isDeskCenterWidgetHidden(item.id)
     }))
+    // Packages whose QML the host is willing to execute. Index discovery is
+    // deliberately not enough: anything under $XDG_DATA_HOME/kos/widgets is
+    // untrusted until the host maps it to a real view with its own data and
+    // input containment (WidgetGalleryPreviewPlan R2/R5). Keep this list in
+    // sync with DeskCenterWindow's resolveContentComponent/resolveSettingsComponent.
+    readonly property var executablePackages: ["org.nextkde.example.clock"]
+    function canExecute(packageId) {
+        return executablePackages.indexOf(String(packageId)) >= 0
+    }
     function title(id) {
         for (const item of builtins) if (item.id === id) return item.name
         return I18n.tr("Widget")
