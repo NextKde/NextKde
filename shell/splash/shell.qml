@@ -102,6 +102,38 @@ ShellRoot {
                     }
                 }
             }
+            // Brand lockup in the corner, laid out like Plasma's splash: the
+            // text, then the mark, anchored to the bottom-right. Plasma themes
+            // measure this in grid units (one for the margin, two for the mark)
+            // and use the system font for the text; derive the same unit from
+            // the default font so the sizes stay proportional to the session's
+            // font settings. The logo loads from the same light/dark asset pair
+            // the About page uses. Decoration only: the spinner stays the one
+            // moving element so the splash remains cheap on software renderers.
+            TextMetrics {
+                id: units
+                text: "M"
+            }
+            Row {
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.margins: units.boundingRect.height
+                spacing: Math.max(2, Math.floor(units.boundingRect.height / 2))
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "by NextKDE"
+                    color: root.dark ? "#eff0f1" : "#232629"
+                }
+                Image {
+                    width: units.boundingRect.height * 2
+                    height: units.boundingRect.height * 2
+                    source: root.dark ? "nextkde-logo-dark.svg" : "nextkde-logo.svg"
+                    sourceSize: Qt.size(units.boundingRect.height * 4,
+                        units.boundingRect.height * 4)
+                    fillMode: Image.PreserveAspectFit
+                    smooth: true
+                }
+            }
         }
     }
 
