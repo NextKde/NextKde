@@ -37,9 +37,12 @@ legacy Dock migration. Saving is debounced through `JsonConfigStore` → platfor
 Schema 36 adds the optional startup-splash background: `splashBackgroundMode` (`solid`/`image`)
 and `splashBackgroundImage` (an absolute local path). The login splash runs as its own Quickshell
 instance before the desktop tree, so it reads these two fields directly from the same file and
-renders the picture behind a scrim; a deleted or invalid file falls back to the solid light/dark
-surface. Both the writer and the splash apply `SplashBackgroundPolicy.mjs`; remote URLs and
-resource paths are never accepted.
+renders the picture behind a 60% black scrim; a deleted or invalid file falls back to the solid
+light/dark surface. The writer, the splash and Settings share
+`shared/qml/foundation/SplashBackgroundPolicy.mjs`; remote URLs and resource paths are never
+accepted. Quickshell rejects imports that traverse outside a shell root, so
+`shell/splash/SplashBackgroundPolicy.mjs` is a symlink to that canonical file and deployment
+materializes it beside the splash entry point.
 
 Settings calls `appearance-settings` snapshot/update operations and receives a complete snapshot.
 Check the endpoint when adding a setting; expose bounded values, preserve compatibility aliases
@@ -72,6 +75,12 @@ Register Shell-owned imagery by stable name in `BundledIcons`; render through `B
 its registry source. Do not depend on workstation absolute paths or font glyphs. Application
 icons, media art and file thumbnails follow their own contracts. System-theme exceptions such as
 the Dock trash icon resolve through `SystemIconResolver`, with centralized candidates and bundled fallback.
+
+The login splash is the documented exception to the registry and token rules above: it runs before
+the desktop tree and does not load `BundledIcons` or `AppearanceTokens`. It loads
+`shell/splash/nextkde-logo.svg` and `shell/splash/nextkde-logo-dark.svg` directly and uses the
+fixed light/dark inks in `shell/splash/shell.qml`. Keep the two SVGs in sync with the copies in
+`apps/settings/icons` and `docs/images`.
 
 Tray identity resolution lives in `modules/bar/TrayIdentity.mjs`: explicit tooltip/title
 labels and app-specific IDs win over daemon fallback names keyed by a shared generated ID.

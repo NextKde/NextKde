@@ -246,10 +246,12 @@ void SettingsBridge::updateSplashBackgroundImage(const QString& pathOrUrl)
 {
     // FileDialog hands the page a URL. The shell persists and the splash
     // paints a local path, so decode here once; an already-plain path passes
-    // through unchanged.
+    // through unchanged and keeps filename characters such as '#' and '?'.
+    const bool isFileUrl = pathOrUrl.startsWith(
+        QStringLiteral("file:"), Qt::CaseInsensitive);
     const QUrl url(pathOrUrl);
     callAppearance({ QStringLiteral("updateSplashBackgroundImage"),
-        url.isLocalFile() ? url.toLocalFile() : pathOrUrl });
+        isFileUrl && url.isLocalFile() ? url.toLocalFile() : pathOrUrl });
 }
 
 void SettingsBridge::updateDockWindowAnimationStyle(const QString& style)

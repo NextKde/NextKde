@@ -4,10 +4,9 @@ import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.platform
 import "VisibilityPolicy.mjs" as VisibilityPolicy
-// The login splash's Quickshell root is its own directory, so the shared
-// background rules live there and this service imports them from the shell
-// tree rather than the other way around.
-import "../../../splash/SplashBackgroundPolicy.mjs" as SplashBackgroundPolicy
+// The shared background rules live in shared/qml so the desktop service, the
+// standalone splash and the Settings page can all resolve them.
+import "../../../shared/qml/foundation/SplashBackgroundPolicy.mjs" as SplashBackgroundPolicy
 
 // Global appearance settings shared by shell surfaces. Keep these values out
 // of DockConfigService: glass material is a shell-wide concern, while pinned
@@ -671,7 +670,9 @@ QtObject {
     // trip through the mode dropdown to make the choice visible.
     function updateSplashBackgroundImage(rawPath) {
         const path = SplashBackgroundPolicy.normalizeImagePath(rawPath)
-        if (path === "" || service.splashBackgroundImage === path)
+        const unchanged = service.splashBackgroundImage === path
+            && service.splashBackgroundMode === "image"
+        if (path === "" || unchanged)
             return false
         service.splashBackgroundImage = path
         service.splashBackgroundMode = "image"
@@ -883,15 +884,11 @@ QtObject {
                     // Files written before it carry neither key and keep the
                     // solid surface; the validation pass below writes the two
                     // defaults once together with the new version.
-                    const splashMode = String(object.splashBackgroundMode ?? "")
-                    const hasSplashBackground =
-                        service.isValidSplashBackgroundMode(splashMode)
-                        && typeof object.splashBackgroundImage === "string"
-                    if (service.isValidSplashBackgroundMode(splashMode))
-                        service.splashBackgroundMode = splashMode
-                    service.splashBackgroundImage =
-                        SplashBackgroundPolicy.normalizeImagePath(
-                            object.splashBackgroundImage)
+                    const splash = SplashBackgroundPolicy.resolveBackground(
+                        object.splashBackgroundMode, object.splashBackgroundImage)
+                    const hasSplashBackground = splash.canonical
+                    service.splashBackgroundMode = splash.mode
+                    service.splashBackgroundImage = splash.image
                     // v28 adds per-surface visibility. Files written before it
                     // carry neither key. v35 adds the grouped widget, which is
                     // opt-in: older files cannot contain an explicit choice for

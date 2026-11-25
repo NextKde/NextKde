@@ -6,6 +6,7 @@ import QtQuick.Layouts
 import QtQuick.Window
 import "../../../shared/qml/controls" as LiquidControls
 import "../../../shared/qml/foundation" as Foundation
+import "../../../shared/qml/foundation/SplashBackgroundPolicy.mjs" as SplashBackgroundPolicy
 import "../../../shared/qml/i18n"
 import "../components" as Controls
 
@@ -99,7 +100,9 @@ ColumnLayout {
             return;
         reduceMotion = state.reduceMotion === true;
         startupRevealDuration = Number(state.startupRevealDuration ?? 1500);
-        splashBackgroundMode = state.splashBackgroundMode === "image" ? "image" : "solid";
+        splashBackgroundMode =
+            SplashBackgroundPolicy.isValidBackgroundMode(state.splashBackgroundMode)
+                ? state.splashBackgroundMode : "solid";
         splashBackgroundImage = String(state.splashBackgroundImage ?? "");
         shellStyle = state.shellStyle;
         // The window palette follows the same style. ControlForm is NOT
@@ -169,7 +172,7 @@ ColumnLayout {
     }
 
     function isValidSplashBackgroundMode(mode) {
-        return mode === "solid" || mode === "image";
+        return SplashBackgroundPolicy.isValidBackgroundMode(mode);
     }
 
     function setSplashBackgroundMode(mode) {
@@ -421,7 +424,6 @@ ColumnLayout {
             }
         }
         Demo.SettingsItem {
-            visible: themePage.splashBackgroundMode === "image"
             title: I18n.tr("Splash image")
             description: themePage.splashImageName.length > 0
                 ? themePage.splashImageName

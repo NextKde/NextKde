@@ -12,6 +12,9 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+// Quickshell rejects script imports that traverse outside this shell root.
+// The sibling file is a symlink to the canonical shared policy; deployment
+// follows it and installs a regular file.
 import "SplashBackgroundPolicy.mjs" as SplashBackground
 
 ShellRoot {
@@ -44,7 +47,7 @@ ShellRoot {
     // path must be a local absolute path before it reaches Image.source.
     property string splashBackgroundMode: "solid"
     property string splashBackgroundImage: ""
-    readonly property string splashImage: SplashBackground.activeImage(
+    readonly property string splashImage: SplashBackground.imageSource(
         splashBackgroundMode, splashBackgroundImage)
 
     FileView {
@@ -62,11 +65,10 @@ ShellRoot {
             dark = (settings.shellStyle === "material"
                 || settings.glassFollowsAppearanceMode === true)
                 ? resolved : true
-            const mode = String(settings.splashBackgroundMode ?? "")
-            splashBackgroundMode = SplashBackground.isValidBackgroundMode(mode)
-                ? mode : "solid"
-            splashBackgroundImage = SplashBackground.normalizeImagePath(
-                settings.splashBackgroundImage)
+            const background = SplashBackground.resolveBackground(
+                settings.splashBackgroundMode, settings.splashBackgroundImage)
+            splashBackgroundMode = background.mode
+            splashBackgroundImage = background.image
         } catch (_) {
             // Keep the palette-derived value.
         }
@@ -101,11 +103,12 @@ ShellRoot {
                 color: root.dark ? "#000000" : "#ffffff"
             }
             // The chosen picture, dimmed so the spinner and the signature keep
-            // their contrast on any photo. A picture has no guaranteed
-            // luminance, so this layer always uses a black scrim and light ink
-            // rather than following the appearance; the solid surface keeps
-            // its light/dark pairing. Both appear at once, so the ink never
-            // flips before there is a picture behind it.
+            // their contrast on any photo. A 60% black scrim keeps white ink
+            // above 4.5:1 even when the photo is pure white. A picture has no
+            // guaranteed luminance, so this layer always uses the scrim and
+            // light ink rather than following the appearance; the solid
+            // surface keeps its light/dark pairing. Both appear at once, so
+            // the ink never flips before there is a picture behind it.
             Item {
                 id: pictureLayer
                 anchors.fill: parent
@@ -114,9 +117,11 @@ ShellRoot {
                     id: picture
                     anchors.fill: parent
                     source: root.splashImage
-                    // Decode at the size the surface actually paints, not at
-                    // the source photo's full resolution: an 8K picture must
-                    // not cost 100 MB of texture while the desktop builds.
+                    // Bound the decode to the surface's physical pixel box;
+                    // Qt keeps the source aspect ratio. PreserveAspectCrop can
+                    // make one decoded dimension larger than the box for an
+                    // extreme aspect ratio, but this still avoids decoding a
+                    // large photo at full resolution while the desktop builds.
                     sourceSize: Qt.size(
                         Math.max(1, Math.ceil(width * Screen.devicePixelRatio)),
                         Math.max(1, Math.ceil(height * Screen.devicePixelRatio)))
@@ -128,7 +133,7 @@ ShellRoot {
                 Rectangle {
                     anchors.fill: parent
                     color: "#000000"
-                    opacity: 0.45
+                    opacity: 0.60
                 }
             }
             Item {
@@ -177,7 +182,7 @@ ShellRoot {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "by NextKDE"
-                    color: splashSurface.lightInk ? "#eff0f1" : "#232629"
+                    color: splashSurface.lightInk ? "#ffffff" : "#232629"
                 }
                 Image {
                     width: units.boundingRect.height * 2

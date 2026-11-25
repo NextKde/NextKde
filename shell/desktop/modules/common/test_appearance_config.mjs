@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
-import { activeImage, isValidBackgroundMode, normalizeImagePath }
-    from "../../../splash/SplashBackgroundPolicy.mjs";
+import {
+    activeImage, imageSource, isValidBackgroundMode, normalizeImagePath,
+    resolveBackground,
+} from "../../../shared/qml/foundation/SplashBackgroundPolicy.mjs";
 
 function normalize(value) {
     const number = Number(value);
@@ -112,11 +114,44 @@ function migrate(previous = {}) {
     assert.equal(normalizeImagePath("https://example.com/a.jpg"), "");
     assert.equal(normalizeImagePath("qrc:/a.jpg"), "");
     assert.equal(normalizeImagePath("/home/u/a\nb.jpg"), "");
+    assert.equal(normalizeImagePath("/home/u/a\rb.jpg"), "");
+    assert.equal(normalizeImagePath("/home/u/a\0b.jpg"), "");
+    assert.equal(normalizeImagePath("/home/u/a\tb.jpg"), "");
+    assert.equal(normalizeImagePath("//host/share/a.jpg"), "");
 
     assert.equal(activeImage("solid", "/home/u/a.jpg"), "");
     assert.equal(activeImage("image", "/home/u/a.jpg"), "/home/u/a.jpg");
     assert.equal(activeImage("image", "https://example.com/a.jpg"), "");
     assert.equal(activeImage("bogus", "/home/u/a.jpg"), "");
+
+    assert.equal(imageSource("solid", "/home/u/a.jpg"), "");
+    assert.equal(imageSource("image", "/home/u/a.jpg"),
+        "file:///home/u/a.jpg");
+    assert.equal(imageSource("image", "/home/u/a b.jpg"),
+        "file:///home/u/a%20b.jpg");
+    assert.equal(imageSource("image", "/home/u/a#b.jpg"),
+        "file:///home/u/a%23b.jpg");
+    assert.equal(imageSource("image", "/home/u/a?b.jpg"),
+        "file:///home/u/a%3Fb.jpg");
+    assert.equal(imageSource("image", "/home/u/a%20b.jpg"),
+        "file:///home/u/a%2520b.jpg");
+    assert.equal(imageSource("image", "/home/u/\ud800.jpg"), "");
+
+    assert.deepEqual(resolveBackground(undefined, undefined), {
+        mode: "solid", image: "", canonical: false,
+    });
+    assert.deepEqual(resolveBackground("image", "/home/u/a.jpg"), {
+        mode: "image", image: "/home/u/a.jpg", canonical: true,
+    });
+    assert.deepEqual(resolveBackground("image", "  /home/u/a.jpg  "), {
+        mode: "image", image: "/home/u/a.jpg", canonical: false,
+    });
+    assert.deepEqual(resolveBackground("image", "https://example.com/a.jpg"), {
+        mode: "image", image: "", canonical: false,
+    });
+    assert.deepEqual(resolveBackground("video", "/home/u/a.jpg"), {
+        mode: "solid", image: "/home/u/a.jpg", canonical: false,
+    });
     console.log("ok: splash background accepts only solid/image and local absolute paths");
 }
 

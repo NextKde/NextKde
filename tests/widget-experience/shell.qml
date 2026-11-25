@@ -504,6 +504,26 @@ ShellRoot {
                     // style and the old grayscale icon setting to prove independence.
                     AppearanceConfigService.updateWidgetStyle("color")
                     AppearanceConfigService.updateDesktopFontFamily(Qt.fontFamilies()[0])
+                    // The sandbox splash image is not opened here; these checks
+                    // cover the persisted path rules that its own process shares.
+                    AppearanceConfigService.updateSplashBackgroundMode("solid")
+                    check(AppearanceConfigService.updateSplashBackgroundImage(
+                        "/home/u/start #1 100%.png"),
+                        "choosing an image switches the splash to image mode")
+                    check(AppearanceConfigService.splashBackgroundMode === "image"
+                        && AppearanceConfigService.splashBackgroundImage
+                            === "/home/u/start #1 100%.png",
+                        "splash path keeps URL-significant filename characters")
+                    check(!AppearanceConfigService.updateSplashBackgroundImage(
+                        "https://example.com/splash.png"),
+                        "splash rejects a remote image URL")
+                    check(AppearanceConfigService.updateSplashBackgroundMode("solid"),
+                        "splash returns to the solid surface")
+                    check(AppearanceConfigService.updateSplashBackgroundImage(
+                        "/home/u/start #1 100%.png"),
+                        "reselecting the stored image returns to image mode")
+                    check(AppearanceConfigService.splashBackgroundMode === "image",
+                        "reselecting the image is not a no-op while solid")
                     console.log("WIDGET_EXPERIENCE_PASS")
                     running = false
                     finish.start()

@@ -31,8 +31,10 @@ Bar 融合/布局/显示及 Dock 配置相互独立。切换样式不重置 Dock
 
 schema 36 新增可选的启动画面背景：`splashBackgroundMode`（`solid`/`image`）与
 `splashBackgroundImage`（本地绝对路径）。登录启动画面先于桌面树、以独立 Quickshell 实例运行，
-因此直接读取同一份文件中的这两个字段，并在遮罩后绘制图片；文件被删除或无效时回退纯色明暗背景。
-写入方与启动画面共用 `SplashBackgroundPolicy.mjs`，远程 URL 和资源路径一律不接受。
+因此直接读取同一份文件中的这两个字段，并在 60% 黑色遮罩后绘制图片；文件被删除或无效时回退纯色明暗背景。
+写入方、启动画面与 Settings 共用 `shared/qml/foundation/SplashBackgroundPolicy.mjs`，远程 URL 和资源路径一律不接受。
+Quickshell 不允许脚本 import 越出 shell 根目录，因此 `shell/splash/SplashBackgroundPolicy.mjs`
+是指向该规范文件的符号链接，部署时会物化为 splash 入口旁的普通文件。
 
 Settings 调用 `appearance-settings` 快照/更新并取得完整快照。新增项检查端点、范围、兼容别名及 Shell/平台不可用路径。
 切换玻璃应用完整预设，Material 有独立模糊策略；重置玻璃强度不等于重置所有偏好。
@@ -54,6 +56,10 @@ Settings 调用 `appearance-settings` 快照/更新并取得完整快照。新�
 
 Shell 图案在 `BundledIcons` 用稳定名称登记，通过 `BundledIcon` 或注册表来源绘制，不依赖本机绝对路径或字体字形。
 应用图标、媒体封面、文件缩略图各有契约。Dock 回收站等系统主题例外经 `SystemIconResolver` 集中候选和内置回退。
+
+登录启动画面是上述图标注册与 token 规则的明确例外：它先于桌面树运行，不加载 `BundledIcons` 或 `AppearanceTokens`，
+而是直接加载 `shell/splash/nextkde-logo.svg` / `nextkde-logo-dark.svg`，并使用 `shell/splash/shell.qml` 中固定的明暗墨色。
+两枚 SVG 需与 `apps/settings/icons`、`docs/images` 中的副本同步。
 
 托盘身份在 `modules/bar/TrayIdentity.mjs` 解析：应用明确提供的提示标题、标题与专用 ID 优先于
 按共享生成 ID 缓存的 daemon 回退名。两个匿名项共用 ID 时保持未解析；托盘增删会清空缓存并丢弃

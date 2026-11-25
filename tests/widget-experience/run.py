@@ -135,8 +135,10 @@ def run(base_env=None):
                 check_digital_pixels(root / "captures")
                 check_bell_pixels(root / "captures")
                 saved = json.loads(state["appearance/config.json"])
-                assert saved["version"] == 35 and saved["widgetStyle"] == "color", saved
+                assert saved["version"] == 36 and saved["widgetStyle"] == "color", saved
                 assert "useSystemFont" not in saved and isinstance(saved["desktopFontFamily"], str) and saved["desktopFontFamily"], saved
+                assert saved["splashBackgroundMode"] == "image", saved
+                assert saved["splashBackgroundImage"] == "/home/u/start #1 100%.png", saved
                 assert set(saved["hiddenDeskCenterWidgets"]) == set(WIDGETS) - {"clock"}, saved
                 assert json.loads(state["appearance/icon-appearance.json"])["mode"] == "grayscale"
                 # Each launch must render its own frames, not reuse the first run.
