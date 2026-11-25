@@ -532,6 +532,10 @@ Item {
                 barMacTint: AppearanceConfigService.barMacTint,
                 reduceMotion: AppearanceConfigService.reduceMotion,
                 startupRevealDuration: AppearanceConfigService.startupRevealDuration,
+                // Read by the splash's own Quickshell instance as well, so the
+                // Settings page edits the same fields that process parses.
+                splashBackgroundMode: AppearanceConfigService.splashBackgroundMode,
+                splashBackgroundImage: AppearanceConfigService.splashBackgroundImage,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
                 // The family the desktop would draw with, so the Settings page
@@ -660,6 +664,16 @@ Item {
 
         function updateStartupMotion(reduced: bool, duration: int): string {
             AppearanceConfigService.updateStartupMotion(reduced, duration)
+            return snapshot()
+        }
+
+        function updateSplashBackgroundMode(mode: string): string {
+            AppearanceConfigService.updateSplashBackgroundMode(mode)
+            return snapshot()
+        }
+
+        function updateSplashBackgroundImage(path: string): string {
+            AppearanceConfigService.updateSplashBackgroundImage(path)
             return snapshot()
         }
 

@@ -3,14 +3,16 @@
 // The desktop Shell builds every window on one GUI thread, and that thread is
 // busy for the whole time the login screen is up. Anything animated from
 // inside it stands still exactly when it matters, so the spinner lives here
-// instead: this config owns nothing but a black (dark appearance) or white
-// (light appearance) surface with three dots, and its event loop has nothing
-// else to do. Started by kos-shell.service in parallel with the Shell, stopped
-// by StartupSplash.qml once the arrival animation begins.
+// instead: this config owns nothing but a background with three dots, and its
+// event loop has nothing else to do. The background is the appearance's black
+// (dark) or white (light) surface, or the picture chosen in Settings → Theme →
+// Desktop arrival. Started by kos-shell.service in parallel with the Shell,
+// stopped by StartupSplash.qml once the arrival animation begins.
 import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "SplashBackgroundPolicy.mjs" as SplashBackground
 
 ShellRoot {
     id: root
@@ -35,6 +37,16 @@ ShellRoot {
     }
     property bool dark: paletteDark
 
+    // The picture chosen in Settings → Theme → Desktop arrival. This process
+    // starts before the desktop's appearance service exists, so it reads the
+    // fields straight from the same appearance file. A hand-edited or stale
+    // value falls back to the solid surface: the mode must be "image" and the
+    // path must be a local absolute path before it reaches Image.source.
+    property string splashBackgroundMode: "solid"
+    property string splashBackgroundImage: ""
+    readonly property string splashImage: SplashBackground.activeImage(
+        splashBackgroundMode, splashBackgroundImage)
+
     FileView {
         path: root.appearanceFile
         preload: true
@@ -50,6 +62,11 @@ ShellRoot {
             dark = (settings.shellStyle === "material"
                 || settings.glassFollowsAppearanceMode === true)
                 ? resolved : true
+            const mode = String(settings.splashBackgroundMode ?? "")
+            splashBackgroundMode = SplashBackground.isValidBackgroundMode(mode)
+                ? mode : "solid"
+            splashBackgroundImage = SplashBackground.normalizeImagePath(
+                settings.splashBackgroundImage)
         } catch (_) {
             // Keep the palette-derived value.
         }
@@ -58,6 +75,7 @@ ShellRoot {
     Variants {
         model: Quickshell.screens
         delegate: PanelWindow {
+            id: splashSurface
             required property var modelData
             screen: modelData
             color: "transparent"
@@ -72,9 +90,46 @@ ShellRoot {
             // Click-through: the session is already usable underneath.
             mask: Region {}
 
+            // A visible picture is always dimmed black, so the spinner and the
+            // signature switch to light ink no matter which appearance the
+            // solid surface would have used. Without a picture this is just
+            // the light/dark appearance decision.
+            readonly property bool lightInk: root.dark || pictureLayer.visible
+
             Rectangle {
                 anchors.fill: parent
                 color: root.dark ? "#000000" : "#ffffff"
+            }
+            // The chosen picture, dimmed so the spinner and the signature keep
+            // their contrast on any photo. A picture has no guaranteed
+            // luminance, so this layer always uses a black scrim and light ink
+            // rather than following the appearance; the solid surface keeps
+            // its light/dark pairing. Both appear at once, so the ink never
+            // flips before there is a picture behind it.
+            Item {
+                id: pictureLayer
+                anchors.fill: parent
+                visible: picture.status === Image.Ready
+                Image {
+                    id: picture
+                    anchors.fill: parent
+                    source: root.splashImage
+                    // Decode at the size the surface actually paints, not at
+                    // the source photo's full resolution: an 8K picture must
+                    // not cost 100 MB of texture while the desktop builds.
+                    sourceSize: Qt.size(
+                        Math.max(1, Math.ceil(width * Screen.devicePixelRatio)),
+                        Math.max(1, Math.ceil(height * Screen.devicePixelRatio)))
+                    fillMode: Image.PreserveAspectCrop
+                    asynchronous: true
+                    cache: false
+                    smooth: true
+                }
+                Rectangle {
+                    anchors.fill: parent
+                    color: "#000000"
+                    opacity: 0.45
+                }
             }
             Item {
                 anchors.centerIn: parent
@@ -93,7 +148,7 @@ ShellRoot {
                         width: 9
                         height: 9
                         radius: 4.5
-                        color: root.dark ? "#ffffff" : "#000000"
+                        color: splashSurface.lightInk ? "#ffffff" : "#000000"
                         opacity: [1, 0.6, 0.25][index]
                         x: 22 - width / 2
                             + Math.cos((index * 120 - 90) * Math.PI / 180) * 14
@@ -122,12 +177,12 @@ ShellRoot {
                 Text {
                     anchors.verticalCenter: parent.verticalCenter
                     text: "by NextKDE"
-                    color: root.dark ? "#eff0f1" : "#232629"
+                    color: splashSurface.lightInk ? "#eff0f1" : "#232629"
                 }
                 Image {
                     width: units.boundingRect.height * 2
                     height: units.boundingRect.height * 2
-                    source: root.dark ? "nextkde-logo-dark.svg" : "nextkde-logo.svg"
+                    source: splashSurface.lightInk ? "nextkde-logo-dark.svg" : "nextkde-logo.svg"
                     sourceSize: Qt.size(units.boundingRect.height * 4,
                         units.boundingRect.height * 4)
                     fillMode: Image.PreserveAspectFit

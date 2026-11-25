@@ -24,10 +24,15 @@ Bar 融合/布局/显示及 Dock 配置相互独立。切换样式不重置 Dock
 
 ## 持久化与 IPC
 
-`Quickshell.stateDir/appearance/config.json` 当前写入 schema **33**；完整字段以源码
+`Quickshell.stateDir/appearance/config.json` 当前写入 schema **36**；完整字段以源码
 `serialize()` 和加载迁移为准，不用不完整示例覆盖用户整份 JSON。保留旧版迁移、各预设光学值、校验及范围裁剪。
 图标另存 `appearance/icon-appearance.json`（schema 1），含旧 Dock 一次性迁移。
 经防抖、`JsonConfigStore` → 平台 `state.write` → `QSaveFile` 保存，不从 QML 执行 shell 命令。
+
+schema 36 新增可选的启动画面背景：`splashBackgroundMode`（`solid`/`image`）与
+`splashBackgroundImage`（本地绝对路径）。登录启动画面先于桌面树、以独立 Quickshell 实例运行，
+因此直接读取同一份文件中的这两个字段，并在遮罩后绘制图片；文件被删除或无效时回退纯色明暗背景。
+写入方与启动画面共用 `SplashBackgroundPolicy.mjs`，远程 URL 和资源路径一律不接受。
 
 Settings 调用 `appearance-settings` 快照/更新并取得完整快照。新增项检查端点、范围、兼容别名及 Shell/平台不可用路径。
 切换玻璃应用完整预设，Material 有独立模糊策略；重置玻璃强度不等于重置所有偏好。

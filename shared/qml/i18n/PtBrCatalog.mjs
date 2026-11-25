@@ -3,6 +3,13 @@
 // Keys mirror ZhCatalog.mjs; when an English source string changes, update
 // the key here too. Date patterns use Qt format strings (quote literals).
 export const catalog = {
+    "Splash background": "Fundo da tela de inicialização",
+    "Solid follows the light or dark appearance; an image is shown full screen while the desktop loads": "A cor sólida acompanha a aparência clara ou escura; uma imagem é exibida em tela cheia enquanto o desktop carrega",
+    "Solid color": "Cor sólida",
+    "Splash image": "Imagem da tela de inicialização",
+    "No image chosen; the solid background stays until one is picked": "Nenhuma imagem escolhida; o fundo sólido permanece até você escolher uma",
+    "Choose image…": "Escolher imagem…",
+    "Choose splash image": "Escolher imagem da tela de inicialização",
     "Input method activation failed": "Falha ao ativar a interface do método de entrada",
     "Reloading input method…": "Recarregando método de entrada…",
     "No version has been approved in this catalog.": "Nenhuma versão foi aprovada neste catálogo.",

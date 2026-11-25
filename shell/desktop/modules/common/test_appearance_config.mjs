@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { activeImage, isValidBackgroundMode, normalizeImagePath }
+    from "../../../splash/SplashBackgroundPolicy.mjs";
 
 function normalize(value) {
     const number = Number(value);
@@ -90,6 +92,32 @@ function migrate(previous = {}) {
     assert.equal("barBlurInherit" in v8, false);
     assert.equal(v8.barLayoutMode, "transparent");
     console.log("ok: v7 configuration migrates to flattened v8");
+}
+
+{
+    // The splash reads these fields from a file a user can hand-edit, so only
+    // the two known modes and local absolute paths may reach Image.source.
+    assert.equal(isValidBackgroundMode("solid"), true);
+    assert.equal(isValidBackgroundMode("image"), true);
+    assert.equal(isValidBackgroundMode(""), false);
+    assert.equal(isValidBackgroundMode("Image"), false);
+    assert.equal(isValidBackgroundMode("video"), false);
+
+    assert.equal(normalizeImagePath("/home/u/Pictures/splash.png"),
+        "/home/u/Pictures/splash.png");
+    assert.equal(normalizeImagePath("  /home/u/a.jpg  "), "/home/u/a.jpg");
+    assert.equal(normalizeImagePath(""), "");
+    assert.equal(normalizeImagePath("relative/a.jpg"), "");
+    assert.equal(normalizeImagePath("file:///home/u/a.jpg"), "");
+    assert.equal(normalizeImagePath("https://example.com/a.jpg"), "");
+    assert.equal(normalizeImagePath("qrc:/a.jpg"), "");
+    assert.equal(normalizeImagePath("/home/u/a\nb.jpg"), "");
+
+    assert.equal(activeImage("solid", "/home/u/a.jpg"), "");
+    assert.equal(activeImage("image", "/home/u/a.jpg"), "/home/u/a.jpg");
+    assert.equal(activeImage("image", "https://example.com/a.jpg"), "");
+    assert.equal(activeImage("bogus", "/home/u/a.jpg"), "");
+    console.log("ok: splash background accepts only solid/image and local absolute paths");
 }
 
 console.log("ALL TESTS PASS");

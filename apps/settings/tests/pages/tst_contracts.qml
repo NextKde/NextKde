@@ -191,6 +191,7 @@ Item {
         function test_settingsDropdowns_data() {
             return [
                 {tag:"material", name:"ThemeSettingsPage", objectName:"themeMaterialStyleSelect", count:3},
+                {tag:"startup-background", name:"ThemeSettingsPage", objectName:"splashBackgroundModeSelect", count:2},
                 {tag:"display-material", name:"DisplaySettingsPage", objectName:"displayMaterialStyleSelect", count:3},
                 {tag:"launcher", name:"LauncherSettingsPage", objectName:"launcherDisplayModeSelect", count:4},
                 {tag:"icon-presets", name:"IconAppearanceSection", objectName:"iconTintPresetSelect", count:4}

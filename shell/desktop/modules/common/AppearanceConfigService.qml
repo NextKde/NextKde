@@ -4,6 +4,10 @@ import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.platform
 import "VisibilityPolicy.mjs" as VisibilityPolicy
+// The login splash's Quickshell root is its own directory, so the shared
+// background rules live there and this service imports them from the shell
+// tree rather than the other way around.
+import "../../../splash/SplashBackgroundPolicy.mjs" as SplashBackgroundPolicy
 
 // Global appearance settings shared by shell surfaces. Keep these values out
 // of DockConfigService: glass material is a shell-wide concern, while pinned
@@ -181,6 +185,13 @@ QtObject {
     property string dockWindowAnimationStyle: "scale"
     // Empty means follow KDE General font; this override changes only family.
     property string desktopFontFamily: ""
+    // The login splash runs in its own Quickshell instance before this service
+    // exists, so it reads these two fields straight from config.json. They
+    // still belong here: one appearance file, one Settings IPC path and one
+    // save pipeline. "solid" is the light/dark surface the splash has always
+    // drawn; "image" paints the chosen local picture behind a scrim.
+    property string splashBackgroundMode: "solid"
+    property string splashBackgroundImage: ""
     // Which individual surfaces are shown. Both lists hold the ids that are
     // *hidden*; an absent id is visible, so a newly added widget or StatusArea
     // cell appears by default and an upgrade never silently removes one.
@@ -640,6 +651,34 @@ QtObject {
         return true
     }
 
+    function isValidSplashBackgroundMode(value) {
+        return SplashBackgroundPolicy.isValidBackgroundMode(value)
+    }
+
+    function updateSplashBackgroundMode(rawMode) {
+        const mode = String(rawMode)
+        if (!service.isValidSplashBackgroundMode(mode)
+                || service.splashBackgroundMode === mode)
+            return false
+        service.splashBackgroundMode = mode
+        service.saveTimer.restart()
+        return true
+    }
+
+    // Accepts a plain path; the Settings bridge turns the picker's URL into
+    // one before sending it. Picking a picture is also the intent to show it,
+    // so the mode follows in the same save: the user does not need a second
+    // trip through the mode dropdown to make the choice visible.
+    function updateSplashBackgroundImage(rawPath) {
+        const path = SplashBackgroundPolicy.normalizeImagePath(rawPath)
+        if (path === "" || service.splashBackgroundImage === path)
+            return false
+        service.splashBackgroundImage = path
+        service.splashBackgroundMode = "image"
+        service.saveTimer.restart()
+        return true
+    }
+
     function resetStrengths() {
         const globalBlurChanged = Math.abs(globalBlurStrength - 0.42) > 0.001
         const globalLiquidChanged = Math.abs(globalLiquidStrength - 1.0) > 0.001
@@ -698,7 +737,7 @@ QtObject {
         if (!service._widgetStyleResolved)
             return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 35,
+            version: 36,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -748,6 +787,8 @@ QtObject {
             startupRevealDuration: service.startupRevealDuration,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
             desktopFontFamily: service.desktopFontFamily,
+            splashBackgroundMode: service.splashBackgroundMode,
+            splashBackgroundImage: service.splashBackgroundImage,
             // Sorted before writing so a reorder in the UI never produces a
             // spurious diff, and so the file stays readable by hand.
             hiddenDeskCenterWidgets: service.hiddenDeskCenterWidgets.slice().sort(),
@@ -838,6 +879,19 @@ QtObject {
                     // override; older profiles still follow KDE General font.
                     service.desktopFontFamily = typeof object.desktopFontFamily === "string"
                         ? object.desktopFontFamily.trim() : ""
+                    // v36 adds the login splash's optional background picture.
+                    // Files written before it carry neither key and keep the
+                    // solid surface; the validation pass below writes the two
+                    // defaults once together with the new version.
+                    const splashMode = String(object.splashBackgroundMode ?? "")
+                    const hasSplashBackground =
+                        service.isValidSplashBackgroundMode(splashMode)
+                        && typeof object.splashBackgroundImage === "string"
+                    if (service.isValidSplashBackgroundMode(splashMode))
+                        service.splashBackgroundMode = splashMode
+                    service.splashBackgroundImage =
+                        SplashBackgroundPolicy.normalizeImagePath(
+                            object.splashBackgroundImage)
                     // v28 adds per-surface visibility. Files written before it
                     // carry neither key. v35 adds the grouped widget, which is
                     // opt-in: older files cannot contain an explicit choice for
@@ -1028,7 +1082,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 35
+                    if (Number(object.version) !== 36
                             || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)
@@ -1040,7 +1094,8 @@ QtObject {
                             || !service.isValidBarVisibilityMode(barVisibility)
                             || !service.isValidBarLayoutMode(barLayout)
                             || !service.isValidGlassStyle(glassStyle)
-                            || !service.isValidDockWindowAnimationStyle(animationStyle))
+                            || !service.isValidDockWindowAnimationStyle(animationStyle)
+                            || !hasSplashBackground)
                         service.saveTimer.restart()
                 } catch (error) {
                     console.warn("[AppearanceConfig] parse error: " + error)

@@ -26,13 +26,20 @@ Standalone app preferences remain separate; see [project context](../PROJECT_CON
 
 ## Persistence and IPC
 
-`Quickshell.stateDir/appearance/config.json` is currently written with schema **33**; source
+`Quickshell.stateDir/appearance/config.json` is currently written with schema **36**; source
 `serialize()`/load migrations are authoritative for the full field set. Do not copy a partial
 JSON example over a user's whole file. Keep old-version migration, per-preset optical values,
 validation and range clamping. Unsupported style values must not become unvalidated runtime state.
 Icon settings use separate `appearance/icon-appearance.json` (schema 1), including the one-time
 legacy Dock migration. Saving is debounced through `JsonConfigStore` → platform `state.write`
 → `QSaveFile`, rather than a QML shell command.
+
+Schema 36 adds the optional startup-splash background: `splashBackgroundMode` (`solid`/`image`)
+and `splashBackgroundImage` (an absolute local path). The login splash runs as its own Quickshell
+instance before the desktop tree, so it reads these two fields directly from the same file and
+renders the picture behind a scrim; a deleted or invalid file falls back to the solid light/dark
+surface. Both the writer and the splash apply `SplashBackgroundPolicy.mjs`; remote URLs and
+resource paths are never accepted.
 
 Settings calls `appearance-settings` snapshot/update operations and receives a complete snapshot.
 Check the endpoint when adding a setting; expose bounded values, preserve compatibility aliases
@@ -202,7 +209,7 @@ that cache fonts may require restarting or logging out, following KDE behavior.
 
 “Desktop font” configures the Shell's family separately from KDE's six font roles.
 Its default is “Follow system”, represented by an empty `desktopFontFamily` in
-appearance schema 33. A selected family overrides only the Shell; clearing it
+appearance schema 36. A selected family overrides only the Shell; clearing it
 resumes following the current General font. Older profiles and the removed
 `useSystemFont` flag migrate to follow-system. Uninstalled overrides fall back to
 General font without discarding the stored choice. The picker exposes only
