@@ -4,7 +4,6 @@ import Quickshell.Services.UPower
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
-import qs.desktop.modules.platform
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "../../../Kos/Ui/foundation/WallpaperCatalog.js" as Catalog
@@ -44,39 +43,25 @@ QtObject {
         next[screenName]=Object.assign({},old,{x:x,y:y,inside:true,clickX:x,clickY:y,clickTime:phase})
         interactionByScreen=next
     }
-    property bool locked: false
-    property bool lockPollPending: false
+    readonly property bool locked: motion.locked
     property real phase: 0
     property real lastTick: 0
     readonly property bool anyVisible: ScreenLifecycle.outputAvailable
         && ScreenLifecycle.usableScreens.some(screen => !covered(screen))
-    readonly property bool hasVisibleWindows: {
-        const revision=WindowService.revision+WindowService.placementRevision
-        return Policy.hasVisibleWindows(WindowService.records,WindowService.currentDesktopId)
-    }
-    readonly property bool idleEligible: active && !preview && !locked
-        && !AppTheme.reduceMotion && ScreenLifecycle.outputAvailable && !hasVisibleWindows
-    property bool idleReady: false
-    function rearmIdle() {
-        if (!idleDelay) return
-        idleReady=false
-        idleDelay.stop()
-        if (idleEligible) idleDelay.start()
-    }
-    property Timer idleDelay: Timer {
-        interval: 10000
-        repeat: false
-        onTriggered: if (root.idleEligible) root.idleReady=true
-    }
-    property Connections desktopChanges: Connections {
-        target: WindowService
-        function onCurrentDesktopIdChanged() { root.rearmIdle() }
+    readonly property bool hasVisibleWindows: motion.hasVisibleWindows
+    readonly property bool idleEligible: motion.idleEligible
+    readonly property bool idleReady: motion.idleReady
+    readonly property Timer idleDelay: motion.idleDelay
+    function rearmIdle() { if (motion) motion.rearmIdle() }
+    property WallpaperMotionGate motion: WallpaperMotionGate {
+        enabled: root.active
+        preview: root.preview
     }
     // Preview always animates, including when Settings covers the desktop.
     readonly property int cadence: preview
         ? (locked || !ScreenLifecycle.outputAvailable ? 0 : economical ? 125 : 67)
         : Policy.cadence(economical, UPower.onBattery, AppTheme.reduceMotion,locked,anyVisible)
-    readonly property bool running: active && cadence>0 && (preview || idleReady && idleEligible)
+    readonly property bool running: motion.running && cadence > 0
     readonly property int weatherCode: themeId === "weather" ? WeatherService.weatherCode : 0
     readonly property real windStrength: WeatherService.available ? Math.min(1,Math.max(0.08,Number(WeatherService.current.windSpeed || 0)*(WeatherService.units === "imperial" ? 1.609344 : 1)/60)) : 0.15
     readonly property real windDirection: WeatherService.available ? Number(WeatherService.current.windDirection || 0) : 0
@@ -95,14 +80,6 @@ QtObject {
         WallpaperColorSource.proceduralPrimary = active
             ? (theme ? theme.accent : ThemePackService.accent(themeId)) : ""
     }
-    function pollLock() {
-        if (lockPollPending || !PlatformClient.supports("session.visibility")) return
-        lockPollPending = true
-        PlatformClient.request("session.visibility", {}, response => {
-            lockPollPending = false
-            if (response?.ok) locked = !!response.result.locked
-        })
-    }
     property Timer clock: Timer {
         interval: Math.max(33, root.cadence)
         repeat: true
@@ -113,14 +90,6 @@ QtObject {
             root.lastTick = now
         }
     }
-    property Timer lockState: Timer {
-        interval: 5000
-        repeat: true
-        running: root.active
-        triggeredOnStart: true
-        onTriggered: root.pollLock()
-    }
-    onIdleEligibleChanged: rearmIdle()
     onRunningChanged: {
         lastTick=0
         if (!running) interactionByScreen=({})

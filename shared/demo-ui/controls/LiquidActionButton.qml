@@ -30,6 +30,7 @@ import "../foundation" as Foundation
 //   adaptiveGlass / convexLens             透镜光学开关（默认凸面透镜）
 Button {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
     property string liquidIntensity: LiquidStyle.intensityLevel
     readonly property var _intensity: LiquidStyle.intensityProfile(liquidIntensity)
     property LiquidBackdrop backdrop: LiquidStyle.backdropForItem(root, root.Window.window)
@@ -90,7 +91,7 @@ Button {
     leftPadding: iconOnly ? 0 : Foundation.AppTheme.compactDesign ? 12 : 14
     rightPadding: iconOnly ? 0 : Foundation.AppTheme.compactDesign ? 12 : 14
     scale: Foundation.AppTheme.compactDesign || adaptiveGlass ? 1 : materialForm ? (down ? .98 : 1) : hovered ? 1.03 : 1
-    Behavior on scale { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: Easing.OutCubic } }
+    Behavior on scale { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
     // 禁用靠文字色表达，不整块降透明度
     opacity: 1
     contentItem: Item {
@@ -163,16 +164,16 @@ Button {
         edgeWidth: Math.min(10, height * .28)
         refractionStrength: root.adaptiveGlass ? .6 : root.hovered ? root._intensity.hoverRefraction : root._intensity.refraction
         magnification: root.adaptiveGlass ? 1 : root.hovered ? root._intensity.hoverMagnification : root._intensity.magnification
-        Behavior on refractionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-        Behavior on magnification { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+        Behavior on refractionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+        Behavior on magnification { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
         radius: root.cornerRadius
         backdrop: root.materialForm ? null : root.backdrop
         reflectionStrength: root.adaptiveGlass ? .12 : root.hovered ? root._intensity.hoverReflection : root._intensity.reflection
-        Behavior on reflectionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+        Behavior on reflectionStrength { NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
         tintColor: root.highlighted || root.checked ? root.accentColor : root.darkAppearance ? LiquidStyle.controlFillCenterDark : LiquidStyle.controlFillCenter
         tintStrength: root.highlighted || root.checked ? 0.24 : LiquidStyle.controlFillOpacity
         Behavior on tintStrength {
-            NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast }
+            NumberAnimation { duration: root.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve }
         }
         opacity: root.flat && !root.hovered && !root.checked && !root.visualFocus ? 0.45 : 1
         }
@@ -182,7 +183,7 @@ Button {
             radius: root.cornerRadius
             color: root.checked ? root.accentColor : Foundation.AppTheme.text
             opacity: root.down ? .10 : root.hovered ? .06 : root.checked ? .13 : 0
-            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : 150 } }
+            Behavior on opacity { NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
         }
         Rectangle {
             anchors.fill: parent

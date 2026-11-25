@@ -161,8 +161,9 @@ ListModel {
         // Quickshell-only service registry into a plain Qt Quick Test process.
         const directory = mkdtempSync(join(tmpdir(), "kos-dock-highlight-"));
         try {
-            copyFileSync(new URL("../../shared/qml/controls/SelectionHighlight.qml", import.meta.url),
-                join(directory, "SelectionHighlight.qml"));
+            const highlight = readFileSync(new URL("../../shared/qml/controls/SelectionHighlight.qml", import.meta.url), "utf8")
+                .replace('"../foundation"', JSON.stringify(new URL("../../shared/qml/foundation", import.meta.url).href));
+            writeFileSync(join(directory, "SelectionHighlight.qml"), highlight);
             const dockWrapper = readFileSync(new URL("../../shell/desktop/modules/dock/DockIconHighlight.qml", import.meta.url), "utf8")
                 .replace('import "../../../Kos/Ui"', 'import "."');
             writeFileSync(join(directory, "DockIconHighlight.qml"), dockWrapper);
@@ -423,8 +424,15 @@ ListModel {
                 'DockAutoHideController.qml', 'DockAutoHideMath.mjs', 'DockAnimation.qml'])
                 symlinkSync(join(repository, 'shell/desktop/modules/dock', name), join(dock, name));
             copyFileSync(new URL("./fixtures/WindowService.qml", import.meta.url), join(dock, 'WindowService.qml'));
+            writeFileSync(join(dock, 'AppIdentityService.qml'), `pragma Singleton
+import QtQuick
+QtObject {
+    function sameApp(identity, id) { return identity.desktopId === id }
+}
+`);
             for (const name of ['LiquidGlassPanel.qml', 'AppearanceTokens.qml'])
                 copyFileSync(new URL(`fixtures/${name}`, import.meta.url), join(common, name));
+            copyFileSync(new URL('../../shared/qml/foundation/MotionTokens.qml', import.meta.url), join(common, 'MotionTokens.qml'));
             writeFileSync(join(dock, 'ConfigService.qml'), `pragma Singleton
 import QtQuick
 QtObject { readonly property real effectiveHoverScale: 1.1 }
@@ -435,9 +443,11 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
         singleton DockAnimation 1.0 DockAnimation.qml
         singleton ConfigService 1.0 ConfigService.qml
         singleton WindowService 1.0 WindowService.qml
+        singleton AppIdentityService 1.0 AppIdentityService.qml
         `);
             writeFileSync(join(common, 'qmldir'), `module qs.desktop.modules.common
         LiquidGlassPanel 1.0 LiquidGlassPanel.qml
+        MotionTokens 1.0 MotionTokens.qml
         singleton AppearanceTokens 1.0 AppearanceTokens.qml
         `);
             copyFileSync(new URL("./reveal.qml", import.meta.url), join(directory, 'shell.qml'));
@@ -457,7 +467,8 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
             assert.match(output, /DOCK_REVEAL_RUNTIME_PASS/, output);
             console.log('Dock reveal: real HoverHandler input, delayed/cancelled entry, slow gap hand-off, hide reset, dynamic span, legacy default, mode switching and disabled mode passed offscreen');
         } finally {
-            rmSync(directory, { recursive: true, force: true });
+            if (process.env.KOS_KEEP_TEST_TMP === "1") console.log(`Fixture retained: ${directory}`);
+            else rmSync(directory, { recursive: true, force: true });
         }
     },
     "reveal-indicator": async () => {
@@ -680,6 +691,7 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
             module("dock", {
                 DockWindow: window,
                 ConfigService: object(`property string dockStyle: "floating"; property string visibilityMode: "always"
+                    property var autoHideApps: []
                     property bool showRevealIndicator: true; property real effectiveHoverScale: 1
                     property real effectiveHoverLift: 0
                     property bool ready: true; property int barHeight: 35`),
@@ -703,7 +715,9 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
         }`,
                 DockAutoHideController: `import QtQuick
         Item {
-            property string mode; property bool configReady; property bool windowDataReady
+            property string mode; property var autoHideApps: []
+            property string effectiveMode: mode
+            property bool configReady; property bool windowDataReady
             property string position; property var targetScreen
             property real dockWidth; property real dockHeight; property real edgeMargin
             property bool pointerInsideDock; property bool editing; property bool dragging
@@ -735,7 +749,11 @@ QtObject { readonly property real effectiveHoverScale: 1.1 }
                     property var glass: ({ ambientMultiplier: 1 })`),
                 AppearanceConfigService: object(`property real effectiveDockBlur: 1
                     property real effectiveDockLiquid: 1; property bool barIntegratedWithDock: false`),
-                WorkspaceLayoutService: object("function updateDock(screen, position, rect, margin) {}"),
+                WorkspaceLayoutService: object(`property bool dockReserved: true
+                    property real workspaceGap: 0
+                    function updateDock(screen, position, rect, margin, reserved) {
+                        dockReserved = reserved; workspaceGap = margin
+                    }`),
             });
             module("applauncher", {
                 AppLauncherService: object("property bool open: false"),

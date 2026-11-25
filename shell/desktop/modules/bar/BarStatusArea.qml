@@ -2,7 +2,9 @@ import QtQuick
 import Quickshell.Services.UPower
 import qs.desktop.modules.common
 import qs.desktop.modules.inputmethod
+import qs.desktop.modules.platform
 import "../common/VisibilityPolicy.mjs" as VisibilityPolicy
+import "../common/PanelPlacement.mjs" as PanelPlacement
 
 // Reusable system-status cluster. Popup panels stay anchored to the same
 // visual items whether this component lives in BarWindow or inside Dock.
@@ -48,8 +50,12 @@ Item {
     // tested, so an unready or unavailable UPower cannot hide a laptop's cell.
     readonly property bool showBatteryCell: VisibilityPolicy.shouldShowBatteryCell(
         UPower.displayDevice.ready, UPower.displayDevice.isPresent)
+    // The native input-method control is opt-in. A disabled or unavailable
+    // takeover must leave only the user's existing Fcitx tray, not a default
+    // "中" badge or an empty slot in the status grid.
     readonly property var visibleTrailingCells: trailingCells.filter(
         entry => !AppearanceConfigService.isStatusCellHidden(entry.key)
+            && (entry.key !== "inputmethod" || InputMethodService.enabled)
             && (entry.key !== "battery" || root.showBatteryCell))
 
     property Item pendingControlCenterAnchor: null
@@ -89,17 +95,82 @@ Item {
             closeControlCenter()
             return
         }
+        if (controlCenter && Date.now() < controlCenter._suppressToggleUntil)
+            return
         notificationPanel.close()
-        if (controlCenter)
+        const placement = _panelPlacement(anchorItem)
+        if (controlCenter) {
+            _applyPlacement(controlCenter, placement)
             controlCenter.toggle(anchorItem)
-        else
+        } else {
             pendingControlCenterAnchor = anchorItem
+            pendingControlCenterPlacement = placement
+        }
     }
 
     function closeControlCenter() {
         pendingControlCenterAnchor = null
         if (controlCenter)
             controlCenter.close()
+    }
+
+    // Persistent panels stay mapped, so they cannot rely on a popup anchor any
+    // more. The host surface (Bar or Dock) knows where the cell sits, and the
+    // panel is placed from that in screen coordinates.
+    readonly property var targetScreen: ScreenLifecycle.activeScreen
+    property var pendingControlCenterPlacement: null
+    readonly property var hostWindow: Window.window
+    function _hostOrigin() {
+        const screen = targetScreen
+        const win = hostWindow
+        const sx = screen ? screen.x : 0
+        const sy = screen ? screen.y : 0
+        const sw = screen ? screen.width : 0
+        const sh = screen ? screen.height : 0
+        if (!win || !root.dockHosted)
+            return Qt.point(sx, sy)
+        if (root.dockEdge === "bottom")
+            return Qt.point(sx, sy + sh - win.height)
+        if (root.dockEdge === "right")
+            return Qt.point(sx + sw - win.width, sy)
+        return Qt.point(sx, sy)
+    }
+    function _panelPlacement(item) {
+        const screen = targetScreen
+        const origin = _hostOrigin()
+        const local = item ? item.mapToItem(null, 0, 0) : Qt.point(0, 0)
+        const dockRect = root.dockHosted ? WorkspaceLayoutService.dockRect : null
+        // The math lives in PanelPlacement.mjs (tested in
+        // test_panel_placement.mjs): screen-local units, dock-artwork based
+        // offsets, null-anchor fallbacks. This function only gathers QML state.
+        return PanelPlacement.panelPlacement({
+            edge: root.dockHosted ? root.dockEdge : "top",
+            screenX: screen ? screen.x : 0,
+            screenY: screen ? screen.y : 0,
+            screenWidth: screen ? screen.width : 0,
+            screenHeight: screen ? screen.height : 0,
+            hostOrigin: origin,
+            hasAnchor: item != null,
+            anchorX: local.x,
+            anchorY: local.y,
+            anchorWidth: item ? item.width : 0,
+            anchorHeight: item ? item.height : 0,
+            dockRect: dockRect
+                ? { x: dockRect.x, y: dockRect.y,
+                    width: dockRect.width, height: dockRect.height }
+                : null,
+            // Both placements breathe: standalone four pixels below the Bar,
+            // dock-hosted eight pixels above the Dock artwork, the same room
+            // the old popup's negative margins gave the notification panel.
+            gap: root.dockHosted ? 8 : 4
+        })
+    }
+    function _applyPlacement(panel, placement) {
+        if (!panel || !placement)
+            return
+        panel.panelEdge = placement.edge
+        panel.panelOffset = placement.offset
+        panel.panelCenter = placement.center
     }
 
     // Remote session entries (desktop context menu) open the panel anchored
@@ -110,8 +181,17 @@ Item {
         closeDetailPanels()
         notificationPanel.close()
         if (controlCenter) {
-            if (!controlCenter.isOpen)
-                controlCenter.toggle(controlCenterAnchor())
+            if (!controlCenter.isOpen) {
+                // Same placement discipline as toggleControlCenter: this path
+                // used to toggle with no placement applied at all, so a panel
+                // opened from the desktop context menu kept its default or
+                // leftover position instead of the dock artwork's. The anchor
+                // may be null (hidden cell); _panelPlacement then centers on
+                // the artwork.
+                const anchor = controlCenterAnchor()
+                _applyPlacement(controlCenter, _panelPlacement(anchor))
+                controlCenter.toggle(anchor)
+            }
             controlCenter.runSessionAction(action)
         } else {
             pendingSessionAction = action
@@ -263,6 +343,10 @@ Item {
                         bluetoothPanel.close()
                         root.closeControlCenter()
                     }
+                    if (Date.now() < notificationPanel._suppressToggleUntil)
+                        return
+                    root._applyPlacement(notificationPanel,
+                        root._panelPlacement(notificationToggle))
                     notificationPanel.toggle(notificationToggle)
                 }
             }
@@ -371,9 +455,13 @@ Item {
         asynchronous: true
         onLoaded: {
             const anchor = root.pendingControlCenterAnchor
-            if (anchor)
+            if (anchor) {
+                root._applyPlacement(item,
+                    root.pendingControlCenterPlacement || root._panelPlacement(anchor))
                 item.toggle(anchor)
+            }
             root.pendingControlCenterAnchor = null
+            root.pendingControlCenterPlacement = null
             if (root.pendingSessionAction !== "") {
                 item.runSessionAction(root.pendingSessionAction)
                 root.pendingSessionAction = ""
@@ -398,9 +486,11 @@ Item {
             bluetoothPanel.close()
             if (!root.controlCenterOpen)
                 networkPanel.close()
-            const anchor = root.controlCenterAnchor()
-            if (anchor)
-                root.toggleControlCenter(anchor)
+            // A hidden or unresolvable cell must not swallow the request
+            // (this path toggled only when the lookup succeeded, so the
+            // global shortcut silently did nothing). toggleControlCenter
+            // places from the dock artwork when the anchor is null.
+            root.toggleControlCenter(root.controlCenterAnchor())
         }
     }
 }

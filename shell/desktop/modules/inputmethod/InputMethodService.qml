@@ -131,12 +131,13 @@ QtObject {
         // A var signal can expose the transport's QVariantList as an array-like
         // QML sequence. Array.isArray rejects that sequence and drops every
         // candidate despite the daemon reporting lookupVisible=true.
-        const nextCandidates = copyList(state.candidates);
-        // Caret/visibility events also carry the table. Keep the Repeater's
-        // delegates when only those fields changed.
-        if (JSON.stringify(nextCandidates) !== JSON.stringify(svc.candidates))
-            svc.candidates = nextCandidates;
-        svc.spot = state.spot || ({});
+        // Compare the flat records before allocating a copy. Caret/visibility
+        // events carry the same table and must not rebuild candidate content.
+        if (!sameRecords(state.candidates, svc.candidates, ["label", "text", "comment"]))
+            svc.candidates = copyList(state.candidates);
+        const nextSpot = state.spot || ({});
+        if (!sameFields(nextSpot, svc.spot, ["x", "y", "width", "height", "scale", "mode"]))
+            svc.spot = nextSpot;
         svc.kwinCaret = state.caret || ({});
         if (svc._popupSessionOpen && !svc._anchorPending
                 && svc.kwinCaret.available
@@ -145,7 +146,9 @@ QtObject {
         if (state.imLabel) svc.imLabel = String(state.imLabel);
         if (state.imIcon) svc.imIcon = String(state.imIcon);
         if (state.imName) svc.imName = String(state.imName);
-        svc.properties = copyList(state.properties);
+        if (!sameRecords(state.properties, svc.properties,
+                ["id", "key", "shortText", "icon", "label", "isMenu"]))
+            svc.properties = copyList(state.properties);
         const showing = svc.enabled && svc.visible
             && (svc.lookupVisible || svc.preeditVisible || svc.auxVisible);
         if (showing && !svc._popupSessionOpen)
@@ -153,6 +156,20 @@ QtObject {
         else if (!showing)
             svc._endPopupSession();
         svc._publishPopupState();
+    }
+
+    function sameFields(left, right, fields) {
+        for (let i = 0; i < fields.length; ++i)
+            if (left[fields[i]] !== right[fields[i]]) return false;
+        return true;
+    }
+
+    function sameRecords(left, right, fields) {
+        const count = left && typeof left.length === "number" ? left.length : 0;
+        if (count !== right.length) return false;
+        for (let i = 0; i < count; ++i)
+            if (!sameFields(left[i], right[i], fields)) return false;
+        return true;
     }
 
     function copyList(value) {
@@ -163,7 +180,7 @@ QtObject {
     }
 
     function _publishPopupState() {
-        svc.popupState = {
+        const next = {
             enabled: svc.enabled, visible: svc.visible,
             anchorReady: !svc._anchorPending,
             lookupVisible: svc.lookupVisible, candidates: svc.candidates,
@@ -172,6 +189,10 @@ QtObject {
             cursorIndex: svc.cursorIndex, layout: svc.layout,
             hasPrev: svc.hasPrev, hasNext: svc.hasNext
         };
+        // Anchor changes have their own binding; status-only messages do not
+        // need to publish another identical presentation snapshot.
+        if (!sameFields(next, svc.popupState, Object.keys(next)))
+            svc.popupState = next;
     }
 
     function _beginPopupSession() {

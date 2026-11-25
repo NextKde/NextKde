@@ -286,15 +286,6 @@ for (const control of ["KosButton", "KosRoundButton", "KosSlider", "KosSwitch"])
         `${control} honors the reduce-motion duration tokens`);
 }
 
-const glassEffect = read("../../kwin/glass-effect/src/blur.cpp");
-assert.match(glassEffect, /hasExplicitBlurRequest[\s\S]*explicitlyRequestedBlur/,
-    "explicit application and decoration blur bypass force-blur filtering");
-assert.match(glassEffect,
-    /addBlurCapability\(\)[\s\S]*m_blurCapabilityRegistered = true[\s\S]*if \(m_blurCapabilityRegistered\)[\s\S]*removeBlurCapability/,
-    "new KWin blur capability is released only after successful registration");
-assert.match(glassEffect, /if \(m_valid\)[\s\S]*stackingOrder\(\)[\s\S]*updateBlurRegion/,
-    "reconfiguration refreshes existing windows from a stable snapshot");
-
 const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");
@@ -320,12 +311,12 @@ assert.doesNotMatch(appActions, /_queueDeepLink|_deepLinkDelay/,
 const popupMotion = read("../../shell/desktop/modules/common/PopupMotion.qml");
 const appearanceTokens = read("../../shell/desktop/modules/common/AppearanceTokens.qml");
 const contextMenu = read("../../shell/desktop/modules/common/ContextMenu.qml");
-assert.match(appearanceTokens, /popupOpenDuration:\s*150[\s\S]*popupCloseDuration:\s*140/,
-    "shared popup motion uses Launchpad's 150ms entrance timing");
+assert.match(appearanceTokens, /popupOpenDuration:\s*base\.duration[\s\S]*popupCloseDuration:\s*base\.duration/,
+    "shared popup motion uses the base tier for both directions");
 assert.match(appearanceTokens, /popupStartScale:\s*0\.96[\s\S]*popupAnchorOffset:\s*20/,
     "shared popup motion uses Launchpad's 0.96 settle scale");
-assert.match(popupMotion, /openEasing:\s*Easing\.OutCubic[\s\S]*closeEasing:\s*Easing\.InCubic/,
-    "popup open and close use cubic easing without overshoot");
+assert.match(popupMotion, /openEasing:\s*AppearanceTokens\.motion\.enterCurve[\s\S]*closeEasing:\s*AppearanceTokens\.motion\.exitCurve/,
+    "popup open and close use directional motion policy curves without overshoot");
 assert.match(contextMenu, /centerBelowAnchor[\s\S]*PopupAdjustment\.Slide/,
     "centered application menus only slide at screen edges");
 const appLauncherWindow = read("../../shell/desktop/modules/applauncher/AppLauncherWindow.qml");
@@ -374,16 +365,26 @@ assert.match(iconThemeReloadSource,
 assert.match(dockAnimationSource,
     /windowPreviewDelay:\s*220/,
     "Dock previews debounce pointer passes before requesting a full-screen capture");
-// The four-pixel separation from the Bar moved from a per-card offset into the
-// panel's own anchor margins when the panel became one window. The value and
-// the intent are unchanged: standalone the panel starts four pixels below the
-// Bar, dock-hosted it must keep its edge flush with the Dock.
-assert.match(controlCenterPanelSource,
-    /margins\.bottom:\s*panel\.dockHosted\s*\?\s*0\s*:\s*-4/,
+// The four-pixel separation from the Bar lives in BarStatusArea's placement
+// math now that the panel is one persistent layer-shell surface: standalone the
+// panel starts four pixels below the Bar, dock-hosted it keeps eight pixels of
+// breathing room above the Dock artwork (the old popup's -8 margins). Clamping
+// the anchor centre keeps it inside the screen instead of letting the surface
+// resize.
+const barStatusAreaSource = read("../../shell/desktop/modules/bar/BarStatusArea.qml");
+const persistentPanelSource = read("../../shell/desktop/modules/common/PersistentPanelWindow.qml");
+const panelPlacementSource = read("../../shell/desktop/modules/common/PanelPlacement.mjs");
+assert.match(barStatusAreaSource, /gap:\s*root\.dockHosted \? 8 : 4/,
     "standalone Control Center starts four pixels below the Bar");
-assert.match(controlCenterPanelSource,
-    /adjustment:\s*PopupAdjustment\.Slide/,
-    "the Control Center still slides at screen edges instead of resizing");
+assert.match(panelPlacementSource, /\bgap = 4\b/,
+    "the placement math keeps a four-pixel default gap");
+assert.match(controlCenterPanelSource, /PersistentPanelWindow \{/,
+    "the Control Center is one persistent layer-shell surface");
+assert.match(persistentPanelSource, /PanelPlacement\.clampedCenterOffset\(\{/,
+    "the panel clamps at screen edges instead of resizing");
+assert.match(panelPlacementSource,
+    /Math\.max\(edgeMargin, Math\.min\(centered, screenSize - size - edgeMargin\)\)/,
+    "the along-edge offset is clamped at both screen ends");
 assert.match(globalMenuSource, /root\.height\s*\+\s*4/,
     "application menus keep a four-pixel Bar gap");
 

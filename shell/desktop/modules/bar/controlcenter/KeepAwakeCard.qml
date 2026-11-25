@@ -15,7 +15,6 @@ ControlCenterCard {
         cornerRadius: keepAwakeCard.cardRadius
         selected: keepAwakeCard.service.keepAwakeEnabled
     }
-    visible: cardShown && coordinator.cardAnchor !== null
     Rectangle {
         id: keepAwakeDisc
         width: 34; height: 34; radius: 17
@@ -24,7 +23,7 @@ ControlCenterCard {
             ? ThemeService.tileActiveFill
             : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(0, 0, 0, 0.05))
         opacity: keepAwakePointer.containsMouse && !keepAwakePointer.pressed ? 1.0 : 0.92
-        Behavior on color { ColorAnimation { duration: 140 } }
+        Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
         BundledIcon {
             anchors.centerIn: parent

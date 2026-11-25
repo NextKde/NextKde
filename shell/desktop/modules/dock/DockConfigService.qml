@@ -4,6 +4,7 @@ import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
+import "DockItems.mjs" as DockItems
 
 // ────────────────────────────────────────────────────────────────
 // DockConfigService — Persistent JSON configuration.
@@ -102,6 +103,8 @@ QtObject {
     // Dock show mode. Single mutually-exclusive enum: "always" | "smart" |
     // "persistent". Never store two booleans — that allows impossible states.
     property string visibilityMode: "always"
+    // Canonical desktop IDs; matching windows temporarily override the show mode.
+    property var autoHideApps: []
     // Window grouping mode: "grouped" (macOS style - 1 icon per app) | "separate" (classic taskbar)
     property string windowGrouping: "grouped"
     // Shell controls stay separate from the persisted application pin order.
@@ -131,10 +134,11 @@ QtObject {
     // AppLauncherConfigService and are published through AppPresentationService.
     // Keep existing values round-trippable so older config files are not lost.
     property var iconOverrides:   ({})
-    // `dockItems` is the canonical ordered list of pinned applications.
-    // Defaults are generic KDE tools plus our own settings entry, never a
-    // developer's personal app pins.
+    // `dockItems` is the canonical ordered list of pinned applications and
+    // user-placed separators. Defaults are generic KDE tools plus our own
+    // settings entry, never a developer's personal app pins.
     // App item: { type: "app", appId: "org.kde.kate.desktop" }
+    // Separator: { type: "separator", id: "sep-…" }
     property var dockItems: [
         { type: "app", appId: "kos-settings.desktop" },
         { type: "app", appId: "org.kde.dolphin.desktop" },
@@ -431,6 +435,40 @@ QtObject {
         return true
     }
 
+    function _autoHideAppId(value) {
+        if (typeof value !== "string")
+            return ""
+        const raw = value.trim()
+        if (!raw || raw.length > 256 || /[\/\x00-\x1f\x7f]/.test(raw))
+            return ""
+        const id = AppIdentityService.canonicalId(raw)
+        // The persisted value must also be accepted for removal and reload.
+        return id.length <= 256 ? id : ""
+    }
+
+    function _normalizeAutoHideApps(values) {
+        const result = []
+        for (const value of Array.isArray(values) ? values : []) {
+            const id = svc._autoHideAppId(value)
+            if (id && !result.some(existing => AppIdentityService.sameApp(existing, id)))
+                result.push(id)
+        }
+        return result
+    }
+
+    function updateAutoHideApp(rawId, enabled) {
+        const id = svc._autoHideAppId(rawId)
+        if (!svc.ready || !id || typeof enabled !== "boolean")
+            return false
+        const existing = svc.autoHideApps.some(app => AppIdentityService.sameApp(app, id))
+        if (existing === enabled)
+            return true
+        svc.autoHideApps = enabled ? svc.autoHideApps.concat([id])
+            : svc.autoHideApps.filter(app => !AppIdentityService.sameApp(app, id))
+        svc.scheduleSave()
+        return true
+    }
+
     function updateWindowGrouping(rawMode) {
         const nextMode = String(rawMode)
         if (!isValidWindowGrouping(nextMode) || windowGrouping === nextMode)
@@ -445,39 +483,7 @@ QtObject {
     // Dock item model — Phase 1 persistence API
     // ═══════════════════════════════════════════════════════════
     function _normalizeDockItems(rawItems) {
-        const normalized = []
-        const seen = new Set()
-        function appendApp(appId) {
-            if (seen.has(appId))
-                return
-            seen.add(appId)
-            normalized.push({ type: "app", appId: appId })
-        }
-        const items = Array.isArray(rawItems) ? rawItems : []
-
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i]
-            if (!item || typeof item !== "object")
-                continue
-
-            if (item.type === "app" && typeof item.appId === "string"
-                    && item.appId.length > 0) {
-                appendApp(item.appId)
-                continue
-            }
-
-            // Folder support was removed. Flatten legacy entries in-place so
-            // no previously pinned application disappears after the upgrade.
-            if (item.type === "folder" && typeof item.id === "string"
-                    && item.id.length > 0) {
-                const appIds = Array.isArray(item.appIds)
-                    ? item.appIds.filter(appId => typeof appId === "string" && appId.length > 0)
-                    : []
-                for (let j = 0; j < appIds.length; j++)
-                    appendApp(appIds[j])
-            }
-        }
-        return normalized
+        return DockItems.normalizeDockItems(rawItems)
     }
 
     function _pinnedIdsFromDockItems(items) {
@@ -518,31 +524,17 @@ QtObject {
         return changed
     }
 
-    // Reorder one pinned application.
+    // Reorder one pinned application or separator.
     // `sourceKey` deliberately uses the persisted identifier so this remains
     // stable even while application metadata is still resolving.
     function moveDockItem(sourceType, sourceKey, targetIndex) {
         const items = _normalizeDockItems(svc.dockItems)
-        let sourceIndex = -1
-        for (let i = 0; i < items.length; i++) {
-            const item = items[i]
-            if (sourceType === "app" && item.type === "app" && item.appId === sourceKey) {
-                sourceIndex = i
-                break
-            }
-        }
-
-        if (sourceIndex < 0)
+        const moved = DockItems.moveDockItem(items, sourceType, sourceKey, targetIndex)
+        if (!moved)
             return false
-
-        const destination = Math.max(0, Math.min(items.length - 1,
-                                                   Math.round(targetIndex)))
-        if (sourceIndex === destination)
-            return false
-
-        const moved = items.splice(sourceIndex, 1)[0]
-        items.splice(destination, 0, moved)
-        const changed = setDockItems(items)
+        // A drop at either end, or one that squeezes two separators together,
+        // removes the separator from storage instead of leaving a hidden item.
+        const changed = setDockItems(DockItems.compactDockItems(moved))
         if (changed)
             scheduleSave()
         return changed
@@ -553,7 +545,7 @@ QtObject {
     // ═══════════════════════════════════════════════════════════
     function _doSave() {
         const obj = {
-            version: 12,
+            version: DockItems.DOCK_CONFIG_VERSION,
             baseHeight:    svc.baseHeight,
             theme:         svc.theme,
             position:      svc.position,
@@ -575,6 +567,7 @@ QtObject {
             iconTintColor:    svc.iconTintColor,
             // Show mode (v3)
             visibilityMode: svc.visibilityMode,
+            autoHideApps: svc.autoHideApps,
             // Grouping mode (macOS style vs separate)
             windowGrouping: svc.windowGrouping,
             showLauncher: svc.showLauncher,
@@ -622,6 +615,9 @@ QtObject {
         svc.showTrash = obj.showTrash !== false
         svc.showNotificationBadges = obj.showNotificationBadges !== false
         svc.showRevealIndicator = obj.showRevealIndicator !== false
+        svc.autoHideApps = svc._normalizeAutoHideApps(obj.autoHideApps)
+        if (Number(obj.version ?? 0) < 13)
+            scheduleSave()
         if (obj.baseHeight !== undefined) {
             const height = Number(obj.baseHeight)
             if (Number.isFinite(height))

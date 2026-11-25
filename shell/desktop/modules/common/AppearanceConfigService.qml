@@ -176,6 +176,8 @@ QtObject {
     // settings page writes both.
     property bool barMacStyle: false
     property real barMacTint: 0.30
+    property bool reduceMotion: false
+    property int startupRevealDuration: 1500
     property string dockWindowAnimationStyle: "scale"
     // Empty means follow KDE General font; this override changes only family.
     property string desktopFontFamily: ""
@@ -184,9 +186,41 @@ QtObject {
     // cell appears by default and an upgrade never silently removes one.
     // The ids are validated against the known sets below before being written,
     // so a hand-edited config file cannot make a surface disappear entirely.
-    property var hiddenDeskCenterWidgets: []
+    property var hiddenDeskCenterWidgets:
+        VisibilityPolicy.defaultHiddenDeskCenterWidgets.slice()
     property var hiddenStatusCells: []
+    // Which shell surfaces keep the glass pointer effects (hover light, lens
+    // parallax and the click ripple). The ids are fixed by the shell; a
+    // surface that is not listed stays completely static. The default is the
+    // set tuned to carry the light -- the Dock, context menus and the Control
+    // Center -- so every other panel is silent without any further wiring.
+    readonly property var pointerEffectSurfaceIds: ["contextMenu", "controlCenter", "dock"]
+    property var pointerEffectsSurfaces: ["contextMenu", "controlCenter", "dock"]
     property bool ready: false
+
+    function isValidPointerEffectSurface(id) {
+        return service.pointerEffectSurfaceIds.indexOf(String(id)) >= 0
+    }
+
+    // Protocol v9 mask: bit 0 hover light, bit 1 lens parallax, bit 2 click
+    // ripple. 0 keeps the shape static.
+    function pointerEffectsFor(id) {
+        return service.pointerEffectsSurfaces.indexOf(String(id)) >= 0 ? 0x7 : 0
+    }
+
+    function setPointerEffectsEnabled(id, enabled) {
+        const surfaceId = String(id)
+        if (!service.isValidPointerEffectSurface(surfaceId))
+            return false
+        const has = service.pointerEffectsSurfaces.indexOf(surfaceId) >= 0
+        if (has === Boolean(enabled))
+            return true
+        service.pointerEffectsSurfaces = enabled
+            ? service.pointerEffectsSurfaces.concat([surfaceId]).sort()
+            : service.pointerEffectsSurfaces.filter(value => value !== surfaceId)
+        saveTimer.restart()
+        return true
+    }
 
     function isValidShellStyle(value) {
         return value === "windows12" || value === "macos"
@@ -577,6 +611,13 @@ QtObject {
         return true
     }
 
+    function updateStartupMotion(reduced, duration) {
+        if (!ready || !Number.isFinite(duration)) return
+        reduceMotion = !!reduced
+        startupRevealDuration = Math.round(Math.max(800, Math.min(2000, duration)))
+        saveTimer.restart()
+    }
+
     function updateDockWindowAnimationStyle(rawStyle) {
         const style = String(rawStyle)
         if (!isValidDockWindowAnimationStyle(style)
@@ -657,7 +698,7 @@ QtObject {
         if (!service._widgetStyleResolved)
             return // Migration will restart the save timer once icons are loaded.
         const payload = JSON.stringify({
-            version: 33,
+            version: 35,
             globalBlurStrength: service.globalBlurStrength,
             globalLiquidStrength: service.globalLiquidStrength,
             materialPresetBlurStrength: service.materialPresetBlurStrength,
@@ -703,12 +744,15 @@ QtObject {
             barLayoutMode: service.barLayoutMode,
             barMacStyle: service.barMacStyle,
             barMacTint: service.barMacTint,
+            reduceMotion: service.reduceMotion,
+            startupRevealDuration: service.startupRevealDuration,
             dockWindowAnimationStyle: service.dockWindowAnimationStyle,
             desktopFontFamily: service.desktopFontFamily,
             // Sorted before writing so a reorder in the UI never produces a
             // spurious diff, and so the file stays readable by hand.
             hiddenDeskCenterWidgets: service.hiddenDeskCenterWidgets.slice().sort(),
             hiddenStatusCells: service.hiddenStatusCells.slice().sort(),
+            pointerEffectsSurfaces: service.pointerEffectsSurfaces.slice().sort(),
         }, null, 2)
         JsonConfigStore.writePath(service.configPath, payload)
     }
@@ -795,11 +839,21 @@ QtObject {
                     service.desktopFontFamily = typeof object.desktopFontFamily === "string"
                         ? object.desktopFontFamily.trim() : ""
                     // v28 adds per-surface visibility. Files written before it
-                    // carry neither key, and the empty arrays they fall back to
-                    // mean "everything visible" -- the behaviour those
-                    // installations already had.
-                    const hiddenWidgets = object.hiddenDeskCenterWidgets
+                    // carry neither key. v35 adds the grouped widget, which is
+                    // opt-in: older files cannot contain an explicit choice for
+                    // it, so add it to the hidden set while normalising. A v35
+                    // file respects whatever the user chose.
+                    const hiddenWidgets = Array.isArray(object.hiddenDeskCenterWidgets)
+                        ? object.hiddenDeskCenterWidgets.slice()
+                        : VisibilityPolicy.defaultHiddenDeskCenterWidgets.slice()
+                    if (Number(object.version) < 35
+                            && hiddenWidgets.indexOf("groups") < 0)
+                        hiddenWidgets.push("groups")
                     const hiddenCells = object.hiddenStatusCells
+                    // v34 adds the per-surface pointer-effect allow list. A
+                    // file written before it keeps the tuned default set; an
+                    // explicit empty array really means "no surface".
+                    const pointerSurfaces = object.pointerEffectsSurfaces
                     const glassStyle = String(object.glassStyle ?? "liquid")
                     const followsAppearance = object.glassFollowsAppearanceMode
                     const followsAppearanceLegacy = object.glassFollowsColorMode
@@ -844,6 +898,12 @@ QtObject {
                         hiddenWidgets, VisibilityPolicy.deskCenterWidgetIds)
                     service.hiddenStatusCells = VisibilityPolicy.normalizeHiddenIds(
                         hiddenCells, VisibilityPolicy.statusCellIds)
+                    if (Array.isArray(pointerSurfaces)) {
+                        service.pointerEffectsSurfaces = pointerSurfaces
+                            .filter(value => service.isValidPointerEffectSurface(value))
+                            .filter((value, index, list) => list.indexOf(value) === index)
+                            .sort()
+                    }
                     if (hasGlassFollows)
                         service.glassFollowsAppearanceMode =
                             typeof followsAppearance === "boolean"
@@ -861,6 +921,11 @@ QtObject {
                         if (Number.isFinite(barMacTint))
                             service.barMacTint = barMacTint
                     }
+                    service.reduceMotion = object.reduceMotion === true
+                    if (typeof object.startupRevealDuration === "number"
+                            && Number.isFinite(object.startupRevealDuration))
+                        service.startupRevealDuration = Math.round(Math.max(800,
+                            Math.min(2000, object.startupRevealDuration)))
                     if (service.isValidDockWindowAnimationStyle(animationStyle))
                         service.dockWindowAnimationStyle = animationStyle
                     if (service.isValidGlassStyle(glassStyle))
@@ -963,7 +1028,7 @@ QtObject {
                     service.globalLiquidStrength = service.activePresetLiquidStrength
                     service.liquidStrength = service.activePresetLiquidStrength
 
-                    if (Number(object.version) !== 33
+                    if (Number(object.version) !== 35
                             || !service.isValidWidgetStyle(widgetStyle)
                             || !service.isValidShellStyle(style)
                             || !service.isValidThemeMode(themeMode)

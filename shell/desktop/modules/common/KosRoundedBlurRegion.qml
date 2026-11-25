@@ -29,9 +29,14 @@ RoundedBlurRegion {
     readonly property bool materialOpacitySupported:
         ("materialOpacitySupported" in surfaceShape) && surfaceShape.materialOpacitySupported
 
+    // Per-shape pointer mask (protocol v9): bit 0 hover light, bit 1 parallax,
+    // bit 2 click ripple. Opt-in: shapes stay static unless the host passes the
+    // mask from AppearanceConfigService.pointerEffectsFor().
+    property int pointerEffects: 0
+
     property bool revealEnabled: false
     property bool revealOpened: false
-    property int revealDuration: 320
+    property int revealDuration: AppearanceTokens.motion.page.duration
     readonly property bool revealSupported:
         ("revealSupported" in surfaceShape) && surfaceShape.revealSupported
     signal revealFinished(bool opened)
@@ -106,5 +111,11 @@ RoundedBlurRegion {
         target: ("captureGeometry" in root.surfaceShape) ? root.surfaceShape : null
         property: "captureGeometry"
         value: root.item !== root.shapeItem ? root.itemRect : Qt.rect(0, 0, 0, 0)
+    }
+
+    property var pointerEffectsBinding: Binding {
+        target: ("pointerEffects" in root.surfaceShape) ? root.surfaceShape : null
+        property: "pointerEffects"
+        value: root.pointerEffects
     }
 }

@@ -7,6 +7,7 @@ import "../foundation" as Foundation
 // No external texture needed - uses mathematical gradients to simulate refraction.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(ControlForm.materialForm)
     // §4.2 焦点：外环 2px accent，偏移 2；§5 Focus「圆角 +2」。
     activeFocusOnTab: true
     Keys.onPressed: (event) => {
@@ -37,9 +38,8 @@ Item {
     property real _expansion: _pressed ? 1.0 : (_hovered ? 0.3 : 0.0)
     Behavior on _expansion {
         NumberAnimation {
-            // §3 motion.duration：按下 instant=100 / 其余过渡 fast=150（原 demo 200/350
-            // 均不在 §3 五档内；§4.1「过渡 150ms；按下 100ms」）
             // §2.12 减动态：reduceMotion 时一步到位。
+            // motion-exception: preserve the coupled liquid/physical response timing and curve.
             duration: Foundation.AppTheme.reduceMotion ? 0 : (_pressed ? 100 : 150)
             easing.type: _pressed ? Easing.OutBack : Easing.OutQuint
             easing.overshoot: _pressed ? 1.4 : 1.0
@@ -51,8 +51,7 @@ Item {
     SequentialAnimation on _stretch {
         id: wobbleAnim
         running: false
-        // §2.11 / §3 motion.duration：只允许 100/150/220/320/400 五档
-        // （原 demo 80/120/100/80 中 80/120 不在档）。
+        // motion-exception: keep the squash-stretch segment ratios and curves.
         NumberAnimation { to: 0.15; duration: 100; easing.type: Easing.OutQuad }
         NumberAnimation { to: -0.06; duration: 150; easing.type: Easing.InOutQuad }
         NumberAnimation { to: 0.03; duration: 100; easing.type: Easing.InOutQuad }
@@ -66,7 +65,7 @@ Item {
     scale: _pressed ? 0.96 : 1.0
     Behavior on scale {
         // §2.12 减动态：reduceMotion 时不走过渡。
-        NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : (_pressed ? 100 : 150); easing.type: Easing.OutCubic }
+        NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : (_pressed ? root.motionPolicy.instant.duration : root.motionPolicy.base.duration); easing.type: root.motionPolicy.enterCurve }
     }
 
     // Drop shadow — §3 elevation.E1 `0 2 8 rgba(0,0,0,0.14)`（原 demo 无 blur 的

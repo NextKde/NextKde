@@ -56,8 +56,9 @@ BundledIcon {
 "desktop.menu.copy": "edit-copy",
 ```
 
-桌面和 Dock 菜单通过 `reserveIconSpace: true` 保留统一的图标列，
-空白项目的文字仍与其他项目对齐。勾选标记和子菜单箭头分别由
+Dock 与桌面菜单都不预留图标列：只有带图标的操作项显示图标，
+其余项目的文字直接从左侧开始，避免整列空白被误读成加载失败的图标。
+勾选标记和子菜单箭头分别由
 `menu.trailing.checked`、`menu.trailing.submenu` 控制。
 
 功能映射不控制点击范围或排版。`size` 决定字形大小，调用方的
@@ -84,17 +85,26 @@ BundledIcon {
 `SystemIconResolver.qml` 只负责查询当前系统主题。应用自行提供的图标仍来自
 其 `.desktop` 数据，用户覆盖图标仍按用户设置加载。
 
+## 可选分层图标主题
+
+图标主题可在 `index.theme` 中声明 `X-KOS-LayeredIconsVersion=1`，并通过
+`X-KOS-LayerManifest=layers/manifest.json` 提供素材清单。`LayeredIconThemeService`
+读取当前选中主题的声明；不按主题名或应用名写死适配。素材、别名和 desktop ID 映射
+都随独立的 `nextkde-glass-icons` 主题项目安装；格式见该项目的 `FORMAT.md`。
+
+`AppIcon` 使用现有外观设置：彩色走普通图标；透明模式使用主题的透明素材；
+染色模式组合底板、前景和高光，仅前景使用现有染色 shader。公共、Dock、状态栏托盘
+和桌面启动器都读取同一份外观设置，桌面启动器的图标与 Dock 同步换色。普通主题、未适配图标
+及分层图片加载失败时使用原来的整图处理。用户自定义图标仍优先。文件夹和普通文件图标
+不走这套分层（它们不是应用图标）。
+无需新设置入口，也无需为换色重新生成主题。KDE 的其他应用继续读取普通图标目录。
+
 ## 安装与验证
 
 正常安装流程会将目录、字形库及 QML 一起部署到
 `~/.config/quickshell/kos/`。安装副本禁用了文件监听，编辑源码后需要重新部署并重启 Shell。
 
-图标运行检查仅在虚拟机中执行：
-
-```sh
-python3 tests/icons/run.py
-node tests/notification-history/run-icons.mjs
-```
-
-字体场景检查功能名解析、刻意留空、品牌图片，以及 Wi-Fi、音量、电池状态。
-本机只安装代码，由用户自行检查界面。
+由人工检查功能名解析、刻意留空、品牌图片，以及 Wi-Fi、音量、电池状态。
+分层主题还需在现有外观设置中切换彩色、透明和染色，观察 Dock、启动台与桌面启动器是否同步变化；
+换回普通图标主题后检查原有整图处理。检查 QQ、终端、带自定义图片的应用及普通工具栏图标。
+不运行自动化测试或为了验证而启动图形会话。

@@ -9,14 +9,18 @@
 namespace KOS
 {
 
-AdjustSession::AdjustSession(ButtonRenderer *renderer, Commit commit)
+AdjustSession::AdjustSession(ButtonRenderer *renderer, Commit commit, Remove remove,
+                             ScopeContextProbe scopeContextProbe)
     : m_renderer(renderer)
     , m_commit(std::move(commit))
+    , m_remove(std::move(remove))
+    , m_scopeContextProbe(std::move(scopeContextProbe))
 {
 }
 
 bool AdjustSession::begin(KWin::EffectWindow *window, const WindowQuery &query,
-                          const PanelGeometry &base)
+                          const PanelGeometry &base,
+                          std::optional<GeometryRule> existingRule)
 {
     cancel();
 
@@ -41,7 +45,27 @@ bool AdjustSession::begin(KWin::EffectWindow *window, const WindowQuery &query,
     m_geometry = base;
     m_dragging = false;
     m_resizeEdge.reset();
+    m_scopeContext = m_scopeContextProbe
+        ? m_scopeContextProbe(window, m_query)
+        : WindowScopeContext{};
 
+    if (existingRule) {
+        m_hasExistingRule = true;
+        m_existingMatcher = existingRule->matcher;
+        m_baseOverlayMode = existingRule->overlayMode;
+        m_overlayMode = existingRule->overlayMode;
+        m_baseScope = initialAdjustScope(m_query, m_existingMatcher, m_scopeContext);
+        m_scope = m_baseScope;
+    } else {
+        m_hasExistingRule = false;
+        m_existingMatcher = WindowMatcher{};
+        m_baseOverlayMode = OverlayMode::Cover;
+        m_overlayMode = OverlayMode::Cover;
+        m_baseScope = initialAdjustScope(m_query, std::nullopt, m_scopeContext);
+        m_scope = m_baseScope;
+    }
+
+    syncOptions();
     m_renderer->setAdjusting(window, true);
     // The draft starts as the geometry already on screen, so a session that is
     // entered and left again changes nothing and writes nothing.
@@ -128,16 +152,62 @@ void AdjustSession::nudge(const QPointF &delta)
     apply(nudged(m_geometry, m_window->frameGeometry().size(), delta));
 }
 
+bool AdjustSession::canToggleScope() const
+{
+    return !m_query.role.isEmpty() || !m_query.caption.isEmpty();
+}
+
+void AdjustSession::setOverlayMode(OverlayMode mode)
+{
+    if (!m_window || m_overlayMode == mode) {
+        return;
+    }
+    m_overlayMode = mode;
+    syncOptions();
+}
+
+void AdjustSession::setMatchScope(MatchScope scope)
+{
+    if (!m_window || !canToggleScope() || m_scope == scope) {
+        return;
+    }
+    m_scope = scope;
+    syncOptions();
+}
+
+WindowMatcher AdjustSession::targetMatcher() const
+{
+    return resolvedAdjustMatcher(
+        m_query, m_scope,
+        m_hasExistingRule ? std::optional<WindowMatcher>(m_existingMatcher) : std::nullopt,
+        m_scopeContext.siblingCaptions);
+}
+
+void AdjustSession::syncOptions()
+{
+    if (m_window && m_renderer) {
+        m_renderer->setAdjustOptions(m_window, m_overlayMode, m_scope,
+                                     canToggleScope(), !m_query.role.isEmpty(),
+                                     m_hasExistingRule);
+    }
+}
+
 bool AdjustSession::commit()
 {
     if (!m_window) {
         return false;
     }
 
-    const QString windowClass = m_query.windowClass;
     const PanelGeometry geometry = m_geometry;
-    const WindowMatcher matcher = adjustmentMatcher(m_query);
-    const bool changed = !sameGeometry(m_base, geometry);
+    const OverlayMode overlayMode = m_overlayMode;
+    const WindowMatcher matcher = targetMatcher();
+    const WindowMatcher previous = m_hasExistingRule ? m_existingMatcher : WindowMatcher{};
+    const bool scopeChanged = m_hasExistingRule
+        && (m_scope != m_baseScope
+            || (matcherScope(m_existingMatcher) == MatchScope::Window
+                && matcher.canonicalKey() != m_existingMatcher.canonicalKey()));
+    const bool changed = !sameGeometry(m_base, geometry)
+        || overlayMode != m_baseOverlayMode || scopeChanged;
 
     // Ended before the write, so that a write that fails leaves the panel
     // visibly back where the configuration puts it instead of showing an
@@ -148,12 +218,29 @@ bool AdjustSession::commit()
         // Nothing was moved. A rule storing the geometry that was already in
         // effect would be a second place the same answer is written down, and
         // it would take the panel out of the user's configuration for nothing.
-        qInfo() << "KOS: the panel for" << windowClass
+        // A changed scope or overlay mode counts as a change even when the
+        // geometry is identical, so switching between title/role and app scope
+        // still updates the saved rule.
+        qInfo() << "KOS: the panel for" << m_query.windowClass
                 << "was not changed; nothing written";
         return true;
     }
 
-    return m_commit(matcher, geometry);
+    return m_commit ? m_commit(previous, matcher, geometry, overlayMode) : false;
+}
+
+bool AdjustSession::reset()
+{
+    if (!m_window) {
+        return false;
+    }
+    const WindowMatcher toRemove = m_hasExistingRule ? m_existingMatcher : WindowMatcher{};
+    const bool hadRule = m_hasExistingRule;
+    endSession();
+    if (!hadRule || !m_remove) {
+        return true;
+    }
+    return m_remove(toRemove);
 }
 
 void AdjustSession::cancel()
@@ -175,6 +262,9 @@ void AdjustSession::forgetWindow(KWin::EffectWindow *window)
     m_window = nullptr;
     m_dragging = false;
     m_resizeEdge.reset();
+    m_hasExistingRule = false;
+    m_existingMatcher = WindowMatcher{};
+    m_scopeContext = WindowScopeContext{};
 }
 
 void AdjustSession::apply(const PanelGeometry &geometry)
@@ -193,6 +283,9 @@ void AdjustSession::endSession()
     m_window = nullptr;
     m_dragging = false;
     m_resizeEdge.reset();
+    m_hasExistingRule = false;
+    m_existingMatcher = WindowMatcher{};
+    m_scopeContext = WindowScopeContext{};
 }
 
 } // namespace KOS

@@ -61,6 +61,28 @@ CopyResult copyFileChunked(const QString &source, const QString &destination)
     return {};
 }
 
+// Resolves a storage id to an installed application .desktop file. KService
+// owns KDE's search path (including Flatpak exports); the XDG applications
+// directories are the fallback for sessions where the service cache has not
+// been built yet. Only application entries are accepted.
+QString resolveApplicationDesktopFile(const QString &desktopId)
+{
+    const KService::Ptr service = KService::serviceByStorageId(desktopId);
+    if (service && service->isApplication()) {
+        const QString entryPath = service->entryPath();
+        // A cached service can outlive its entry file; fall through so the
+        // XDG directories still get a chance to resolve the id.
+        if (!entryPath.isEmpty() && QFileInfo(entryPath).isFile())
+            return entryPath;
+    }
+
+    const QString candidate = resolveDesktopFile(desktopId);
+    if (candidate.isEmpty())
+        return {};
+    const KService fallback(candidate);
+    return fallback.isApplication() ? candidate : QString();
+}
+
 QString freedesktopTrashRoot()
 {
     QString dataHome = qEnvironmentVariable("XDG_DATA_HOME");
@@ -286,7 +308,10 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         return true;
     }
     if (op == QStringLiteral("file.trash")) {
-        const QStringList paths = cleanPaths(payload.value(QStringLiteral("paths")));
+        // Trash the directory entry itself. Desktop shortcuts are usually
+        // symlinks to installed entries; following them would trash the
+        // installed entry (or fail on a root-owned one) and leave the shortcut.
+        const QStringList paths = cleanEntryPaths(payload.value(QStringLiteral("paths")));
         if (paths.isEmpty()) {
             respond(socket, request, false, {}, QStringLiteral("invalid-path"), QStringLiteral("文件路径无效"), false);
             return true;
@@ -338,9 +363,12 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
         return true;
     }
     if (op == QStringLiteral("file.rename")) {
-        const QString source = cleanPath(payload.value(QStringLiteral("source")).toString());
+        // The source is a directory entry: renaming a shortcut symlink must
+        // rename the link, not its installed target.
+        const QString source = cleanEntryPath(payload.value(QStringLiteral("source")).toString());
         const QString target = cleanPath(payload.value(QStringLiteral("target")).toString());
-        if (source.isEmpty() || target.isEmpty() || QFileInfo::exists(target)) {
+        if (source.isEmpty() || target.isEmpty() || QFileInfo::exists(target)
+            || QFileInfo(target).isSymLink()) {
             respond(socket, request, false, {}, QStringLiteral("target-exists"), QStringLiteral("目标文件已存在或路径无效"), false);
             return true;
         }
@@ -368,11 +396,67 @@ bool PlatformServer::handleFileOperation(QLocalSocket *socket, const QJsonObject
             respond(socket, request, false, {}, QStringLiteral("create-failed"), QStringLiteral("创建失败"), true);
         return true;
     }
+    if (op == QStringLiteral("file.create-desktop-shortcut")) {
+        // A desktop shortcut is a link to the installed entry, not caller
+        // content. The payload intentionally has no source, destination or
+        // file data: the daemon owns both ends of the operation.
+        const QString desktopId = payload.value(QStringLiteral("desktopId")).toString().trimmed();
+        if (desktopId.isEmpty() || desktopId.contains(QChar('/'))
+            || desktopId.contains(QChar('\\')) || desktopId.size() > 255) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-desktop-id"),
+                    QStringLiteral("应用标识无效"), false);
+            return true;
+        }
+        const QString entryPath = resolveApplicationDesktopFile(desktopId);
+        if (entryPath.isEmpty()) {
+            respond(socket, request, false, {}, QStringLiteral("application-not-found"),
+                    QStringLiteral("应用启动器不存在"), false);
+            return true;
+        }
+        const QFileInfo source(entryPath);
+        if (!source.isFile()
+            || !source.fileName().endsWith(QStringLiteral(".desktop"), Qt::CaseInsensitive)
+            || source.fileName().startsWith(QLatin1Char('.'))) {
+            respond(socket, request, false, {}, QStringLiteral("invalid-desktop-entry"),
+                    QStringLiteral("应用启动器文件无效"), false);
+            return true;
+        }
+        const QString directory = QStandardPaths::writableLocation(QStandardPaths::DesktopLocation);
+        if (directory.isEmpty() || !QFileInfo(directory).isDir()) {
+            respond(socket, request, false, {}, QStringLiteral("desktop-directory-unavailable"),
+                    QStringLiteral("桌面目录不可用"), false);
+            return true;
+        }
+        const QString destination = QDir(directory).filePath(source.fileName());
+        const QFileInfo existing(destination);
+        // Never replace a file the user already has on the desktop, including
+        // a dangling link. The client treats created:false as "already there".
+        if (existing.exists() || existing.isSymLink()) {
+            respond(socket, request, true,
+                    QJsonObject{{QStringLiteral("path"), destination},
+                                {QStringLiteral("created"), false}});
+            return true;
+        }
+        // Link to the entry path rather than its canonical target: a Flatpak
+        // export link must keep following the current deployment, and a
+        // package-managed entry must stay in sync with its own updates.
+        if (!QFile::link(source.absoluteFilePath(), destination)) {
+            respond(socket, request, false, {}, QStringLiteral("shortcut-create-failed"),
+                    QStringLiteral("无法创建桌面快捷方式"), true);
+            return true;
+        }
+        respond(socket, request, true,
+                QJsonObject{{QStringLiteral("path"), destination},
+                            {QStringLiteral("created"), true}});
+        return true;
+    }
     if (op == QStringLiteral("file.transfer")) {
         const QString destination = cleanPath(payload.value(QStringLiteral("destination")).toString());
         const QString mode = payload.value(QStringLiteral("mode")).toString();
         const bool move = mode == QStringLiteral("move");
-        const QStringList paths = cleanPaths(payload.value(QStringLiteral("paths")));
+        // Transfer the directory entries themselves. Resolving a shortcut
+        // symlink would move/copy the installed entry instead of the shortcut.
+        const QStringList paths = cleanEntryPaths(payload.value(QStringLiteral("paths")));
         if (destination.isEmpty() || paths.isEmpty()
             || (mode != QStringLiteral("copy") && !move)) {
             respond(socket, request, false, {}, QStringLiteral("invalid-transfer"),

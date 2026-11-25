@@ -9,7 +9,7 @@ Item {
     property alias font: incoming.font
     property alias horizontalAlignment: incoming.horizontalAlignment
     property alias elide: incoming.elide
-    property int duration: 240
+    property int duration: AppTheme.motion.slow.duration
     readonly property bool transitioning: motion.running
     implicitHeight: incoming.implicitHeight
     implicitWidth: incoming.implicitWidth
@@ -47,9 +47,9 @@ Item {
     }
     ParallelAnimation {
         id: motion
-        NumberAnimation { target: incoming; property: "y"; from: root.height * 0.7; to: 0; duration: root.duration; easing.type: Easing.OutCubic }
+        NumberAnimation { target: incoming; property: "y"; from: root.height * 0.7; to: 0; duration: root.duration; easing.type: AppTheme.motion.enterCurve }
         NumberAnimation { target: incoming; property: "opacity"; from: 0; to: 1; duration: root.duration }
-        NumberAnimation { target: outgoing; property: "y"; from: 0; to: -root.height * 0.7; duration: root.duration; easing.type: Easing.OutCubic }
+        NumberAnimation { target: outgoing; property: "y"; from: 0; to: -root.height * 0.7; duration: root.duration; easing.type: AppTheme.motion.enterCurve }
         NumberAnimation { target: outgoing; property: "opacity"; from: 1; to: 0; duration: root.duration }
     }
 }

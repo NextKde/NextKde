@@ -50,9 +50,9 @@ Current operation groups are:
   content-addressed and removed together with the entry that owns it, so
   deleting never leaves state behind)
 - `file.open`, `file.copy`, `file.launch`, `file.rename`, `file.create-folder`,
-  `file.create-file`, `file.transfer`, `file.trash`, `file.trash-state`,
-  `file.empty-trash`, `file.open-trash`, `file.open-with`, `file.set-default`,
-  `file.open-kde`
+  `file.create-file`, `file.create-desktop-shortcut`, `file.transfer`,
+  `file.trash`, `file.trash-state`, `file.empty-trash`, `file.open-trash`,
+  `file.open-with`, `file.set-default`, `file.open-kde`
 - `kwin.subscribe`, `kwin.command`, `kwin.layout.update`
 - `kwin.animation.update-targets`, `kwin.animation.prepare-launch`
 - `wallpaper.plasma.proxy` (replace every screen's Plasma wallpaper with a KOS
@@ -101,6 +101,8 @@ Current operation groups are:
   escapes are rejected); payloads are capped at 1 MiB. `state.write` commits
   rename. `state.read` returns `{data, exists}` and reports `exists:false`
   with an empty `data` for a missing file)
+- `system.timezone` (read-only system zone lookup; returns `{timeZone}` as the
+  system IANA ID, or an empty string when the platform cannot resolve one)
 - Widget inspection (`application.widget-snapshot`, `application.widget-open`)
   has one worker slot per fixed app, shared between reads and launch preflight.
   Same-key reads coalesce under the bounded reply queue. At 15 seconds the daemon
@@ -177,18 +179,34 @@ clients must not call that private interface directly.
 
 `kwin.layout.update` is an internal Shell-to-compositor layout update. Its
 payload is
-`{outputName, outputRect, barReservedHeight, dockPosition, dockRect, workspaceGap}`.
+`{outputName, outputRect, barReservedHeight, dockPosition, dockRect, workspaceGap, dockReserved?}`.
 Rectangles use global logical coordinates; `dockPosition` is one of `bottom`,
 `left`, or `right`. The daemon bounds and validates every field before
 forwarding an `update-layout` command to the KWin script. A new normal main
 window may use the latest layout for its one-time initial placement; existing,
 maximized, fullscreen, dialog, transient, and special windows are not moved.
-`workspaceGap` remains accepted for v1 compatibility, but initial placement
-meets the Bar/Dock safe edges directly and does not create an invisible gap.
+The optional boolean `dockReserved` defaults to `true` for older clients. Shell
+publishes `false` for effective auto-hide modes and while boot is unresolved;
+initial placement then ignores `dockRect` and `workspaceGap` but still respects
+the Bar reservation. The full-reveal rectangle remains valid, not a zero-sized
+sentinel. When Dock space is reserved, `workspaceGap` adds the configured inner
+breathing room. The Shell, daemon and KWin script must all be updated for this
+optional field to take effect; an older script retains the legacy reservation.
 
 On `kwin.subscribe`, the daemon replays both its latest `window.snapshot` and
 latest `desktops` event when available. Consumers may explicitly request a
 fresh desktop event with `kwin.command {action: "desktops"}` during startup.
+
+Window snapshots optionally include `windows[].parentId`, the nearest tracked
+ancestor reached through KWin's transient relationship, and `activeOwnerId`,
+the tracked owner of the focused window. IDs use the same normalized internal
+handle format as `windows[].id`; missing relationships are empty strings.
+Filtered dialogs can participate in the relationship without becoming taskbar
+entries. Old producers/consumers may omit or ignore these optional fields.
+
+Automatic `minimize-group` commands may include `expectedActiveId`. The bridge
+discards the batch if compositor focus has changed before execution. Explicit
+desktop collection and user minimize/restore commands omit this guard.
 
 The optional `desktops.transitionActive` boolean marks desktop navigation while
 KWin's `slide`, `cubeslide`, or `fadedesktop` effect is active. The daemon sets
@@ -260,6 +278,25 @@ configuration and runtime state; rollback failure is reported explicitly.
 launcher as `application.launch`. A desktop-file path is resolved and parsed by
 `KService`; optional file arguments are passed as URLs. Launch failure is
 reported through the common response envelope.
+
+`file.create-desktop-shortcut` takes `{desktopId}` and creates a symbolic link
+named after the installed entry in `QStandardPaths::DesktopLocation`. The
+daemon resolves the id through KDE `KService`, falling back to the XDG
+applications directories, and accepts application entries only. It never
+accepts a caller-supplied source, destination, or file content. The entry must
+be an installed `.desktop` file whose name does not start with a dot. An
+existing file or link at the destination is left untouched and reported with
+`created:false`, making repeated requests idempotent. Errors are
+`invalid-desktop-id`, `application-not-found`, `invalid-desktop-entry`,
+`desktop-directory-unavailable`, and `shortcut-create-failed`. The shell must
+not write desktop files directly; the data service's watcher or an explicit
+`desktop.refresh` makes the new icon visible.
+
+`file.rename`, `file.transfer`, `file.trash` and `clipboard.set` operate on the
+named directory entry itself. Their source paths canonicalise the parent
+directory but do not resolve the final component, so renaming, copying, moving
+or trashing a shortcut symlink leaves the installed `.desktop` file it points at
+untouched. A symlink is not followed to its target by these operations.
 
 ### Status panel operations
 

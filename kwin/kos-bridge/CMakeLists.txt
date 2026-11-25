@@ -34,6 +34,7 @@ add_library(kos_bridge MODULE
     windowbuttons/cooperativecontrols.cpp
     bridge.cpp
     main.cpp
+    windowbuttons/adjustbar.cpp
     windowbuttons/adjustsession.cpp
     windowbuttons/buttonglyph.cpp
     windowbuttons/buttonrenderer.cpp
@@ -50,6 +51,7 @@ add_library(kos_bridge MODULE
     windowappearance/appearanceconfig.cpp
     windowappearance/sceneshadow.cpp
     windowappearance/continuousclip.cpp
+    windowappearance/cornermask.cpp
     windowappearance/windowappearance.cpp
 )
 
@@ -130,10 +132,16 @@ if(KOS_BRIDGE_BUILD_TESTS)
     # compositor: panelgeometry and windowrules are deliberately free of KWin
     # headers so that they can be tested like this.
     enable_testing()
+    add_executable(window_effect_policy_test
+        ../common/tests/windoweffectpolicy_test.cpp)
+    target_link_libraries(window_effect_policy_test PRIVATE Qt6::Core)
+    add_test(NAME window_effect_policy_test COMMAND window_effect_policy_test)
+
     add_executable(rules_test
         tests/rules_test.cpp
         windowbuttons/panelgeometry.cpp
         windowappearance/contour.cpp
+        windowbuttons/adjustbar.cpp
         windowbuttons/tilemenu.cpp
         windowbuttons/windowrules.cpp
         windowbuttons/buttonconfig.cpp

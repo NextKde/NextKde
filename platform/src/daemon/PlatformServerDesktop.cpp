@@ -6,9 +6,12 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QTimer>
+#include <QDBusArgument>
 #include <QDBusConnection>
 #include <QDBusMessage>
+#include <QDBusObjectPath>
 #include <QDBusPendingCall>
+#include <QDBusVariant>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonValue>
@@ -19,6 +22,148 @@
 #include <QStringList>
 #include <QVariant>
 #include <memory>
+
+namespace {
+
+// Bounded synchronous system-bus call. Switch-user is a one-shot user action
+// and every peer here is local, so a short timeout is enough to keep a wedged
+// display manager from stalling the daemon for Qt's default 25 s.
+QDBusMessage systemBusCall(const QString &service, const QString &path,
+                           const QString &interface, const QString &method,
+                           const QVariantList &arguments = {})
+{
+    QDBusMessage message = QDBusMessage::createMethodCall(service, path, interface, method);
+    message.setArguments(arguments);
+    return QDBusConnection::systemBus().call(message, QDBus::Block, 5000);
+}
+
+// A logind property as a plain value: Properties.Get returns a variant of a
+// variant.
+QVariant loginProperty(const QString &path, const QString &interface, const QString &name)
+{
+    const QDBusMessage reply = systemBusCall(
+        QStringLiteral("org.freedesktop.login1"), path,
+        QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"),
+        {interface, name});
+    if (reply.type() != QDBusMessage::ReplyMessage || reply.arguments().isEmpty())
+        return {};
+    const QVariant value = reply.arguments().first();
+    if (value.metaType() == QMetaType::fromType<QDBusVariant>())
+        return qvariant_cast<QDBusVariant>(value).variant();
+    return value;
+}
+
+// True for errors that mean "this bus has no such service/object/method",
+// i.e. this display-manager mechanism is absent and the next one may apply.
+bool isUnsupportedError(const QString &name)
+{
+    return name == QLatin1String("org.freedesktop.DBus.Error.ServiceUnknown")
+        || name == QLatin1String("org.freedesktop.DBus.Error.NameHasNoOwner")
+        || name == QLatin1String("org.freedesktop.DBus.Error.UnknownMethod")
+        || name == QLatin1String("org.freedesktop.DBus.Error.UnknownObject")
+        || name == QLatin1String("org.freedesktop.DBus.Error.UnknownInterface");
+}
+
+// SDDM implements the freedesktop DisplayManager seat interface, where
+// "switch user" is SwitchToGreeter. LightDM implements it too, but dm-tool
+// wins there.
+bool switchToGreeterViaSeat(QString *errorName, QString *error)
+{
+    const QDBusMessage reply = systemBusCall(
+        QStringLiteral("org.freedesktop.DisplayManager"),
+        QStringLiteral("/org/freedesktop/DisplayManager/Seat0"),
+        QStringLiteral("org.freedesktop.DisplayManager.Seat"),
+        QStringLiteral("SwitchToGreeter"));
+    if (reply.type() == QDBusMessage::ReplyMessage)
+        return true;
+    *errorName = reply.errorName();
+    *error = reply.errorMessage();
+    return false;
+}
+
+// GDM does not implement the seat interface. This mirrors upstream libgdm's
+// gdm_goto_login_session(): resolve the caller's seat through logind, activate
+// an already-running greeter session (service "gdm-launch-environment") on
+// that seat, and otherwise ask GDM for a transient display. GDM's own system-
+// bus policy allows every user to call CreateTransientDisplay.
+bool switchToGreeterViaGdm(QString *errorName, QString *error)
+{
+    const QDBusMessage sessionReply = systemBusCall(
+        QStringLiteral("org.freedesktop.login1"),
+        QStringLiteral("/org/freedesktop/login1"),
+        QStringLiteral("org.freedesktop.login1.Manager"),
+        QStringLiteral("GetSession"), {QStringLiteral("auto")});
+    if (sessionReply.type() != QDBusMessage::ReplyMessage || sessionReply.arguments().isEmpty()) {
+        *errorName = sessionReply.errorName();
+        *error = sessionReply.errorMessage();
+        return false;
+    }
+    const QString sessionPath =
+        qvariant_cast<QDBusObjectPath>(sessionReply.arguments().first()).path();
+    const QString seatPath = loginProperty(sessionPath,
+        QStringLiteral("org.freedesktop.login1.Session"), QStringLiteral("Seat"))
+        .value<QDBusObjectPath>().path();
+    const QString seatId = loginProperty(seatPath,
+        QStringLiteral("org.freedesktop.login1.Seat"), QStringLiteral("Id")).toString();
+    if (seatPath.isEmpty() || seatId.isEmpty()) {
+        errorName->clear();
+        *error = QStringLiteral("无法确定当前会话所在的 seat");
+        return false;
+    }
+
+    // Seat.Sessions is a(so): (session id, object path) per session. The
+    // property read can fail, so only walk the array when it really is one.
+    QString greeterSessionId;
+    const QVariant sessionsValue = loginProperty(seatPath,
+        QStringLiteral("org.freedesktop.login1.Seat"), QStringLiteral("Sessions"));
+    if (sessionsValue.metaType() == QMetaType::fromType<QDBusArgument>()) {
+        QDBusArgument sessions = qvariant_cast<QDBusArgument>(sessionsValue);
+        sessions.beginArray();
+        while (!sessions.atEnd()) {
+            QString id;
+            QDBusObjectPath path;
+            sessions.beginStructure();
+            sessions >> id >> path;
+            sessions.endStructure();
+            if (!greeterSessionId.isEmpty())
+                continue;
+            const QString service = loginProperty(path.path(),
+                QStringLiteral("org.freedesktop.login1.Session"), QStringLiteral("Service"))
+                .toString();
+            if (service == QStringLiteral("gdm-launch-environment"))
+                greeterSessionId = id;
+        }
+        sessions.endArray();
+    }
+
+    if (!greeterSessionId.isEmpty()) {
+        const QDBusMessage activateReply = systemBusCall(
+            QStringLiteral("org.freedesktop.login1"),
+            QStringLiteral("/org/freedesktop/login1"),
+            QStringLiteral("org.freedesktop.login1.Manager"),
+            QStringLiteral("ActivateSessionOnSeat"),
+            {greeterSessionId, seatId});
+        if (activateReply.type() == QDBusMessage::ReplyMessage)
+            return true;
+        // Like libgdm, fall through to a fresh transient display: an activation
+        // refusal does not prove that creating one will fail too.
+        *errorName = activateReply.errorName();
+        *error = activateReply.errorMessage();
+    }
+
+    const QDBusMessage createReply = systemBusCall(
+        QStringLiteral("org.gnome.DisplayManager"),
+        QStringLiteral("/org/gnome/DisplayManager/LocalDisplayFactory"),
+        QStringLiteral("org.gnome.DisplayManager.LocalDisplayFactory"),
+        QStringLiteral("CreateTransientDisplay"));
+    if (createReply.type() == QDBusMessage::ReplyMessage)
+        return true;
+    *errorName = createReply.errorName();
+    *error = createReply.errorMessage();
+    return false;
+}
+
+} // namespace
 
 namespace KosPlatform {
 using namespace Detail;
@@ -314,7 +459,38 @@ bool PlatformServer::handleDesktopOperation(QLocalSocket *socket, const QJsonObj
         return true;
     }
     if (op == QStringLiteral("session.switch-user")) {
-        runCommand(socket, request, QStringLiteral("dm-tool"), {QStringLiteral("switch-to-greeter")}, {}, 15000);
+        // dm-tool is LightDM's helper and does not exist on SDDM systems,
+        // where the dm-tool-only path always failed with "command-unavailable"
+        // — the UI's "switch user" could never work on the KOS default display
+        // manager. Keep dm-tool where it is present (LightDM); otherwise try
+        // the two system-bus mechanisms that actually exist: SDDM's freedesktop
+        // seat interface, then GDM's own transient-greeter path.
+        if (!QStandardPaths::findExecutable(QStringLiteral("dm-tool")).isEmpty()) {
+            runCommand(socket, request, QStringLiteral("dm-tool"),
+                       {QStringLiteral("switch-to-greeter")}, {}, 15000);
+            return true;
+        }
+        if (!QDBusConnection::systemBus().isConnected()) {
+            respond(socket, request, false, {}, QStringLiteral("command-unavailable"),
+                    QStringLiteral("没有可用的切换用户方式"));
+            return true;
+        }
+        QString errorName;
+        QString error;
+        bool switched = switchToGreeterViaSeat(&errorName, &error);
+        // Only a missing mechanism falls through: a real refusal from the
+        // running display manager must be reported, not masked by the next
+        // probe's "service not found".
+        if (!switched && isUnsupportedError(errorName))
+            switched = switchToGreeterViaGdm(&errorName, &error);
+        if (!switched) {
+            respond(socket, request, false, {}, QStringLiteral("command-failed"),
+                    isUnsupportedError(errorName)
+                        ? QStringLiteral("当前显示管理器不支持切换用户")
+                        : QStringLiteral("切换用户失败：%1").arg(error));
+            return true;
+        }
+        respond(socket, request, true);
         return true;
     }
     if (op == QStringLiteral("screenshot.capture")) {

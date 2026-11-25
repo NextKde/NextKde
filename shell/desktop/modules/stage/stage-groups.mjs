@@ -12,7 +12,7 @@ export const CARD_FIELDS = ["targetId", "pid", "appName", "title",
 
 // ── 分组 ──
 
-// 组键：desktopId 优先（同应用堆一张卡），无身份退 rawAppId，再退 pid
+// 组键：显式合并 > 窗口归属组 > desktopId > rawAppId > pid。
 // （KWin 内部表面无身份时同 pid 的窗仍归同一张卡——pid 不会骗人）。
 // overrides（自由组合层）：{ handleId: groupKey }——用户把不同应用的
 // 窗口手动拖进同一张卡。键用 KWin internalId（handleId，窗口生命周期内
@@ -20,7 +20,9 @@ export const CARD_FIELDS = ["targetId", "pid", "appName", "title",
 export function groupKeyOf(r, overrides) {
     if (overrides && overrides[r.handleId])
         return overrides[r.handleId]
-    return r.identity?.desktopId || r.identity?.rawAppId
+    if (overrides && r.ownerHandleId && overrides[r.ownerHandleId])
+        return overrides[r.ownerHandleId]
+    return r.familyKey || r.identity?.desktopId || r.identity?.rawAppId
         || ("pid:" + r.pid)
 }
 
@@ -40,9 +42,22 @@ export function isSameProcess(a, b) {
 // 同应用豁免双保险：同进程，或 desktopId 相同（空串不算相同——两个身份
 // 未解析的窗口不该因此互认）。
 export function isSameApp(a, b, appIdA, appIdB) {
+    if (a?.familyKey && a.familyKey === b?.familyKey)
+        return true
     if (isSameProcess(a, b))
         return true
     return !!(appIdA && appIdA === appIdB)
+}
+
+// All automatic demotion paths use the same relation, including a final
+// check immediately before dispatch. Explicit desktop collection bypasses
+// this filter: the user asked to minimize the foreground family too.
+export function canAutoDemote(record, active, overrides) {
+    return !!record && !!active && record.windowId !== active.windowId
+        && !record.familyPending && !active.familyPending
+        && groupKeyOf(record, overrides) !== groupKeyOf(active, overrides)
+        && !isSameApp(record, active,
+            record.identity?.desktopId, active.identity?.desktopId)
 }
 
 // 卡片宽高比：优先窗口内容几何（无装饰，与缩略图同口径），退 frame。

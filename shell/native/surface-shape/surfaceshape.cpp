@@ -121,7 +121,7 @@ private:
             self->m_manager = static_cast<kos_surface_shape_manager_v1 *>(
                 wl_registry_bind(registry, name,
                     &kos_surface_shape_manager_v1_interface, std::min(version, uint32_t(std::clamp(qEnvironmentVariableIntValue("KOS_SURFACE_SHAPE_MAX_VERSION") > 0
-                        ? qEnvironmentVariableIntValue("KOS_SURFACE_SHAPE_MAX_VERSION") : 8, 1, 8)))));
+                        ? qEnvironmentVariableIntValue("KOS_SURFACE_SHAPE_MAX_VERSION") : 9, 1, 9)))));
             self->m_globalName = name;
             Q_EMIT self->available();
         }
@@ -416,6 +416,13 @@ void SurfaceShape::setBlurLevel(int level)
     m_blurLevel = level; Q_EMIT blurLevelChanged(); scheduleSync();
 }
 
+void SurfaceShape::setPointerEffects(int flags)
+{
+    flags = std::clamp(flags, 0, 0x7);
+    if (m_pointerEffects == flags) return;
+    m_pointerEffects = flags; Q_EMIT pointerEffectsChanged(); scheduleSync();
+}
+
 void SurfaceShape::handleWindowChanged(QQuickWindow *window)
 {
     if (m_window == window) { scheduleSync(); return; }
@@ -556,6 +563,12 @@ void SurfaceShape::sync()
         kos_surface_shape_v1_set_tint(m_shape, m_tintMode,
             wl_fixed_from_double(m_tintColor.redF()), wl_fixed_from_double(m_tintColor.greenF()),
             wl_fixed_from_double(m_tintColor.blueF()), wl_fixed_from_double(m_tintOpacity));
+    }
+    // set_pointer_effects is since=9; older compositors keep every effect on,
+    // which is what the historical shapes did. Guard the opcode like set_scrim.
+    if (wl_proxy_get_version(reinterpret_cast<struct wl_proxy *>(m_shape))
+        >= KOS_SURFACE_SHAPE_V1_SET_POINTER_EFFECTS_SINCE_VERSION) {
+        kos_surface_shape_v1_set_pointer_effects(m_shape, static_cast<uint32_t>(m_pointerEffects));
     }
 
 }

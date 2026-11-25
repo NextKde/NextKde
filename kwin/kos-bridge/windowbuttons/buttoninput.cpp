@@ -11,6 +11,8 @@
 
 #include <QDebug>
 
+#include <limits>
+
 namespace KOS
 {
 
@@ -89,6 +91,23 @@ void leaveWholeWindowState(KWin::Window *window)
     }
 }
 
+bool isManagedPanelWindow(const KWin::EffectWindow *window)
+{
+    if (!window || window->isDeleted() || !window->isManaged()) {
+        return false;
+    }
+    if (!window->isNormalWindow() && !window->isDialog()) {
+        return false;
+    }
+    if (window->isSkipSwitcher() || window->isSpecialWindow()) {
+        return false;
+    }
+    if (const KWin::Window *native = window->window(); native && native->isInternal()) {
+        return false;
+    }
+    return true;
+}
+
 } // namespace
 
 ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
@@ -96,9 +115,36 @@ ButtonInput::ButtonInput(ButtonRenderer *renderer, ButtonConfig *config)
     , m_renderer(renderer)
     , m_config(config)
     , m_session(std::make_unique<AdjustSession>(
-          renderer, [config](const WindowMatcher &matcher,
-                             const PanelGeometry &geometry) {
-              return config && config->storeGeometry(matcher, geometry);
+          renderer,
+          [this, config](const WindowMatcher &previous,
+                         const WindowMatcher &target,
+                         const PanelGeometry &geometry,
+                         OverlayMode mode) {
+              const bool ok = config && config->replaceRule(previous, target, geometry, mode);
+              if (ok && m_pendingActionWindow) {
+                  if (auto it = m_windowStates.find(m_pendingActionWindow);
+                      it != m_windowStates.end()) {
+                      it->pinnedRule.reset();
+                  }
+              }
+              return ok;
+          },
+          [this, config](const WindowMatcher &matcher) {
+              const bool ok = config && config->removeRule(matcher);
+              if (ok && m_pendingActionWindow) {
+                  if (auto it = m_windowStates.find(m_pendingActionWindow);
+                      it != m_windowStates.end()) {
+                      it->pinnedRule.reset();
+                  }
+              }
+              return ok;
+          },
+          // Collects open-sibling and caption-history context for roleless
+          // windows so secondary windows default to title scope (without
+          // overwriting the primary app rule) while primary windows default
+          // to app scope and structured titles generalize cleanly.
+          [this](KWin::EffectWindow *window, const WindowQuery &query) {
+              return scopeContextFor(window, query);
           }))
 {
 }
@@ -148,6 +194,14 @@ bool ButtonInput::pointerMotion(KWin::PointerMotionEvent *event)
     // freezes for as long as the pointer is there.
     if (event->buttons != Qt::NoButton && m_consumedButtons == Qt::NoButton) {
         return false;
+    }
+
+    if (m_session->active()) {
+        if (m_renderer->adjustBarContains(event->position)) {
+            m_renderer->setAdjustBarHovered(event->position);
+            return true;
+        }
+        m_renderer->setAdjustBarHovered(QPointF(-1e9, -1e9));
     }
 
     KWin::EffectWindow *window = nullptr;
@@ -313,6 +367,38 @@ bool ButtonInput::sessionPress(KWin::PointerButtonEvent *event,
     }
 
     if (event->button == Qt::LeftButton) {
+        if (m_renderer->adjustBarContains(event->position)) {
+            m_consumedButtons |= event->button;
+            if (const auto barAction = m_renderer->adjustBarActionAt(event->position)) {
+                switch (*barAction) {
+                case AdjustAction::ModeCover:
+                    m_session->setOverlayMode(OverlayMode::Cover);
+                    break;
+                case AdjustAction::ModeTransparent:
+                    m_session->setOverlayMode(OverlayMode::Transparent);
+                    break;
+                case AdjustAction::ModeHidden:
+                    m_session->setOverlayMode(OverlayMode::Hidden);
+                    finishSession();
+                    break;
+                case AdjustAction::ScopeWindow:
+                    m_session->setMatchScope(MatchScope::Window);
+                    break;
+                case AdjustAction::ScopeApp:
+                    m_session->setMatchScope(MatchScope::App);
+                    break;
+                case AdjustAction::Reset:
+                    resetSession();
+                    break;
+                case AdjustAction::Done:
+                    finishSession();
+                    break;
+                case AdjustAction::None:
+                    break;
+                }
+            }
+            return true;
+        }
         if (insidePanel && window == m_session->window()) {
             // Pressed on the panel: the edge under the pointer is dragged, or --
             // anywhere else on it -- the panel as a whole follows the pointer.
@@ -463,6 +549,36 @@ bool ButtonInput::keyboardKey(KWin::KeyboardKeyEvent *event)
         m_session->nudge(delta);
         return true;
     }
+    case Qt::Key_M:
+    case Qt::Key_C:
+        m_consumedKeys.insert(event->key);
+        m_session->setOverlayMode(OverlayMode::Cover);
+        return true;
+    case Qt::Key_T:
+        m_consumedKeys.insert(event->key);
+        m_session->setOverlayMode(m_session->overlayMode() == OverlayMode::Transparent
+                                      ? OverlayMode::Cover
+                                      : OverlayMode::Transparent);
+        return true;
+    case Qt::Key_H:
+        m_consumedKeys.insert(event->key);
+        m_session->setOverlayMode(OverlayMode::Hidden);
+        finishSession();
+        return true;
+    case Qt::Key_S:
+        if (m_session->canToggleScope()) {
+            m_consumedKeys.insert(event->key);
+            m_session->setMatchScope(m_session->matchScope() == MatchScope::App
+                                          ? MatchScope::Window
+                                          : MatchScope::App);
+            return true;
+        }
+        break;
+    case Qt::Key_Backspace:
+    case Qt::Key_Delete:
+        m_consumedKeys.insert(event->key);
+        resetSession();
+        return true;
     default:
         break;
     }
@@ -473,9 +589,195 @@ bool ButtonInput::keyboardKey(KWin::KeyboardKeyEvent *event)
 void ButtonInput::forgetWindow(KWin::EffectWindow *window)
 {
     m_session->forgetWindow(window);
+    if (m_pendingActionWindow == window) {
+        m_pendingActionWindow = nullptr;
+    }
+    m_windowStates.remove(window);
     // A placement is about a window that no longer exists, and there is nothing
     // left to put back.
     m_placements.remove(window);
+}
+
+void ButtonInput::trackWindow(KWin::EffectWindow *window)
+{
+    if (!isManagedPanelWindow(window) || m_windowStates.contains(window)) {
+        return;
+    }
+    m_windowStates.insert(window, WindowTrackState{
+        .order = ++m_windowOrderSeq,
+        .lastCaption = window->caption(),
+        .dynamicCaption = false,
+        .pinnedRule = std::nullopt,
+    });
+}
+
+void ButtonInput::reconfigured()
+{
+    cancelAdjustment();
+    for (auto it = m_windowStates.begin(); it != m_windowStates.end(); ++it) {
+        it->pinnedRule.reset();
+    }
+}
+
+AppConfig ButtonInput::configForWindow(KWin::EffectWindow *window) const
+{
+    if (!m_config) {
+        return AppConfig{};
+    }
+    const auto it = m_windowStates.constFind(window);
+    const std::optional<GeometryRule> pinned =
+        (it != m_windowStates.constEnd()) ? it->pinnedRule : std::nullopt;
+    return m_config->getAppConfig(windowQueryFor(window), pinned);
+}
+
+WindowScopeContext ButtonInput::scopeContextFor(KWin::EffectWindow *window,
+                                                const WindowQuery &query) const
+{
+    WindowScopeContext ctx;
+    const auto selfIt = m_windowStates.constFind(window);
+    ctx.dynamicCaption = selfIt != m_windowStates.constEnd() && selfIt->dynamicCaption;
+    const quint64 selfOrder = selfIt != m_windowStates.constEnd()
+        ? selfIt->order
+        : std::numeric_limits<quint64>::max();
+
+    if (!KWin::effects || query.windowClass.isEmpty()) {
+        return ctx;
+    }
+
+    const auto windows = KWin::effects->stackingOrder();
+    for (KWin::EffectWindow *other : windows) {
+        if (!other || other == window || !isManagedPanelWindow(other)) {
+            continue;
+        }
+        if (other->windowClass() != query.windowClass
+            || other->windowTypeInt() != query.type) {
+            continue;
+        }
+        const QString otherCaption = other->caption();
+        if (otherCaption.isEmpty() || otherCaption == query.caption) {
+            continue;
+        }
+        if (!ctx.siblingCaptions.contains(otherCaption)) {
+            ctx.siblingCaptions.append(otherCaption);
+        }
+
+        const auto otherIt = m_windowStates.constFind(other);
+        if (otherIt != m_windowStates.constEnd()) {
+            if (otherIt->order < selfOrder) {
+                ctx.hasOlderSibling = true;
+            }
+            if (otherIt->dynamicCaption) {
+                ctx.hasDynamicSibling = true;
+            }
+        }
+
+        bool otherHasWindowRule =
+            otherIt != m_windowStates.constEnd() && otherIt->pinnedRule.has_value();
+        if (!otherHasWindowRule && m_config) {
+            GeometryRule otherRule;
+            if (m_config->findStoredRule(windowQueryFor(other), &otherRule)
+                && matcherScope(otherRule.matcher) == MatchScope::Window) {
+                otherHasWindowRule = true;
+            }
+        }
+        if (!otherHasWindowRule) {
+            ctx.hasUnscopedSibling = true;
+        }
+    }
+    return ctx;
+}
+
+void ButtonInput::captionChanged(KWin::EffectWindow *window)
+{
+    if (!isManagedPanelWindow(window) || m_session->window() == window) {
+        return;
+    }
+    trackWindow(window);
+    auto stateIt = m_windowStates.find(window);
+    if (stateIt == m_windowStates.end()) {
+        return;
+    }
+    WindowTrackState &state = stateIt.value();
+    const QString oldCaption = state.lastCaption;
+    const QString newCaption = window->caption();
+    if (oldCaption == newCaption) {
+        return;
+    }
+
+    const WindowQuery currentQuery = windowQueryFor(window);
+    WindowQuery previousQuery = currentQuery;
+    previousQuery.caption = oldCaption;
+
+    std::optional<GeometryRule> activePrevWindowRule;
+    if (state.pinnedRule) {
+        activePrevWindowRule = *state.pinnedRule;
+    } else if (m_config && !oldCaption.isEmpty()) {
+        GeometryRule stored;
+        if (m_config->findStoredRule(previousQuery, &stored)
+            && matcherScope(stored.matcher) == MatchScope::Window) {
+            activePrevWindowRule = stored;
+        }
+    }
+
+    state.lastCaption = newCaption;
+    if (!state.dynamicCaption) {
+        const CaptionTransition transition = classifyCaptionTransition(
+            currentQuery.windowClass, oldCaption, newCaption);
+        if (transition != CaptionTransition::Unchanged
+            && transition != CaptionTransition::StartupPlaceholder) {
+            state.dynamicCaption = true;
+        }
+    }
+
+    if (!activePrevWindowRule || !m_config) {
+        return;
+    }
+
+    GeometryRule currentMatched;
+    const std::optional<GeometryRule> currentMatchedOpt =
+        m_config->findStoredRule(currentQuery, &currentMatched)
+            ? std::optional<GeometryRule>(currentMatched)
+            : std::nullopt;
+    const WindowScopeContext ctx = scopeContextFor(window, currentQuery);
+    const CaptionAdaptation adaptation = adaptRuleForCaptionChange(
+        previousQuery, currentQuery, *activePrevWindowRule, currentMatchedOpt, ctx);
+
+    switch (adaptation.kind) {
+    case CaptionAdaptation::Kind::None:
+        if (activePrevWindowRule->matcher.matches(currentQuery)
+            || (currentMatchedOpt
+                && matcherScope(currentMatchedOpt->matcher) == MatchScope::Window)) {
+            state.pinnedRule.reset();
+        }
+        break;
+    case CaptionAdaptation::Kind::UpgradeToPrefixRegex:
+        if (m_config->replaceRule(activePrevWindowRule->matcher,
+                                  adaptation.targetMatcher,
+                                  activePrevWindowRule->geometry,
+                                  activePrevWindowRule->overlayMode)) {
+            state.pinnedRule.reset();
+            qInfo() << "KOS: generalized title rule for" << currentQuery.windowClass
+                    << "to" << adaptation.targetMatcher.titleRegex;
+        } else {
+            state.pinnedRule = *activePrevWindowRule;
+        }
+        break;
+    case CaptionAdaptation::Kind::PromoteToApp:
+        if (m_config->replaceRule(activePrevWindowRule->matcher,
+                                  adaptation.targetMatcher,
+                                  activePrevWindowRule->geometry,
+                                  activePrevWindowRule->overlayMode)) {
+            state.pinnedRule.reset();
+            qInfo() << "KOS: promoted title rule for" << currentQuery.windowClass
+                    << "to app scope after caption change";
+        } else {
+            state.pinnedRule = *activePrevWindowRule;
+        }
+        break;
+    case CaptionAdaptation::Kind::PinInSession:
+        state.pinnedRule = *activePrevWindowRule;
+        break;
+    }
 }
 
 void ButtonInput::startSession(KWin::EffectWindow *window)
@@ -483,9 +785,21 @@ void ButtonInput::startSession(KWin::EffectWindow *window)
     if (!m_config) {
         return;
     }
+    trackWindow(window);
     const WindowQuery query = windowQueryFor(window);
-    const AppConfig config = m_config->getAppConfig(query);
-    if (!m_session->begin(window, query, config.geometry)) {
+    const AppConfig config = configForWindow(window);
+    GeometryRule existingRule;
+    std::optional<GeometryRule> foundRule;
+    if (m_config->findStoredRule(query, &existingRule)) {
+        foundRule = existingRule;
+    }
+    if (!foundRule || matcherScope(foundRule->matcher) == MatchScope::App) {
+        if (const auto it = m_windowStates.constFind(window);
+            it != m_windowStates.constEnd() && it->pinnedRule) {
+            foundRule = *it->pinnedRule;
+        }
+    }
+    if (!m_session->begin(window, query, config.geometry, foundRule)) {
         qWarning() << "KOS: not adjusting the panel on this window: it has no"
                    << "window class to write a rule against, or no area to put a"
                    << "panel in";
@@ -498,7 +812,10 @@ void ButtonInput::finishSession()
         return;
     }
     const QString windowClass = m_session->windowClass();
-    if (m_session->commit()) {
+    m_pendingActionWindow = m_session->window();
+    const bool committed = m_session->commit();
+    m_pendingActionWindow = nullptr;
+    if (committed) {
         // The file is the readout -- there is no on-screen one -- so the line
         // that says an adjustment was saved is how anyone can tell a save from a
         // discard without opening the file.
@@ -511,13 +828,25 @@ void ButtonInput::finishSession()
     }
 }
 
+void ButtonInput::resetSession()
+{
+    if (!m_session->active()) {
+        return;
+    }
+    m_pendingActionWindow = m_session->window();
+    m_session->reset();
+    m_pendingActionWindow = nullptr;
+}
+
 void ButtonInput::performAction(KWin::EffectWindow *window, ButtonRenderer::Action action)
 {
     switch (action) {
     case ButtonRenderer::Action::Close:
+        m_renderer->setHovered(nullptr, ButtonRenderer::Action::None);
         window->closeWindow();
         break;
     case ButtonRenderer::Action::Minimize:
+        m_renderer->setHovered(nullptr, ButtonRenderer::Action::None);
         window->minimize();
         break;
     case ButtonRenderer::Action::Maximize:

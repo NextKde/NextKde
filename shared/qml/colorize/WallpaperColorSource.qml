@@ -403,6 +403,7 @@ QtObject {
         source: svc.wallpaperUrl
         // LiquidGlassSurface owns the slow visual transition for wallpaper
         // adaptation. Keep the palette value immediate and unambiguous.
+        // motion-exception: Wallpaper changes are already blended by the owning scene.
         transitionDuration: 0
     }
 

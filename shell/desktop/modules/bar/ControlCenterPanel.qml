@@ -20,41 +20,22 @@ import "../../../shared/qml/controls" as LiquidControls
 // Its geometry intentionally stays small enough for a top-bar popup while
 // preserving the reference's two-column, pill-and-media-card hierarchy.
 //
-PopupWindow {
+PersistentPanelWindow {
     id: panel
 
     implicitWidth: Math.min(panel.controlCenterWidth, Math.max(1, (panel.targetScreen?.width ?? 1920) - 24))
     implicitHeight: panel.controlCenterHeight
     color: "transparent"
-    grabFocus: popupMotion.interactive
-    visible: popupMotion.mapped
+    motion: popupMotion
     // The whole surface animates as one block: opacity + a small scale around
     // the anchor edge. Animating the shared contentItem instead of each card's
     // x/y/scale keeps every card's compositor blur shape locked to the same
     // transform, so the frosted silhouettes move together instead of drifting
     // as a dozen independent regions.
-    contentItem.opacity: popupMotion.progress
     contentItem.scale: 1
     contentItem.transformOrigin: !panel.dockHosted ? Item.Top
         : panel.dockEdge === "left" ? Item.Left
         : panel.dockEdge === "right" ? Item.Right : Item.Bottom
-    contentItem.enabled: popupMotion.interactive
-    mask: popupMotion.interactive ? panelInputRegion : emptyRegion
-    PopupAnchorBinding { popupAnchor: panel.anchor; sourceItem: panel.anchorItem }
-
-    anchor {
-        edges: !panel.dockHosted ? Edges.Bottom
-            : panel.dockEdge === "left" ? Edges.Right
-            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-        gravity: !panel.dockHosted ? Edges.Bottom
-            : panel.dockEdge === "left" ? Edges.Right
-            : panel.dockEdge === "right" ? Edges.Left : Edges.Top
-        adjustment: PopupAdjustment.Slide
-        margins.top: 0
-        margins.bottom: panel.dockHosted ? 0 : -4
-        margins.left: 0
-        margins.right: 0
-    }
 
     property Item anchorItem: null
     property bool dockHosted: false
@@ -218,13 +199,14 @@ PopupWindow {
         width: panel.controlCenterWidth
         height: panel.naturalContentHeight
         y: panel.dockFacingLayout ? Math.max(0, controlViewport.height - height) : 0
-        scale: AppearanceTokens.motion.popupStartScale + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.progress
+        scale: AppearanceTokens.motion.popupStartScale + (1 - AppearanceTokens.motion.popupStartScale) * popupMotion.geometryProgress
         transformOrigin: !panel.dockHosted ? Item.Top
             : panel.dockEdge === "left" ? Item.Left : panel.dockEdge === "right" ? Item.Right : Item.Bottom
     }
     NotificationHistoryPane {
         id: notificationHistory
         showEmptyState: false
+        pointerEffects: AppearanceConfigService.pointerEffectsFor("controlCenter")
         parent: panelCanvas
         x: 20
         y: panel.notificationsAboveControls ? 0 : panel.controlAreaHeight
@@ -255,7 +237,16 @@ PopupWindow {
             const opening = !popupMotion.requestedOpen
             if (!popupMotion.mapped)
                 pageMotion.reset(panel.requestedPage)
-            popupMotion.open()
+            if (opening) {
+                // Map the persistent surface and let it render one frame before
+                // starting the reveal. Otherwise the 150 ms slide runs during
+                // the first-frame stall and is over before anything is visible.
+                popupMotion.requestedOpen = true
+                popupMotion.mapped = true
+                panel._openPreroll = 5
+            } else {
+                popupMotion.open()
+            }
             panel.positionViewportForOpen()
             // Paint cached values first, including after a deferred Bar reveal.
             if (opening) Qt.callLater(function() {
@@ -268,6 +259,41 @@ PopupWindow {
 
     PopupMotion {
         id: popupMotion
+    }
+
+    // Deferred open: let a few frames render before the reveal starts, so the
+    // cards' compositor materials are already initialised when the slide moves.
+    property int _openPreroll: 0
+    FrameAnimation {
+        running: panel._openPreroll > 0
+        onTriggered: {
+            panel._openPreroll--
+            if (panel._openPreroll === 0 && popupMotion.requestedOpen)
+                popupMotion.open()
+        }
+    }
+
+    // See NotificationHistoryPanel: a persistent surface dismisses itself.
+    property double _suppressToggleUntil: 0
+    Connections {
+        target: WindowService
+        function onGlobalPointerPressed(x, y, button, timestamp) {
+            // The session confirmation lives on its own full-screen surface,
+            // centred well away from the panel. A press on either of its
+            // buttons is therefore *outside* our rect, and closing here would
+            // clear pendingConfirmAction before the button's release can run
+            // the action — the dialog flashed away and logout/reboot/poweroff
+            // silently did nothing. The same exemption onActiveWindowIdChanged
+            // already applies. Backdrop presses still cancel: the dialog
+            // handles those itself (onBackdropClicked).
+            if (!popupMotion.interactive || panel.pendingConfirmAction !== "")
+                return
+            if (x < panel.globalX || x > panel.globalX + panel.width
+                    || y < panel.globalY || y > panel.globalY + panel.height) {
+                panel._suppressToggleUntil = Date.now() + 350
+                panel.close()
+            }
+        }
     }
 
     PageMotion {
@@ -352,27 +378,33 @@ PopupWindow {
     // only the declared card outlines, so the gaps remain transparent. Include
     // every visible declaration in the region union; capture and shape bounds
     // must describe the same envelope throughout scrolling and navigation.
+    // Gate on `backdropVisible` ALONE: that is exactly the condition under
+    // which a card's glass publishes its SurfaceShape ("可见即发布"). Adding
+    // `card.visible &&` here desynchronised the two sides the one time a card
+    // hid itself through a channel the glass did not follow (the retired
+    // cardAnchor gate) — a published shape against an empty slot shifts every
+    // glass rect after it, which reads on screen as whole cards going missing.
     Region { id: emptyRegion }
     Region {
         id: cardsBlurRegion
         regions: [
-            wifiCard.visible && wifiCard.backdropVisible ? wifiCard.blurRegion : emptyRegion,
-            bluetoothCard.visible && bluetoothCard.backdropVisible ? bluetoothCard.blurRegion : emptyRegion,
-            mediaCard.visible && mediaCard.backdropVisible ? mediaCard.blurRegion : emptyRegion,
-            slotCard1.visible && slotCard1.backdropVisible ? slotCard1.blurRegion : emptyRegion,
-            slotCard2.visible && slotCard2.backdropVisible ? slotCard2.blurRegion : emptyRegion,
-            slotCard3.visible && slotCard3.backdropVisible ? slotCard3.blurRegion : emptyRegion,
-            slotCard4.visible && slotCard4.backdropVisible ? slotCard4.blurRegion : emptyRegion,
-            slotCard5.visible && slotCard5.backdropVisible ? slotCard5.blurRegion : emptyRegion,
-            slotCard6.visible && slotCard6.backdropVisible ? slotCard6.blurRegion : emptyRegion,
-            slotCard7.visible && slotCard7.backdropVisible ? slotCard7.blurRegion : emptyRegion,
+            wifiCard.backdropVisible ? wifiCard.blurRegion : emptyRegion,
+            bluetoothCard.backdropVisible ? bluetoothCard.blurRegion : emptyRegion,
+            mediaCard.backdropVisible ? mediaCard.blurRegion : emptyRegion,
+            slotCard1.backdropVisible ? slotCard1.blurRegion : emptyRegion,
+            slotCard2.backdropVisible ? slotCard2.blurRegion : emptyRegion,
+            slotCard3.backdropVisible ? slotCard3.blurRegion : emptyRegion,
+            slotCard4.backdropVisible ? slotCard4.blurRegion : emptyRegion,
+            slotCard5.backdropVisible ? slotCard5.blurRegion : emptyRegion,
+            slotCard6.backdropVisible ? slotCard6.blurRegion : emptyRegion,
+            slotCard7.backdropVisible ? slotCard7.blurRegion : emptyRegion,
             // stageModeCard 同样发布 SurfaceShape（可见即发布）——漏列
             // 一张 = 声明的 shape 集比 region 多一个条目，全卡玻璃按它
             // 偏移（见本清单头注释；审计 🔴，glass 主题下实测错位源）
-            stageModeCard.visible && stageModeCard.backdropVisible ? stageModeCard.blurRegion : emptyRegion,
-            keepAwakeCard.visible && keepAwakeCard.backdropVisible ? keepAwakeCard.blurRegion : emptyRegion,
-            sessionCard.visible && sessionCard.backdropVisible ? sessionCard.blurRegion : emptyRegion,
-            submenuCard.visible && submenuCard.backdropVisible ? submenuCard.blurRegion : emptyRegion,
+            stageModeCard.backdropVisible ? stageModeCard.blurRegion : emptyRegion,
+            keepAwakeCard.backdropVisible ? keepAwakeCard.blurRegion : emptyRegion,
+            sessionCard.backdropVisible ? sessionCard.blurRegion : emptyRegion,
+            submenuCard.backdropVisible ? submenuCard.blurRegion : emptyRegion,
             notificationHistory.visible ? notificationHistory.blurRegion : emptyRegion
         ]
     }
@@ -409,10 +441,20 @@ PopupWindow {
                 }
                 c.captureAnchor = popupCapture
                 c.clipViewport = controlViewport
+                // The pointer mask belongs to the control center, not to every
+                // ControlCenterCard host: the desk widgets reuse this card and
+                // must keep their glass static.
+                c.pointerEffects = AppearanceConfigService.pointerEffectsFor("controlCenter")
                 c.parent = panelCanvas
                 panel.placeCard(c)
             }
         }
+        // Open-list suppression (P3): while the control center is on screen
+        // (a deferred open already counts -- it is about to be), new
+        // notifications land straight in the list instead of flying a banner
+        // over the panel. See NotificationHistoryService.listOpen.
+        NotificationHistoryService.controlCenterHistoryOpen
+            = Qt.binding(function() { return panel.isOpen })
     }
     function placeCard(c) {
         c.backdropScale = Qt.binding(function() { return panelCanvas.scale * c.scale })
@@ -754,14 +796,14 @@ PopupWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: screenshotPointer.pressed ? 0.91 : (screenshotPointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                 && screenshotPointer.containsMouse && !screenshotPointer.pressed ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent
@@ -790,13 +832,13 @@ PopupWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: themePointer.pressed ? 0.91 : (themePointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: "#ffffff"
             opacity: ThemeService.isDark ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent
@@ -805,7 +847,7 @@ PopupWindow {
             name: "controlCenter.appearance"
 
             rotation: ThemeService.isDark ? 0 : 180
-            Behavior on rotation { NumberAnimation { duration: 250; easing.type: Easing.OutCubic } }
+            Behavior on rotation { NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
             color: ThemeService.isDark ? "#000000" : "#ffffff"
         }
@@ -834,14 +876,14 @@ PopupWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: powerPointer.pressed ? 0.91 : (powerPointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.14) : Qt.rgba(1, 1, 1, 0.45)
             opacity: AppearanceTokens.surface.selectionHighlightStyle !== "glass"
                 && powerPointer.containsMouse && !powerPointer.pressed ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent
@@ -877,13 +919,13 @@ PopupWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: dndPointer.pressed ? 0.91 : (dndPointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: ThemeService.isDark ? Qt.rgba(0.04, 0.52, 1.0, 0.28) : Qt.rgba(0.04, 0.52, 1.0, 0.18)
             opacity: ControlCenterService.doNotDisturbEnabled ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent
@@ -919,13 +961,13 @@ PopupWindow {
         cardHeight: panel.quickControlWidth
 
         cardScale: nightLightPointer.pressed ? 0.91 : (nightLightPointer.containsMouse ? 1.06 : 1.0)
-        Behavior on cardScale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         Rectangle {
             anchors.fill: parent
             radius: AppearanceTokens.surface.pick(AppearanceTokens.shape.extraLarge, 26)
             color: "#ffcc00"
             opacity: ControlCenterService.nightLightActive ? 1 : 0
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         BundledIcon {
             anchors.centerIn: parent

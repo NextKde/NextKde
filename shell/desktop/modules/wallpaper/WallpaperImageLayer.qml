@@ -22,6 +22,7 @@ Item {
         : anyPosition ? (activeSeed * 251) % 1 : Number(options.positionY ?? 0.5)
     readonly property int effectMode: ({left: 1, right: 2, top: 3, bottom: 4,
         wipe: 5, wave: 6, grow: 7, center: 7, outer: 8, cinematic: 9})[activeTransition] || 0
+    // motion-exception: Wallpaper transition modes retain their coordinated ambient choreography.
     readonly property int animationDuration: activeTransition === "simple" ? 260 : 800
     property real revealProgress: 0
     readonly property bool revealSupported: GraphicsInfo.api !== GraphicsInfo.Software

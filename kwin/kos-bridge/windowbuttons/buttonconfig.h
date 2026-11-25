@@ -9,6 +9,7 @@
 
 #include <functional>
 #include <array>
+#include <optional>
 
 #include "panelgeometry.h"
 #include "windowrules.h"
@@ -84,6 +85,7 @@ struct AppConfig {
         return (nativeGtkControls || nativeAppControls) && !hasDecoration;
     }
     GlyphMode glyphMode = GlyphMode::Always;
+    OverlayMode overlayMode = OverlayMode::Cover;
     // Where the panel is and how big it is: the part of this struct an adjust
     // session changes and a machine-written rule stores (WindowRuleStore).
     PanelGeometry geometry;
@@ -130,11 +132,17 @@ public:
     // `default`, then `apps[class]`, then the first matching hand-written
     // `rules` entry, then the first matching machine-written rule -- which
     // replaces the geometry whole and touches nothing else.
-    AppConfig getAppConfig(const WindowQuery &) const;
+    AppConfig getAppConfig(const WindowQuery &,
+                           const std::optional<GeometryRule> &pinnedRule = std::nullopt) const;
 
-    // Writes an adjusted geometry as a machine rule. The user's own file is
-    // never opened for writing.
-    bool storeGeometry(const WindowMatcher &, const PanelGeometry &);
+    // Writes an adjusted geometry and overlay mode as a machine rule. The
+    // user's own file is never opened for writing.
+    bool findStoredRule(const WindowQuery &, GeometryRule *out) const;
+    bool storeGeometry(const WindowMatcher &, const PanelGeometry &,
+                       OverlayMode = OverlayMode::Cover);
+    bool replaceRule(const WindowMatcher &previous, const WindowMatcher &,
+                     const PanelGeometry &, OverlayMode = OverlayMode::Cover);
+    bool removeRule(const WindowMatcher &);
 
     QString rulesPath() const { return m_store.path(); }
     // Whether the decoration KWin is configured to use is ours, which is what

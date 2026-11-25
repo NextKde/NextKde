@@ -1,7 +1,17 @@
 pragma Singleton
 import QtQuick
+import "../foundation" as Foundation
 
 QtObject {
+    readonly property Foundation.MotionTokens motion: Foundation.MotionTokens {}
+    readonly property Foundation.MotionTokens materialMotion: Foundation.MotionTokens { isMaterial: true }
+    function motionFor(materialForm) {
+        return materialForm ? materialMotion : motion
+    }
+
+    // Shared toolbar geometry, independent of material and compactDesign.
+    readonly property int toolbarButtonHeight: 28
+    readonly property int toolbarIconSize: 16
     // Glass-layer opacity over a blurred underlay; tint coverage is independent.
     readonly property real panelMaterialOpacity: 0.95
     // Material intensity only: never changes layout, typography or fill alpha.

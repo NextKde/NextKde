@@ -380,8 +380,8 @@ Item {
         pageActive: carousel.visible && carousel.isShown(carousel.musicPage)
         x: carousel.layoutX(carousel.musicPage)
         opacity: carousel.isShown(carousel.musicPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
 
     DockWeatherWidget {
@@ -396,8 +396,8 @@ Item {
         pageActive: carousel.visible && carousel.isShown(carousel.weatherPage)
         x: carousel.layoutX(carousel.weatherPage)
         opacity: carousel.isShown(carousel.weatherPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
 
     DockClockWidget {
@@ -412,8 +412,8 @@ Item {
         pageActive: carousel.visible && carousel.isShown(carousel.clockPage)
         x: carousel.layoutX(carousel.clockPage)
         opacity: carousel.isShown(carousel.clockPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
 
     DockTemperatureWidget {
@@ -428,7 +428,7 @@ Item {
         pageActive: carousel.visible && carousel.isShown(carousel.temperaturePage)
         x: carousel.layoutX(carousel.temperaturePage)
         opacity: carousel.isShown(carousel.temperaturePage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: 160; easing.type: Easing.OutCubic } }
-        Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
     }
 }

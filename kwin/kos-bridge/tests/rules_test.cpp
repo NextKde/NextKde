@@ -22,6 +22,7 @@
 #include <cmath>
 #include <cstdio>
 
+#include "windowbuttons/adjustbar.h"
 #include "windowbuttons/buttonconfig.h"
 #include "windowbuttons/panelgeometry.h"
 #include "windowbuttons/tilemenu.h"
@@ -382,6 +383,19 @@ void testGeometry()
         shape.offset = AppOffset{1.01, 1.01};
         CHECK(panelFlushMask(shape) == 0);
     }
+    // Continuous-corner contour uses both visual radii (tangent extent) and smoothness.
+    shape.position = ButtonPosition::Right;
+    shape.offset = AppOffset{0, 0};
+    const qreal extent = WindowAppearance::cornerExtent(20.0, 0.6);
+    const PanelWindowContour continuous{rounded.size, {extent, extent, extent, extent}, 0.6};
+    const PanelWindowContour arcSameExtent{rounded.size, {extent, extent, extent, extent}, 0.0};
+    // At the top-right corner, (98, 2) is outside the continuous corner (diagonal inset ~5.86),
+    // while (94, 6) is inside the superellipse (diagonal inset ~5.86) yet outside a circle of
+    // radius `extent` (diagonal inset ~8.64).
+    CHECK(!panelBackgroundPath(box, shape, continuous).contains(QPointF(98, 2)));
+    CHECK(panelBackgroundPath(box, shape, continuous).contains(QPointF(94, 6)));
+    CHECK(!panelBackgroundPath(box, shape, arcSameExtent).contains(QPointF(94, 6)));
+    CHECK(panelBackgroundKey(shape, continuous) != panelBackgroundKey(shape, arcSameExtent));
     CHECK(panelBackgroundPath(QRectF(), shape, rounded).isEmpty());
 
 }
@@ -1081,6 +1095,61 @@ void testStore()
     // A matcher that says nothing about a window is refused rather than stored:
     // it would apply to every window there is.
     CHECK(!writing.store(WindowMatcher{}, written));
+
+    // Interactive Wayland adjustments (empty role): single-window adjustments
+    // persist across dynamic captions, while adjustments made alongside an open
+    // sibling window scope to the secondary caption without altering the main one.
+    removeRulesFile();
+    WindowRuleStore waylandStore;
+    PanelGeometry mainCover;
+    mainCover.offset = AppOffset{12, 6};
+    mainCover.coverage = QMarginsF(16, 4, 12, 4);
+    PanelGeometry refinedCover = mainCover;
+    refinedCover.coverage.setLeft(22);
+    PanelGeometry viewerCover = mainCover;
+    viewerCover.coverage.setBottom(18);
+
+    const WindowQuery chat1 = query(QStringLiteral("antigravity antigravity"),
+                                    QStringLiteral("Chat 1 - Antigravity"), 0);
+    const WindowQuery chat2 = query(QStringLiteral("antigravity antigravity"),
+                                    QStringLiteral("Chat 2 - Antigravity"), 0);
+    const WindowQuery chat3 = query(QStringLiteral("antigravity antigravity"),
+                                    QStringLiteral("Chat 3 - Antigravity"), 0);
+    // Simulate a legacy caption-locked rule first; re-saving as a single window
+    // promotes it to class+type so switching chats never drops the cover. The
+    // session expresses the promotion through replace(previous, target), with
+    // appMatcher() standing in for the sibling-free single-window case.
+    CHECK(waylandStore.store(adjustmentMatcher(chat1), mainCover));
+    CHECK(!waylandStore.found(chat2, &readBack));
+    CHECK(waylandStore.replace(adjustmentMatcher(chat1), appMatcher(chat1),
+                               mainCover));
+    CHECK(waylandStore.count() == 1);
+    CHECK(waylandStore.found(chat2, &readBack) && sameGeometry(readBack, mainCover));
+    // A later adjustment on a sibling chat re-saves the same class+type rule,
+    // so every chat keeps the latest cover and no caption rule accumulates.
+    CHECK(waylandStore.replace(appMatcher(chat2), appMatcher(chat2),
+                               refinedCover));
+    CHECK(waylandStore.count() == 1);
+    CHECK(waylandStore.found(chat1, &readBack) && sameGeometry(readBack, refinedCover));
+    CHECK(waylandStore.found(chat3, &readBack) && sameGeometry(readBack, refinedCover));
+
+    // Secondary window adjusted while the main window is also open. The main
+    // window was saved as class+type while alone; narrowing to the viewer's
+    // caption refines the class rule instead of replacing it, so the main
+    // window keeps its cover and the caption rule wins for the viewer alone.
+    const WindowQuery wechatMain = query(QStringLiteral("wechat com.tencent.wechat"),
+                                         QStringLiteral("微信"), 0);
+    const WindowQuery wechatViewer = query(QStringLiteral("wechat com.tencent.wechat"),
+                                           QStringLiteral("图片和视频"), 0);
+    CHECK(waylandStore.replace(WindowMatcher{}, appMatcher(wechatMain), mainCover));
+    CHECK(waylandStore.replace(appMatcher(wechatMain), adjustmentMatcher(wechatViewer),
+                               viewerCover));
+    // Three rules: the antigravity class rule, the wechat class rule, and the
+    // viewer caption that refined it. The refine kept the class rule -- that
+    // is the sibling-cover semantics under test.
+    CHECK(waylandStore.count() == 3);
+    CHECK(waylandStore.found(wechatMain, &readBack) && sameGeometry(readBack, mainCover));
+    CHECK(waylandStore.found(wechatViewer, &readBack) && sameGeometry(readBack, viewerCover));
 }
 
 void testIndependentBackground()
@@ -1151,6 +1220,480 @@ void testIndependentBackground()
     CHECK(resolved.coverage == saved.coverage); // Reactivating restores the cover.
 }
 
+void testOverlayModesAndScopes()
+{
+    removeRulesFile();
+    writeUserConfig(R"({"apps":{"hiddenapp":{"showButtons":false}}})");
+
+    const WindowQuery chat = query(QStringLiteral("wechat"), QStringLiteral("Chat"), 0);
+    const WindowQuery moments = query(QStringLiteral("wechat"), QStringLiteral("Moments"), 0);
+
+    const WindowMatcher appScope = appMatcher(chat);
+    CHECK(appScope.className == QStringLiteral("wechat"));
+    CHECK(appScope.titleRegex.isEmpty());
+    CHECK(appScope.role.isEmpty());
+    CHECK(appScope.matches(chat));
+    CHECK(appScope.matches(moments));
+
+    const WindowMatcher winScope = adjustmentMatcher(moments);
+    CHECK(winScope.matches(moments));
+    CHECK(!winScope.matches(chat));
+
+    ButtonConfig config;
+    config.load();
+
+    // Cover overlay mode keeps hand-written showButtons: false inactive override.
+    CHECK(config.storeGeometry(classMatcher(QStringLiteral("hiddenapp")), PanelGeometry{}, OverlayMode::Cover));
+    AppConfig hiddenAppCfg = config.getAppConfig(query(QStringLiteral("hiddenapp")));
+    CHECK(!hiddenAppCfg.showButtons);
+    CHECK(hiddenAppCfg.overlayMode == OverlayMode::Cover);
+
+    // Explicit per-window Cover, Transparent and Hidden rules round-trip and apply.
+    PanelGeometry g;
+    g.offset = AppOffset{22, 18};
+    CHECK(config.replaceRule(winScope, winScope, g, OverlayMode::Cover));
+    config.load();
+    GeometryRule found;
+    CHECK(config.findStoredRule(moments, &found));
+    CHECK(found.overlayMode == OverlayMode::Cover);
+    CHECK(config.getAppConfig(moments).overlayMode == OverlayMode::Cover);
+    CHECK(config.getAppConfig(moments).showButtons);
+
+    CHECK(config.replaceRule(winScope, winScope, g, OverlayMode::Transparent));
+    config.load();
+    CHECK(config.findStoredRule(moments, &found));
+    CHECK(found.overlayMode == OverlayMode::Transparent);
+    AppConfig momentsCfg = config.getAppConfig(moments);
+    CHECK(momentsCfg.showButtons);
+    CHECK(momentsCfg.overlayMode == OverlayMode::Transparent);
+    CHECK(near(momentsCfg.geometry.offset.x, 22));
+
+    // Replacing window-scoped rule with app-scoped Hidden rule removes old matcher.
+    CHECK(config.replaceRule(winScope, appScope, g, OverlayMode::Hidden));
+    config.load();
+    CHECK(config.findStoredRule(chat, &found));
+    CHECK(found.matcher.canonicalKey() == appScope.canonicalKey());
+    CHECK(found.overlayMode == OverlayMode::Hidden);
+    CHECK(!config.getAppConfig(chat).showButtons);
+    CHECK(config.getAppConfig(chat).overlayMode == OverlayMode::Hidden);
+    CHECK(!config.getAppConfig(moments).showButtons);
+
+    // Removing the rule restores default visibility and Cover mode.
+    CHECK(config.removeRule(appScope));
+    config.load();
+    CHECK(!config.findStoredRule(chat, &found));
+    CHECK(config.getAppConfig(chat).showButtons);
+    CHECK(config.getAppConfig(chat).overlayMode == OverlayMode::Cover);
+}
+
+void testAdjustBar()
+{
+    const QRectF window(0, 0, 900, 600);
+    const QRectF panel(12, 10, 68, 28);
+    const AdjustBarLayout single = adjustBarLayout(panel, window, true, false);
+    CHECK(!single.isEmpty());
+    CHECK(!single.twoRows);
+    CHECK(window.contains(single.rect));
+    CHECK(!single.rect.intersects(panel));
+    for (const auto &btn : single.buttons) {
+        if (btn.enabled) {
+            CHECK(adjustBarActionAt(single, btn.rect.center()) == btn.action);
+        }
+    }
+    CHECK(single.buttons.size() == 7);
+    CHECK(single.buttons[0].action == AdjustAction::ModeCover);
+    CHECK(adjustBarActionAt(single, single.buttons[0].rect.center()) == AdjustAction::ModeCover);
+    CHECK(adjustBarActionAt(single, QPointF(0, 0)) == std::nullopt);
+
+    // Narrow window wraps to two rows and remains inside the window frame.
+    const QRectF narrowWindow(0, 0, 260, 200);
+    const QRectF narrowPanel(8, 8, 68, 28);
+    const AdjustBarLayout wrapped = adjustBarLayout(narrowPanel, narrowWindow, true, true);
+    CHECK(!wrapped.isEmpty());
+    CHECK(wrapped.twoRows);
+    CHECK(narrowWindow.contains(wrapped.rect));
+    CHECK(adjustBarActionAt(wrapped, QPointF(wrapped.rect.left() + 2, wrapped.rect.top() + 2))
+          != AdjustAction::Reset);
+}
+
+void testAdjustScopeResolution()
+{
+    const WindowQuery docWindow = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("05_Part05.zh - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery docWindow2 = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("06_Part06.zh - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery settingsWindow = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("设置 - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery settingsOtherVault = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("设置 - test build - Obsidian 1.15.1"), 0);
+    const WindowQuery settingsNewVer = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("设置 - ob-vault - Obsidian 1.15.2"), 0);
+    const WindowQuery settingsGuide = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("设置指南 - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery roledWindow = query(
+        QStringLiteral("qq"), QStringLiteral("QQ"), 0, QStringLiteral("main"));
+    const WindowQuery blankCaption = query(
+        QStringLiteral(" md.obsidian.Obsidian"), QString(), 0);
+
+    // 1. Standalone roleless window defaults to App, and explicit Window scope
+    //    generalizes delimited titles when app token or sibling tail identifies
+    //    the window kind.
+    WindowScopeContext emptyCtx;
+    WindowScopeContext blankCtx;
+    blankCtx.hasOlderSibling = true;
+    blankCtx.hasUnscopedSibling = true;
+    CHECK(initialAdjustScope(docWindow, std::nullopt, emptyCtx) == MatchScope::App);
+    CHECK(initialAdjustScope(blankCaption, std::nullopt, blankCtx) == MatchScope::App);
+
+    const WindowMatcher defaultApp =
+        resolvedAdjustMatcher(docWindow, MatchScope::App, std::nullopt);
+    CHECK(matcherScope(defaultApp) == MatchScope::App);
+    CHECK(defaultApp.canonicalKey() == appMatcher(docWindow).canonicalKey());
+
+    const WindowMatcher explicitTitle =
+        resolvedAdjustMatcher(docWindow, MatchScope::Window, std::nullopt,
+                              {settingsWindow.caption});
+    CHECK(matcherScope(explicitTitle) == MatchScope::Window);
+    CHECK(!explicitTitle.titleRegex.isEmpty());
+    CHECK(explicitTitle.matches(docWindow));
+    CHECK(!explicitTitle.matches(settingsWindow));
+
+    // 2. Obsidian main (older, dynamic) vs Settings (newer, static) initial scope:
+    //    Main stays App even with Settings open; Settings defaults to Window even
+    //    when an App rule already exists!
+    WindowScopeContext mainCtx;
+    mainCtx.siblingCaptions = {settingsWindow.caption};
+    mainCtx.hasOlderSibling = false;
+    mainCtx.hasUnscopedSibling = true;
+
+    WindowScopeContext settingsCtx;
+    settingsCtx.siblingCaptions = {docWindow.caption};
+    settingsCtx.hasOlderSibling = true;
+    settingsCtx.hasUnscopedSibling = true;
+
+    CHECK(initialAdjustScope(docWindow, std::nullopt, mainCtx) == MatchScope::App);
+    CHECK(initialAdjustScope(settingsWindow, std::nullopt, settingsCtx) == MatchScope::Window);
+
+    const WindowMatcher existingApp = appMatcher(docWindow);
+    CHECK(initialAdjustScope(settingsWindow, existingApp, settingsCtx) == MatchScope::Window);
+    CHECK(initialAdjustScope(docWindow, existingApp, mainCtx) == MatchScope::App);
+
+    // Even if stacking/creation order had Settings first, a dynamic main sibling
+    // marks Settings as the secondary static window.
+    WindowScopeContext settingsDynamicSibCtx;
+    settingsDynamicSibCtx.siblingCaptions = {docWindow2.caption};
+    settingsDynamicSibCtx.hasOlderSibling = false;
+    settingsDynamicSibCtx.hasDynamicSibling = true;
+    settingsDynamicSibCtx.hasUnscopedSibling = true;
+    CHECK(initialAdjustScope(settingsWindow, existingApp, settingsDynamicSibCtx)
+          == MatchScope::Window);
+
+    WindowScopeContext mainDynamicCtx;
+    mainDynamicCtx.siblingCaptions = {settingsWindow.caption};
+    mainDynamicCtx.dynamicCaption = true;
+    mainDynamicCtx.hasOlderSibling = true;
+    mainDynamicCtx.hasUnscopedSibling = true;
+    CHECK(initialAdjustScope(docWindow2, existingApp, mainDynamicCtx) == MatchScope::App);
+
+    // Once the sibling already has its own Window-scoped rule, there is no
+    // unscoped sibling left to protect.
+    WindowScopeContext scopedSibCtx = settingsCtx;
+    scopedSibCtx.hasUnscopedSibling = false;
+    CHECK(initialAdjustScope(settingsWindow, existingApp, scopedSibCtx) == MatchScope::App);
+
+    // 3. Structured title prefix generalization (`windowScopedMatcher`).
+    const WindowMatcher settingsGen =
+        windowScopedMatcher(settingsWindow, {docWindow.caption});
+    CHECK(!settingsGen.titleRegex.isEmpty());
+    CHECK(settingsGen.title.isEmpty());
+    CHECK(settingsGen.matches(settingsWindow));
+    CHECK(settingsGen.matches(settingsOtherVault));
+    CHECK(settingsGen.matches(settingsNewVer));
+    CHECK(!settingsGen.matches(docWindow));
+    CHECK(!settingsGen.matches(settingsGuide));
+
+    // Multi-dash document title keeps full non-shared head ("01 - Intro").
+    const WindowQuery multiDashDoc = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("01 - Intro - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery multiDashOther = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("01 - Other - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery multiDashOtherVault = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("01 - Intro - test build - Obsidian 1.15.1"), 0);
+    const WindowMatcher multiDashGen =
+        windowScopedMatcher(multiDashDoc, {settingsWindow.caption});
+    CHECK(!multiDashGen.titleRegex.isEmpty());
+    CHECK(multiDashGen.matches(multiDashDoc));
+    CHECK(multiDashGen.matches(multiDashOtherVault));
+    CHECK(!multiDashGen.matches(multiDashOther));
+    CHECK(!multiDashGen.matches(settingsWindow));
+
+    // Alone with app token in trailing segment generalizes cleanly as well.
+    const WindowMatcher settingsAloneGen = windowScopedMatcher(settingsWindow);
+    CHECK(!settingsAloneGen.titleRegex.isEmpty());
+    CHECK(settingsAloneGen.matches(settingsWindow));
+    CHECK(settingsAloneGen.matches(settingsOtherVault));
+    CHECK(!settingsAloneGen.matches(docWindow));
+
+    // Pure numeric prefix alone is NOT generalized.
+    const WindowQuery numericDoc = query(
+        QStringLiteral(" md.obsidian.Obsidian"),
+        QStringLiteral("01 - Intro - Obsidian 1.15.1"), 0);
+    const WindowMatcher numericMatcher = windowScopedMatcher(numericDoc);
+    CHECK(numericMatcher.titleRegex.isEmpty());
+    CHECK(numericMatcher.title == numericDoc.caption);
+
+    // Collision protection: sibling sharing prefix never generalizes to collide.
+    const WindowQuery chatAliceApp = query(
+        QStringLiteral("app"), QStringLiteral("Chat - Alice - App"), 0);
+    const WindowQuery chatBobApp = query(
+        QStringLiteral("app"), QStringLiteral("Chat - Bob - App"), 0);
+    const WindowQuery chatBobPlain = query(
+        QStringLiteral("app"), QStringLiteral("Chat - Bob"), 0);
+    const WindowMatcher safeMulti =
+        windowScopedMatcher(chatAliceApp, {chatBobApp.caption});
+    CHECK(safeMulti.matches(chatAliceApp));
+    CHECK(!safeMulti.matches(chatBobApp));
+    const WindowMatcher collisionFallback =
+        windowScopedMatcher(chatAliceApp, {chatBobPlain.caption});
+    CHECK(collisionFallback.titleRegex.isEmpty());
+    CHECK(collisionFallback.title == chatAliceApp.caption);
+
+    // Single-segment titles fall back to exact title.
+    const WindowQuery wechatViewer = query(
+        QStringLiteral("wechat wechat"), QStringLiteral("图片和视频"), 0);
+    const WindowMatcher singleSeg =
+        windowScopedMatcher(wechatViewer, {QStringLiteral("微信")});
+    CHECK(singleSeg.titleRegex.isEmpty());
+    CHECK(singleSeg.title == QStringLiteral("图片和视频"));
+
+    // 4. Window with a role (X11) defaults to Window even without siblings,
+    //    and preserves role when resolving Window scope.
+    CHECK(initialAdjustScope(roledWindow, std::nullopt, emptyCtx) == MatchScope::Window);
+    const WindowMatcher roledMatcher =
+        resolvedAdjustMatcher(roledWindow, MatchScope::Window, std::nullopt);
+    CHECK(matcherScope(roledMatcher) == MatchScope::Window);
+    CHECK(roledMatcher.role == QStringLiteral("main"));
+    CHECK(roledMatcher.title.isEmpty());
+
+    // 5. Existing App rule (including legacy class-only) stays App when alone,
+    //    and narrowing to Window refines without deleting the app rule.
+    WindowMatcher legacyClassOnly;
+    legacyClassOnly.className = docWindow.windowClass;
+
+    CHECK(initialAdjustScope(settingsWindow, existingApp, emptyCtx) == MatchScope::App);
+    CHECK(initialAdjustScope(settingsWindow, legacyClassOnly, emptyCtx) == MatchScope::App);
+    CHECK(resolvedAdjustMatcher(settingsWindow, MatchScope::App, legacyClassOnly).canonicalKey()
+          == legacyClassOnly.canonicalKey());
+
+    const WindowMatcher narrowedTitle =
+        resolvedAdjustMatcher(settingsWindow, MatchScope::Window, existingApp,
+                              {docWindow.caption});
+    CHECK(matcherScope(narrowedTitle) == MatchScope::Window);
+    CHECK(narrowedTitle.matches(settingsWindow));
+    CHECK(narrowedTitle.matches(settingsOtherVault));
+
+    removeRulesFile();
+    WindowRuleStore refineStore;
+    PanelGeometry mainGeom;
+    mainGeom.offset = AppOffset{10, 6};
+    PanelGeometry settingsGeom = mainGeom;
+    settingsGeom.offset = AppOffset{24, 12};
+
+    CHECK(refineStore.replace(WindowMatcher{}, existingApp, mainGeom));
+    CHECK(refineStore.replace(existingApp, narrowedTitle, settingsGeom));
+    CHECK(refineStore.count() == 2);
+    PanelGeometry resolved;
+    CHECK(refineStore.found(docWindow, &resolved) && sameGeometry(resolved, mainGeom));
+    CHECK(refineStore.found(settingsWindow, &resolved) && sameGeometry(resolved, settingsGeom));
+    CHECK(refineStore.found(settingsOtherVault, &resolved) && sameGeometry(resolved, settingsGeom));
+
+    // 6. Existing Window rules (title, titleRegex, role) stay Window even when
+    //    no sibling is open; keeping Window preserves titleRegex/role, while
+    //    switching to App promotes to appMatcher and removes the old rule.
+    WindowMatcher regexRule;
+    regexRule.className = docWindow.windowClass;
+    regexRule.hasType = true;
+    regexRule.type = docWindow.type;
+    regexRule.titleRegex = QStringLiteral("^设置");
+
+    CHECK(initialAdjustScope(settingsWindow, narrowedTitle, emptyCtx) == MatchScope::Window);
+    CHECK(initialAdjustScope(settingsWindow, regexRule, emptyCtx) == MatchScope::Window);
+    CHECK(initialAdjustScope(roledWindow, roledMatcher, emptyCtx) == MatchScope::Window);
+
+    CHECK(resolvedAdjustMatcher(settingsWindow, MatchScope::Window, narrowedTitle).canonicalKey()
+          == narrowedTitle.canonicalKey());
+    CHECK(resolvedAdjustMatcher(settingsWindow, MatchScope::Window, regexRule).canonicalKey()
+          == regexRule.canonicalKey());
+    CHECK(resolvedAdjustMatcher(roledWindow, MatchScope::Window, roledMatcher).canonicalKey()
+          == roledMatcher.canonicalKey());
+
+    const WindowMatcher promotedApp =
+        resolvedAdjustMatcher(settingsWindow, MatchScope::App, narrowedTitle);
+    CHECK(promotedApp.canonicalKey() == appMatcher(settingsWindow).canonicalKey());
+
+    removeRulesFile();
+    WindowRuleStore promoteStore;
+    CHECK(promoteStore.replace(WindowMatcher{}, narrowedTitle, settingsGeom));
+    CHECK(promoteStore.replace(narrowedTitle, promotedApp, settingsGeom));
+    CHECK(promoteStore.count() == 1);
+    CHECK(promoteStore.found(docWindow, &resolved) && sameGeometry(resolved, settingsGeom));
+    CHECK(promoteStore.found(settingsWindow, &resolved) && sameGeometry(resolved, settingsGeom));
+}
+
+void testCaptionTransitionsAndAdaptation()
+{
+    const QString obsClass = QStringLiteral(" md.obsidian.Obsidian");
+    QString prefix;
+    QString delim;
+
+    // Startup placeholders
+    CHECK(classifyCaptionTransition(obsClass, QString(),
+                                    QStringLiteral("设置 - ob-vault - Obsidian 1.15.1"))
+          == CaptionTransition::StartupPlaceholder);
+    CHECK(classifyCaptionTransition(obsClass, QStringLiteral("Obsidian"),
+                                    QStringLiteral("设置 - ob-vault - Obsidian 1.15.1"))
+          == CaptionTransition::StartupPlaceholder);
+    CHECK(classifyCaptionTransition(QStringLiteral("Navigator firefox"),
+                                    QStringLiteral("Mozilla Firefox"),
+                                    QStringLiteral("GitHub — Mozilla Firefox"))
+          == CaptionTransition::StartupPlaceholder);
+
+    // SamePrefix (Settings switching vaults)
+    CHECK(classifyCaptionTransition(obsClass,
+                                    QStringLiteral("设置 - ob-vault - Obsidian 1.15.1"),
+                                    QStringLiteral("设置 - test build - Obsidian 1.15.1"),
+                                    &prefix, &delim)
+          == CaptionTransition::SamePrefix);
+    CHECK(prefix == QStringLiteral("设置"));
+    CHECK(delim == QStringLiteral(" - "));
+
+    // SameSuffix (Note switching inside vault)
+    CHECK(classifyCaptionTransition(obsClass,
+                                    QStringLiteral("05_Part05.zh - ob-vault - Obsidian 1.15.1"),
+                                    QStringLiteral("06_Part06.zh - ob-vault - Obsidian 1.15.1"))
+          == CaptionTransition::SameSuffix);
+
+    // Unrelated replacement
+    CHECK(classifyCaptionTransition(QStringLiteral("firefox"),
+                                    QStringLiteral("GitHub"),
+                                    QStringLiteral("YouTube"))
+          == CaptionTransition::Replaced);
+
+    // Adaptation scenarios
+    const WindowQuery doc1 = query(obsClass, QStringLiteral("05_Part05.zh - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery doc2 = query(obsClass, QStringLiteral("06_Part06.zh - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery settings1 = query(obsClass, QStringLiteral("设置 - ob-vault - Obsidian 1.15.1"), 0);
+    const WindowQuery settings2 = query(obsClass, QStringLiteral("设置 - test build - Obsidian 1.15.1"), 0);
+
+    PanelGeometry mainGeom;
+    mainGeom.panelPadding = 11.5;
+    mainGeom.panelPaddingX = 31.3;
+    PanelGeometry settingsGeom;
+    settingsGeom.panelPadding = 5.7;
+    settingsGeom.panelPaddingX = 31.3;
+
+    const GeometryRule doc1Rule{adjustmentMatcher(doc1), mainGeom, OverlayMode::Cover};
+    const GeometryRule appRule{appMatcher(doc1), settingsGeom, OverlayMode::Cover};
+    const GeometryRule settingsRule{adjustmentMatcher(settings1), settingsGeom, OverlayMode::Cover};
+
+    // Case A: Exact-title rule on Main switching notes when Settings already has
+    // its own window-scoped rule (or is closed): promotes to App without touching Settings.
+    WindowScopeContext mainNoUnscopedCtx;
+    mainNoUnscopedCtx.siblingCaptions = {settings1.caption};
+    mainNoUnscopedCtx.hasOlderSibling = false;
+    mainNoUnscopedCtx.hasUnscopedSibling = false;
+
+    const CaptionAdaptation promoteMain = adaptRuleForCaptionChange(
+        doc1, doc2, doc1Rule, appRule, mainNoUnscopedCtx);
+    CHECK(promoteMain.kind == CaptionAdaptation::Kind::PromoteToApp);
+    CHECK(promoteMain.targetMatcher.canonicalKey() == appMatcher(doc2).canonicalKey());
+
+    // Verify store update preserves Settings' separate rule.
+    removeRulesFile();
+    writeKwinrc("kos_decoration");
+    writeUserConfig(R"({"default":{}})");
+    ButtonConfig cfg;
+    CHECK(cfg.storeGeometry(settingsRule.matcher, settingsGeom));
+    CHECK(cfg.storeGeometry(doc1Rule.matcher, mainGeom));
+    CHECK(cfg.storeGeometry(appRule.matcher, settingsGeom));
+    CHECK(cfg.replaceRule(doc1Rule.matcher, promoteMain.targetMatcher,
+                          doc1Rule.geometry, doc1Rule.overlayMode));
+    CHECK(near(cfg.getAppConfig(doc2).geometry.panelPadding, 11.5));
+    CHECK(near(cfg.getAppConfig(settings1).geometry.panelPadding, 5.7));
+
+    // Case B: Exact-title rule on Main switching notes when an unscoped sibling
+    // is open: pins in-session without altering the sibling's fallback/App rule.
+    WindowScopeContext mainWithUnscopedCtx;
+    mainWithUnscopedCtx.siblingCaptions = {settings1.caption};
+    mainWithUnscopedCtx.hasOlderSibling = false;
+    mainWithUnscopedCtx.hasUnscopedSibling = true;
+
+    const CaptionAdaptation pinMain = adaptRuleForCaptionChange(
+        doc1, doc2, doc1Rule, appRule, mainWithUnscopedCtx);
+    CHECK(pinMain.kind == CaptionAdaptation::Kind::PinInSession);
+    CHECK(near(cfg.getAppConfig(doc2, doc1Rule).geometry.panelPadding, 11.5));
+    CHECK(near(cfg.getAppConfig(settings1, doc1Rule).geometry.panelPadding, 5.7));
+
+    // Explicit Window-scoped rule still beats pinnedRule, and hand-written
+    // showButtons: false is still honored with pinnedRule.
+    writeUserConfig(R"({"apps":{"hiddenpinned":{"showButtons":false}}})");
+    cfg.load();
+    CHECK(!cfg.getAppConfig(query(QStringLiteral("hiddenpinned"), QStringLiteral("X")), doc1Rule)
+               .showButtons);
+
+    // Case C: Secondary popout switching captions while older main App rule is
+    // open: pins in-session and NEVER overwrites main's App rule.
+    const WindowQuery wechatMain = query(QStringLiteral("wechat"), QStringLiteral("微信"), 0);
+    const WindowQuery wechatAlice = query(QStringLiteral("wechat"), QStringLiteral("Alice"), 0);
+    const WindowQuery wechatBob = query(QStringLiteral("wechat"), QStringLiteral("Bob"), 0);
+    const GeometryRule wechatPopRule{adjustmentMatcher(wechatAlice), settingsGeom, OverlayMode::Cover};
+    const GeometryRule wechatAppRule{appMatcher(wechatMain), mainGeom, OverlayMode::Cover};
+    WindowScopeContext secondaryCtx;
+    secondaryCtx.siblingCaptions = {wechatMain.caption};
+    secondaryCtx.hasOlderSibling = true;
+    secondaryCtx.hasUnscopedSibling = true;
+
+    const CaptionAdaptation pinSecondary = adaptRuleForCaptionChange(
+        wechatAlice, wechatBob, wechatPopRule, wechatAppRule, secondaryCtx);
+    CHECK(pinSecondary.kind == CaptionAdaptation::Kind::PinInSession);
+
+    // Case D: Legacy exact-title rule on Settings switching vault upgrades to prefix regex.
+    WindowScopeContext settingsSwitchCtx;
+    settingsSwitchCtx.siblingCaptions = {doc1.caption};
+    settingsSwitchCtx.hasOlderSibling = true;
+    settingsSwitchCtx.hasUnscopedSibling = false;
+    const CaptionAdaptation upgradeSettings = adaptRuleForCaptionChange(
+        settings1, settings2, settingsRule, appRule, settingsSwitchCtx);
+    CHECK(upgradeSettings.kind == CaptionAdaptation::Kind::UpgradeToPrefixRegex);
+    CHECK(upgradeSettings.targetMatcher.matches(settings1));
+    CHECK(upgradeSettings.targetMatcher.matches(settings2));
+    CHECK(!upgradeSettings.targetMatcher.matches(doc1));
+
+    // Case E: Pinned rule originally for doc1 ("05_Part05.zh...") later seeing
+    // unrelated "A - 1" -> "A - 2" does NOT falsely upgrade to ^A(?: - |$).
+    const WindowQuery unrelatedA1 = query(obsClass, QStringLiteral("A - 1"), 0);
+    const WindowQuery unrelatedA2 = query(obsClass, QStringLiteral("A - 2"), 0);
+    const CaptionAdaptation noFalseUpgrade = adaptRuleForCaptionChange(
+        unrelatedA1, unrelatedA2, doc1Rule, appRule, mainWithUnscopedCtx);
+    CHECK(noFalseUpgrade.kind == CaptionAdaptation::Kind::PinInSession);
+
+    // Case F: Transitioning into a caption that already has a Window-scoped rule -> None.
+    const CaptionAdaptation intoExplicitWindowRule = adaptRuleForCaptionChange(
+        doc1, settings1, doc1Rule, settingsRule, mainNoUnscopedCtx);
+    CHECK(intoExplicitWindowRule.kind == CaptionAdaptation::Kind::None);
+
+    removeRulesFile();
+}
+
 } // namespace
 
 int main(int argc, char **argv)
@@ -1195,6 +1738,10 @@ int main(int argc, char **argv)
     testFormaControls();
     testStore();
     testIndependentBackground();
+    testOverlayModesAndScopes();
+    testAdjustBar();
+    testAdjustScopeResolution();
+    testCaptionTransitionsAndAdaptation();
 
     std::printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures == 0 ? 0 : 1;

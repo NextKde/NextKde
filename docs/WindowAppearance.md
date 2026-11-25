@@ -3,7 +3,7 @@
 [简体中文](WindowAppearance.zh-CN.md)
 
 For AI contributors. Current code lives in `kwin/kos-bridge/windowappearance/`,
-`kwin/kos-decoration/`, `kwin/glass-effect/` and `shell/native/surface-shape/`.
+`kwin/kos-decoration/`, `kwin/glass/` and `shell/native/surface-shape/`.
 Use [Development](Development.md) for VM-only builds and installation; native plugin changes
 require logout/login or reboot. This page replaces historical implementation proposals and audits.
 
@@ -21,6 +21,29 @@ Animation captures the clipped source; Bridge must not cache its own later anima
 background blur. Continuous windows need translucent occlusion semantics so background behind
 clipped corners is painted. Removing that flag to improve performance can produce black corners.
 Glass must use the actual visual contour rather than reapply an old circular input radius.
+Because that flag also disables KWin's own occlusion culling, Bridge skips capture, tint,
+buttons and draw for a continuous window only when opaque continuous windows above it cover
+everything it could paint (expandedGeometry clipped to the output). Coverage uses the upper
+clients' opaque regions minus whole corner squares, so it is conservative; two windows with
+the same frame and the same contour (stacked maximized/fullscreen) count as exact coverage
+because no shadow reaches the screen. Transformed windows, dock morphs and active fullscreen
+effects keep the normal path.
+Stationary captures contain client content and decoration only; the panel and its tint are
+drawn as an overlay after the clipped window, so hover, menu and tint changes repaint the
+panel instead of invalidating the whole-window source. Animated (morph) captures include the
+panel because the deformation moves it with the window.
+
+Mime's Windows clients retain their own appearance. `kwin/common/windoweffectpolicy.h` identifies
+`mime` and `mime.<nonempty app ID>` case-insensitively, including whitespace-separated X11 window-class
+fields. Bridge adds no corners, outline, frame or shadow to these windows. A late app-ID update restores
+any previously applied KOS appearance and releases continuous clipping. Glass creates no blur cache and
+applies no blur, liquid material or surface reveal transform. This hard exclusion precedes explicit blur
+requests, forced blur and class-list settings; other applications retain the KDE blur contract.
+AutoCAD, Quark and other guest applications therefore need no individual rules, and unrelated identifiers
+such as `mimetype-editor` do not match. This does not remove client-owned transparent margins, shadows or
+corners, or disable Dock/Stage window animations. `kos-window.effect-policy` checks identity boundaries;
+Bridge's `appearance_lifecycle_test` checks per-window restoration and re-entry. Final application appearance
+still requires a VM comparison with the new plugins after logout/login, not just offline policy tests.
 
 The continuous cache has a 256 MiB budget and GPU texture-size checks. Shader/resource/geometry/
 budget failure falls back to native arcs with a diagnostic. Reconsider rejection after relevant
@@ -75,7 +98,8 @@ rules and merge fields, not a complete example over an existing file. Invalid co
 last valid state. App matching uses window class then desktop/resource identifiers, never title guessing.
 
 Preserve physical versus logical outline-width semantics and schema-1 conversion. Gaussian shadow
-values are sigma in logical pixels, not total extent. Focus transitions reserve enough cache margin
+values are sigma in logical pixels, not total extent; `offsetY` shifts the cast shadow downward by
+that many logical pixels while the frame contour stays put. Focus transitions reserve enough cache margin
 for both states; bounded repaint timers stop when idle. Fullscreen always disables KOS corners/outlines/shadows/controls to cover the output;
 maximized behavior follows configuration. Restore normal appearance on leaving fullscreen.
 Settings → Window appearance exposes **Square corners when maximized** below Corner radius.
@@ -135,9 +159,12 @@ focus, theme changes, resizing, covered windows and real GL drivers.
 
 `kos-surface-shape-v1.xml` defines versioned capability negotiation. Preserve interface/opcode order.
 Versions 1–7 apply their established immediate behavior; v8 latches pending shape state via manager
-commit at the next `wl_surface.commit`. Rendering reads committed state only. Test atomic batches
-and old clients. Explicit v8 geometry owns the surface even when empty/hidden; do not fall back to
-whole-window blur for an intentionally empty declaration. Ordinary undeclared windows keep legacy blur.
+commit at the next `wl_surface.commit`. v9 appends a per-shape pointer-effect mask
+(`set_pointer_effects`: hover light, lens parallax, click ripple) that latches the same way; clients
+that never send it keep every effect enabled, and clients below v9 must not send it. Renderers read
+committed state only. Test atomic batches and old clients. Explicit v8 geometry owns the surface even
+when empty/hidden; do not fall back to whole-window blur for an intentionally empty declaration.
+Ordinary undeclared windows keep legacy blur.
 
 Rounded-rectangle shapes carry geometry, visual rounding, scrim, continuous blur sigma, material
 opacity and reveal/capture parameters. Tint opacity is independent of background blur; material opacity fades the complete finish.

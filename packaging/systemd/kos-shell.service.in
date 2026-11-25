@@ -35,6 +35,11 @@ Environment=MALLOC_ARENA_MAX=2
 # Let Qt choose its render loop for the active platform and graphics backend.
 Environment=QML2_IMPORT_PATH=%h/.config/quickshell/kos:%h/.local/lib/qt6/qml
 ExecStart=@QS_EXEC@ --no-duplicate -c kos
+# Login spinner in its own Quickshell instance: this process cannot run any QML
+# until the desktop tree is built, so a spinner started from there would only
+# appear at the end of the wait. The Shell stops it when the arrival animation
+# starts (StartupSplash.qml); %h matches the QML2_IMPORT_PATH line above.
+ExecStartPost=/bin/sh -c '@QS_EXEC@ -n -p %h/.config/quickshell/kos/splash >/dev/null 2>&1 &'
 Restart=on-failure
 RestartSec=2
 

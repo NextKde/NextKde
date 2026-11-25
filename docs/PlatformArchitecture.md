@@ -71,7 +71,7 @@ the resolved contour; without Bridge metadata it stays square. See [WindowAppear
 The shared definition is [`kos-surface-shape-v1.xml`](../shell/native/surface-shape/kos-surface-shape-v1.xml),
 currently **v8** for manager and shape. Capability negotiation preserves old request numbering.
 The client `Kos.SurfaceShape` QML native module lives in `shell/native/surface-shape/`; the server
-is `kwin/glass-effect/src/surfaceshapemanager.{h,cpp}`, owned by the effect.
+is `kwin/glass/src/surfaceshapemanager.{h,cpp}`, owned by the effect.
 
 Versions 1–7 keep established immediate updates. v8 adds manager-committed batches latched with
 `wl_surface.commit`, explicit material profiles, continuous blur sigma and tint independent of
@@ -141,7 +141,7 @@ operation list and examples live in
 | Module | Operations | Implementation boundary |
 | --- | --- | --- |
 | `applications` | launch installed desktop entries with optional URLs | KDE `KService` + `KIO::ApplicationLauncherJob`; desktop-entry parsing, activation and process grouping remain KDE-owned |
-| `clipboard` | `clipboard.set/read/save-image`, history watch/list/copy/delete/clear | Qt `QClipboard`, Wayland MIME ownership, platform-supervised cliphist |
+| `clipboard` | `clipboard.set/read/save-image`, history watch/list/copy/delete/clear | Qt `QClipboard`, Wayland MIME ownership, `wl-paste` fallback for foreign file/image selections, platform-supervised cliphist |
 | `files` | open, copy, launch, transfer, trash, Trash state/empty, Open-With | Qt file APIs, KDE application launch jobs and `gio` for file operations |
 | `kwin` | snapshots, activation, desktops, thumbnails, Dock animation tickets | KWin script + internal D-Bus |
 | `network` | refresh, scan, connect, 802.1X, radio, traffic counters | NetworkManager/sysfs adapter |

@@ -9,6 +9,7 @@ import "../foundation" as Foundation
 // make custom segmented controls feel as if they need a second click.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     implicitWidth: 180
     implicitHeight: 34
@@ -36,28 +37,21 @@ Item {
     property int _visualIndex: 0
     property int _pendingIndex: -1
     property bool _ready: false
-    property real _deformation: 0
+    readonly property real _deformation: _motionEnabled
+        ? Math.min(1, Math.abs(selectionSpring.velocity) * 0.07) : 0
     readonly property bool _motionEnabled: !materialForm && !Foundation.AppTheme.reduceMotion
 
-    function animateSelection() {
-        if (_ready && _motionEnabled) selectionMotion.restart()
+    Foundation.SpringMotion {
+        id: selectionSpring
+        target: root._visualIndex
+        enabled: root._ready && !Foundation.AppTheme.reduceMotion && root.visible
     }
-    function settleMotion() {
-        selectionMotion.stop()
-        _deformation = 0
-    }
-    onMaterialFormChanged: { if (materialForm) settleMotion() }
-    Connections {
-        target: Foundation.AppTheme
-        function onReduceMotionChanged() {
-            if (Foundation.AppTheme.reduceMotion) root.settleMotion()
-        }
-    }
-    SequentialAnimation {
-        id: selectionMotion
-        NumberAnimation { target: root; property: "_deformation"; to: 1; duration: 85; easing.type: Easing.OutCubic }
-        NumberAnimation { target: root; property: "_deformation"; to: -.18; duration: 155; easing.type: Easing.InOutSine }
-        NumberAnimation { target: root; property: "_deformation"; to: 0; duration: 150; easing.type: Easing.OutCubic }
+    Foundation.SpringMotion {
+        id: pressSpring
+        target: root._motionEnabled && root._pressedIndex >= 0 ? 0.06 : 0
+        enabled: root._ready && root._motionEnabled && root.visible
+        response: 0.22
+        dampingRatio: 0.85
     }
 
     readonly property real _lensPosition: lens.x
@@ -78,7 +72,6 @@ Item {
         // Draw the result first. The owner may update its persistent state
         // through IPC, but that round trip must not consume the first click.
         _pendingIndex = index
-        if (_visualIndex !== index) animateSelection()
         _visualIndex = index
         selectionRequested(index)
         confirmationTimer.restart()
@@ -105,15 +98,14 @@ Item {
         // Read the changed source property directly. A binding that depends on
         // currentIndex (such as safeIndex) may not have been re-evaluated yet
         // when this change handler runs.
-        if (_visualIndex !== clampedIndex(currentIndex)) animateSelection()
         _visualIndex = clampedIndex(currentIndex)
         _pendingIndex = -1
         confirmationTimer.stop()
     }
     onLabelsChanged: {
-        settleMotion()
         _visualIndex = clampedIndex(currentIndex)
         _pendingIndex = -1
+        if (_ready) selectionSpring.snap()
     }
     Component.onCompleted: { _visualIndex = safeIndex; _ready = true }
 
@@ -124,7 +116,6 @@ Item {
         // Roll the lens back only if the externally-owned state did not
         // acknowledge this optimistic selection.
         onTriggered: {
-            if (root._visualIndex !== root.safeIndex) root.animateSelection()
             root._visualIndex = root.safeIndex
             root._pendingIndex = -1
         }
@@ -155,33 +146,27 @@ Item {
             reflectionStrength: materialHover.hovered ? root._intensity.hoverReflection : root._intensity.reflection
             tintColor: root.backgroundColor
             tintStrength: .65
-            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
         }
     }
     Item {
         id: lens
-        x: 2 + root._visualIndex * root.segmentWidth
+        x: 2 + selectionSpring.value * root.segmentWidth
         y: 2
         width: root.segmentWidth
         height: root.height - 4
         // Uniform 2px inset: inner and outer endcaps share their centres.
         readonly property real radius: height / 2
         readonly property real deformation: root._motionEnabled ? root._deformation : 0
-        readonly property real pressExpansion: root._motionEnabled && root._pressedIndex >= 0 ? .06 : 0
+        readonly property real pressExpansion: pressSpring.value
         transform: Scale {
             origin.x: lens.width / 2
             origin.y: lens.height / 2
             xScale: 1 + lens.deformation * .12 + lens.pressExpansion
             yScale: 1 - lens.deformation * .08 + lens.pressExpansion
-            Behavior on xScale { enabled: root._motionEnabled && !selectionMotion.running; NumberAnimation { duration: Foundation.AppTheme.motionFast } }
-            Behavior on yScale { enabled: root._motionEnabled && !selectionMotion.running; NumberAnimation { duration: Foundation.AppTheme.motionFast } }
-        }
-        Behavior on x {
-            enabled: root._motionEnabled
-            NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
         }
         Rectangle {
             anchors.fill: parent
@@ -206,10 +191,10 @@ Item {
             // Preserve a readable selected state after release, including on flat scenes.
             tintColor: root.selectionColor
             tintStrength: root._pressedIndex >= 0 ? .50 : .85
-            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
-            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast } }
+            Behavior on refractionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on magnification { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on reflectionStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on tintStrength { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : Foundation.AppTheme.motionFast; easing.type: root.motionPolicy.enterCurve } }
         }
     }
 
@@ -253,6 +238,13 @@ Item {
                 event.accepted = true
             }
 
+            Foundation.SpringMotion {
+                id: labelPressSpring
+                target: root._pressedIndex === segmentDelegate.index ? 0.96 : 1
+                enabled: root._ready && !Foundation.AppTheme.reduceMotion && root.visible
+                response: 0.22
+            }
+
             Text {
                 anchors.centerIn: parent
                 width: Math.max(0, parent.width - 16)
@@ -264,15 +256,9 @@ Item {
                 font.pixelSize: Foundation.AppTheme.compactDesign ? Foundation.AppTheme.compactControlFontSize : 12
                 font.weight: segmentDelegate.index === root._visualIndex
                     ? root.selectedFontWeight : root.fontWeight
-                scale: root._pressedIndex === segmentDelegate.index ? 0.96 : 1.0
+                scale: labelPressSpring.value
                 Behavior on color {
-                    ColorAnimation { duration: Foundation.AppTheme.motionFast }
-                }
-                Behavior on scale {
-                    NumberAnimation {
-                        duration: Foundation.AppTheme.motionFast
-                        easing.type: Easing.OutCubic
-                    }
+                    ColorAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : root.motionPolicy.fast.duration; easing.type: root.motionPolicy.enterCurve }
                 }
             }
             MouseArea {

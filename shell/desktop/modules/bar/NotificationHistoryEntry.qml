@@ -54,8 +54,8 @@ Item {
     Component.onDestruction: releaseExit()
     ParallelAnimation {
         id: exitMotion
-        NumberAnimation { target: entry; property: "x"; to: 18; duration: 170; easing.type: Easing.InCubic }
-        NumberAnimation { target: entry; property: "opacity"; to: 0; duration: 170; easing.type: Easing.InCubic }
+        NumberAnimation { target: entry; property: "x"; to: 18; duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.exitCurve }
+        NumberAnimation { target: entry; property: "opacity"; to: 0; duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.exitCurve }
         onFinished: {
             entry.releaseExit()
             entry.ListView.delayRemove = false

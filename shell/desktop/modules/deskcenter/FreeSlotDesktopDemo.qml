@@ -19,6 +19,7 @@ Item {
     property real baseCellWidth: 112
     property real baseCellHeight: 114
     property string density: "comfortable"
+    property string alignment: "right"
     property real iconVisualSize: 68
     readonly property var gridMetrics: DesktopGridMetrics.metrics(baseCellWidth,
         baseCellHeight, iconVisualSize, density, titleFontMetrics.height)
@@ -31,15 +32,17 @@ Item {
     readonly property real contentHeight: cellHeight - 4
     FontMetrics { id: titleFontMetrics }
     readonly property real columnPitch: cellWidth + cellGap
-    readonly property real rowPitch: cellHeight + cellGap
+    readonly property var rowGeometry: DesktopGridMetrics.rowLayout(
+        validHeight, cellHeight, cellGap)
+    readonly property real rowPitch: rowGeometry.pitch
     readonly property int columnCount: Math.max(1,
         Math.floor((validWidth + cellGap) / columnPitch))
-    readonly property int rowCount: Math.max(1,
-        Math.floor((validHeight + cellGap) / rowPitch))
+    readonly property int rowCount: rowGeometry.count
     readonly property int capacity: columnCount * rowCount
     readonly property real gridWidth: columnCount * cellWidth
         + Math.max(0, columnCount - 1) * cellGap
-    readonly property real gridOriginX: validX + validWidth - gridWidth
+    readonly property real gridOriginX: alignment === "left"
+        ? validX : validX + validWidth - gridWidth
     // `slots` is the durable layout. `previewSlots` is a private drag-time
     // layout: delegates animate it immediately, but it becomes durable only
     // when a valid drop is committed.
@@ -353,7 +356,8 @@ Item {
     }
 
     function pointForSlot(slot) {
-        const column = columnCount - 1 - Math.floor(slot / rowCount)
+        const column = DesktopGridMetrics.columnForSlot(slot, rowCount,
+            columnCount, alignment)
         const row = slot % rowCount
         return Qt.point(gridOriginX + column * columnPitch, validY + row * rowPitch)
     }
@@ -368,7 +372,8 @@ Item {
         const row = Math.floor(localY / rowPitch)
         if (column < 0 || column >= columnCount || row < 0 || row >= rowCount)
             return -1
-        return (columnCount - 1 - column) * rowCount + row
+        return DesktopGridMetrics.slotForCell(column, row, rowCount,
+            columnCount, alignment)
     }
 
     function pointInGap(pointX, pointY) {
@@ -945,6 +950,8 @@ Item {
         delegate: Item {
             id: delegateRoot
             required property var entry
+            required property int index
+            readonly property real arrival: StartupReveal.iconProgress(index, desktopEntryModel.count)
             readonly property string itemId: entry?.path || ""
             readonly property bool isFolder: entry && entry.kind === "folder"
             readonly property var folderCustom: root.folderCustomFor(itemId)
@@ -968,6 +975,7 @@ Item {
             Behavior on x {
                 enabled: root.initialized && !root.isActiveDragItem(delegateRoot.itemId)
                     && root.lastDropId !== delegateRoot.itemId
+                // motion-exception: Drag reflow retains its existing displacement response.
                 NumberAnimation { duration: 150; easing.type: Easing.OutCubic }
             }
             Behavior on y {
@@ -981,7 +989,7 @@ Item {
                 width: root.cellWidth
                 height: root.cellHeight
                 opacity: root.outboundDragStarted
-                        && root.isActiveDragItem(delegateRoot.itemId) ? 0 : 1
+                        && root.isActiveDragItem(delegateRoot.itemId) ? 0 : delegateRoot.arrival
                 z: dragHandler.active ? 100
                     : (root.isActiveDragItem(delegateRoot.itemId) ? 90 : 0)
                 Drag.dragType: Drag.Automatic
@@ -996,9 +1004,9 @@ Item {
                     x: root.isActiveDragItem(delegateRoot.itemId)
                             && delegateRoot.itemId !== root.activeDragSourceId
                         ? root.groupDragOffset.x : 0
-                    y: root.isActiveDragItem(delegateRoot.itemId)
+                    y: (root.isActiveDragItem(delegateRoot.itemId)
                             && delegateRoot.itemId !== root.activeDragSourceId
-                        ? root.groupDragOffset.y : 0
+                        ? root.groupDragOffset.y : 0) - (1 - delegateRoot.arrival) * 14
                 }
                 anchors {
                     horizontalCenter: parent.horizontalCenter
@@ -1028,10 +1036,10 @@ Item {
                     opacity: root.isSelected(delegateRoot.itemId)
                         || (hoverHandler.hovered && !dragHandler.active) ? 1 : 0
                     Behavior on color {
-                        ColorAnimation { duration: 120 }
+                        ColorAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                     Behavior on opacity {
-                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
                 }
 
@@ -1052,13 +1060,13 @@ Item {
                     transform: Translate {
                         y: hoverHandler.hovered && !dragHandler.active ? -2 : 0
                         Behavior on y {
-                            NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                            NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                         }
                     }
                     Behavior on scale {
-                        NumberAnimation { duration: 120; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
                     }
-                    Behavior on color { ColorAnimation { duration: 90 } }
+                    Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                     DesktopFolderIcon {
                         anchors.fill: parent
                         visible: delegateRoot.usesCustomFolderVisual
@@ -1106,11 +1114,34 @@ Item {
                             maskSource: fileThumbnailMask
                         }
                     }
+                    // Launchers are application artwork, so they follow the
+                    // shell-wide appearance mode like the Dock, the tray and
+                    // the launcher window do. In a layered icon theme that
+                    // also reaches the transparent and tinted modes, which
+                    // need the theme's clear artwork or its layer stack.
+                    // Plain files keep their MIME icon below.
+                    AppIcon {
+                        id: launcherAppIcon
+                        anchors.fill: parent
+                        anchors.margins: 4
+                        source: delegateRoot.entry && delegateRoot.entry.kind === "launcher"
+                            ? root.themeIconSource(delegateRoot.entry) : ""
+                        // Theme icon: synchronous, see AppIcon.qml.
+                        asynchronous: false
+                        opacityMultiplier: IconAppearanceService.mode === "color"
+                            ? 1.0 : IconAppearanceService.opacity
+                        saturation: IconAppearanceService.saturation
+                        tintEnabled: IconAppearanceService.tintEnabled
+                        tintColor: IconAppearanceService.tintColor
+                        visible: source !== "" && imageStatus === Image.Ready
+                            && !delegateRoot.usesCustomFolderVisual
+                    }
                     IconImage {
                         id: fileThemeIcon
                         anchors.fill: parent
                         anchors.margins: 4
-                        source: root.themeIconSource(delegateRoot.entry)
+                        source: delegateRoot.entry && delegateRoot.entry.kind === "launcher"
+                            ? "" : root.themeIconSource(delegateRoot.entry)
                         // Theme icon: synchronous, see AppIcon.qml.
                         asynchronous: false
                         visible: source !== "" && status === Image.Ready
@@ -1120,6 +1151,7 @@ Item {
                         anchors.centerIn: parent
                         name: root.iconFor(delegateRoot.entry ? delegateRoot.entry.kind : "")
                         visible: !fileThumbnailFrame.visible && !fileThemeIcon.visible
+                            && !launcherAppIcon.visible
                             && !delegateRoot.usesCustomFolderVisual
                         color: "white"
                         size: root.iconVisualSize * 0.68

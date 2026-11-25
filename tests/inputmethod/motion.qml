@@ -94,7 +94,11 @@ TestCase {
         verify(Math.abs(panel.progress - before) < 0.3)
         compare(panel.state.auxText, "英")
         tryCompare(panel, "progress", 1)
-        compare(panel.scale, 1)
+        // Geometry is spring-driven: it settles inside its epsilon instead of
+        // landing on exactly 1, so wait for the spring to stop before reading
+        // the scale it produces.
+        tryVerify(function() { return !panel.motion.geometry.animating })
+        verify(Math.abs(panel.scale - 1) < 0.002)
     }
 
     function test_same_turn_updates_commit_latest_content() {

@@ -19,6 +19,7 @@ Item {
         && (!WallpaperPreviewService.active || WallpaperPreviewService.mode === "image")
     visible: selectedOutput
     opacity: visualReady && !SpatialWallpaperService.activationPending ? 1 : 0
+    // motion-exception: Scene opacity is an ambient wallpaper crossfade.
     Behavior on opacity { NumberAnimation { duration: 500; easing.type: Easing.OutCubic } }
     function finishPresentation() {
         Qt.callLater(() => {
@@ -32,8 +33,14 @@ Item {
     // Sensitivity changes the input curve, not the renderer's camera limits.
     // Apply it once here so background, subject and preview stay registered.
     property real pointerSensitivity: 3
-    property real renderedPointerX: SpatialPointer.responsivePointer(pointerX, pointerSensitivity)
-    property real renderedPointerY: SpatialPointer.responsivePointer(pointerY, pointerSensitivity)
+    // Keep prepared assets and presentation readiness independent of motion:
+    // Settings may cover the desktop while spatial mode is being enabled.
+    readonly property bool motionRunning: active && SpatialWallpaperService.motionRunning
+    property real renderedPointerX: motionRunning
+        ? SpatialPointer.responsivePointer(pointerX, pointerSensitivity) : 0
+    property real renderedPointerY: motionRunning
+        ? SpatialPointer.responsivePointer(pointerY, pointerSensitivity) : 0
+    // motion-exception: Pointer filtering is part of depth parallax response.
     Behavior on renderedPointerX { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
     Behavior on renderedPointerY { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
 

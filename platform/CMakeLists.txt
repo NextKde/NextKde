@@ -224,6 +224,13 @@ if(BUILD_TESTING)
                 $<TARGET_FILE:kos-platform>)
         set_tests_properties(kos-platform.keep-awake PROPERTIES LABELS platform TIMEOUT 60)
 
+        qt_add_executable(kos-session-lock-test tests/test_session_lock.cpp)
+        target_link_libraries(kos-session-lock-test PRIVATE Qt6::Core Qt6::DBus Qt6::Network)
+        add_test(NAME kos-platform.session-lock
+            COMMAND ${DBUS_RUN_SESSION_EXECUTABLE} -- $<TARGET_FILE:kos-session-lock-test>
+                $<TARGET_FILE:kos-platform>)
+        set_tests_properties(kos-platform.session-lock PROPERTIES LABELS platform TIMEOUT 30)
+
         # The KWin conflict repair talks to kglobalaccel over the session bus,
         # so the test runs on a private bus under dbus-run-session with a fake
         # daemon: it proves both the bytes on the wire (a(ssssssaiai)) and the
@@ -284,6 +291,17 @@ if(BUILD_TESTING)
                 $<TARGET_FILE:kos-platform>
         )
         set_tests_properties(kos-platform.file-copy PROPERTIES
+            LABELS platform
+            TIMEOUT 60
+        )
+        # Desktop shortcuts are daemon-owned links to installed entries: the
+        # client names an id and never supplies a source or destination.
+        add_test(NAME kos-platform.desktop-shortcut
+            COMMAND ${KOS_PYTHON_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/tests/test_desktop_shortcut.py
+                $<TARGET_FILE:kos-platform>
+        )
+        set_tests_properties(kos-platform.desktop-shortcut PROPERTIES
             LABELS platform
             TIMEOUT 60
         )

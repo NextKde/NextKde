@@ -17,7 +17,7 @@ ControlCenterCard {
         pressed: bluetoothPagePointer.pressed || bluetoothTogglePointer.pressed
     }
     cardScale: bluetoothPagePointer.pressed ? 0.97 : bluetoothPagePointer.containsMouse ? 1.015 : 1
-    Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
+    Behavior on cardScale { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
     cardOpacity: bluetoothCard.service.bluetoothAvailable ? 1 : 0.48
     Rectangle {
         id: bluetoothToggleDisc
@@ -29,8 +29,8 @@ ControlCenterCard {
         opacity: bluetoothCard.service.bluetoothChangeInProgress ? 0.55 : 1.0
         scale: bluetoothTogglePointer.pressed ? 0.92
             : (bluetoothTogglePointer.containsMouse ? 1.04 : 1.0)
-        Behavior on color { ColorAnimation { duration: 140 } }
-        Behavior on scale { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
+        Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+        Behavior on scale { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         BundledIcon {
             id: controlBtGlyph
             anchors.centerIn: parent
@@ -38,7 +38,7 @@ ControlCenterCard {
             name: "bluetooth.control"
             color: ThemeService.tileGlyph
             opacity: bluetoothCard.service.bluetoothChangeInProgress ? 0 : 1
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         }
         // Powering BlueZ's adapter genuinely takes a second or more; a
         // flat opacity dim alone reads as "stuck", not "working". Spin an
@@ -49,7 +49,7 @@ ControlCenterCard {
             width: 21; height: 21
             opacity: bluetoothCard.service.bluetoothChangeInProgress ? 1 : 0
             visible: opacity > 0.01
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
             Canvas {
                 id: bluetoothBusyArc
@@ -78,6 +78,7 @@ ControlCenterCard {
                 running: bluetoothBusySpinner.visible && bluetoothCard.service.bluetoothChangeInProgress
                 loops: Animation.Infinite
                 from: 0; to: 360
+                // motion-exception: keep the 900ms loading rotation period.
                 duration: 900
             }
         }

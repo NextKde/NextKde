@@ -309,6 +309,7 @@ windowCount
 records           // runtime records, including the Toplevel reference
 revision          // increments after a rebuild
 activeWindowId
+stageActiveWindowId // actual tracked focus, or the tracked owner of a transient
 ```
 
 Window model roles:
@@ -360,6 +361,7 @@ access every individual window.
 ```js
 pinnedItems
 pinnedCount
+separatorCount
 windowModel
 windowCount
 activateApp(appId)
@@ -372,6 +374,8 @@ pinApp(appId)
 isAppPinned(appId)
 isAppActivated(appId)
 unpinApp(appId)
+addSeparatorAfter(appId)
+removeSeparator(id)
 movePinnedItem(type, key, targetIndex)
 ```
 
@@ -475,6 +479,12 @@ Card presentations keep the search header outside the scrolling app grid: the
 grid viewport starts below the header, so a scrolled row is clipped at that
 boundary instead of painting over the search field.
 
+Apps hidden from the app editor leave both the grid and search. A hidden-apps
+button appears at the left of the search header only while that list is
+non-empty; its panel restores rows through `unhideApplication`, and a restored
+app returns to its persisted `rootItems` slot. Hiding stays launcher-local
+presentation and never edits the desktop entry.
+
 `LauncherIconMotion.qml` drives tile position and scale from one animated
 progress value, with a separate 200 ms opacity track alongside the 300 ms
 spread. Both use GUI-thread `NumberAnimation`, as does the stationary glass
@@ -496,11 +506,11 @@ application-grid order in Dock configuration.
 File: `Quickshell.stateDir + "/dock/config.json"`. This keeps runtime user
 state outside the watched QML source directory.
 
-Core user configuration fields (schema version 12):
+Core user configuration fields (schema version 13):
 
 ```json
 {
-  "version": 12,
+  "version": 13,
   "baseHeight": 60,
   "theme": "dark",
   "position": "bottom",
@@ -508,6 +518,7 @@ Core user configuration fields (schema version 12):
   "iconOverrides": {},
   "dockItems": [
     { "type": "app", "appId": "org.kde.dolphin.desktop" },
+    { "type": "separator", "id": "sep-dolphin" },
     { "type": "app", "appId": "org.kde.kate.desktop" }
   ],
   "pinnedAppIds": [],
@@ -516,6 +527,7 @@ Core user configuration fields (schema version 12):
   "iconOpacity": 0.5,
   "iconTintColor": "#a855f7",
   "visibilityMode": "always",
+  "autoHideApps": [],
   "windowGrouping": "grouped",
   "showLauncher": true,
   "showTrash": true,
@@ -523,6 +535,39 @@ Core user configuration fields (schema version 12):
   "hoverScale": null
 }
 ```
+
+Schema 13 stores user separators in `dockItems` as
+`{ "type": "separator", "id": "<unique>" }`, in the pinned-app run only.
+Every mutation goes through `setDockItems`. Older files need no migration:
+normalization still drops unknown types, keeps separators, and never removes
+a pinned app to accommodate them. `DockModelService` hides separators that
+lead or trail the pinned run, adjacent duplicates, and separators left
+without a neighbouring pinned app (including after a separate-mode app moves
+into the window section). Simply reading the model does not rewrite the saved
+list. "Add separator to the right" is offered only when the next visible pinned
+item is an application, so the last icon and an icon that already has a
+separator on its right do not store a hidden one. Reorder and unpin then
+compact storage: a separator left at either end, or squeezed against another
+separator, is deleted rather than kept invisible. The separator reuses
+`DockDivider` — theme hairline, rotated with `contentRow`, so a side dock
+draws it horizontally. Its slot is one icon spacing plus half a spacing on
+each side, with a 12 px floor so the hairline keeps a usable grab area when
+the adaptive layout shrinks the Dock; `computeLayout` reserves that width
+plus the row gap. Separators reorder with pinned icons, strictly along the
+dock: perpendicular pointer travel is ignored and the slot stays inside the
+bar. They are removed only from their own menu. They do not magnify, show
+a name, or take a highlight.
+A pinned app's menu can add one to its right; a separator's menu only removes it.
+Schema 13 adds `autoHideApps`, an empty-by-default list of canonical desktop
+IDs. Settings exposes it under **Dock app bar** with the same icon/list controls
+as window-button exclusions: select a running application or enter an app class,
+then add/remove it through `dock-settings.updateAutoHideApp(appId, enabled)`.
+The Shell resolves aliases with `AppIdentityService`, rejects invalid inputs and
+mutations before configuration readiness, and returns the confirmed list. Dock
+snapshots also supply running apps with canonical IDs; Settings never compares
+these rules with the foreground scheduler's raw window classes. App edits use
+an independent pending acknowledgement, so unrelated replies cannot acknowledge
+them. Failed IPC leaves the confirmed list and manual input unchanged.
 
 Schema 12 keeps one `hoverScale` setting: the hovered icon's peak scale
 (1.0–3.0, displayed as 100–300%). Lift is derived as
@@ -574,8 +619,14 @@ dimensions without reserving orphan dividers; an entirely empty Dock has zero
 height.
 
 `kos-shell.dock-builtins` checks defaults, independent changes and persistence
-across a reload. `kos-settings.builtin-checkboxes` uses the actual Settings page
-with a simulated bridge to exercise clicks, pending state, failed replies and
+across a reload, including canonical app rules, duplicate/invalid input and
+removal. `kos-dock.policy` covers app-rule eligibility and effective-mode
+restoration. The `reveal` runtime scenario covers initial window readiness,
+edge reveal, app add/remove, minimize/restore, desktop/output moves and closure.
+The `surface` scenario checks boot and effective-mode workspace reservation on
+all three edges, including temporary reveal while an app rule is active.
+`kos-settings.builtin-checkboxes` uses the actual Settings page with a simulated
+bridge to exercise clicks, app add/remove, pending state, failed replies and
 later snapshots. It runs when Qt's `qmltestrunner` is installed. Adaptive layout
 tests cover information-only, accessory-only and empty content.
 
@@ -611,6 +662,26 @@ watched QML source tree.
 `always`, `smart` (hide only when a window overlaps the Dock area), or
 `persistent` (stay hidden regardless of windows). Never persist separate
 booleans for these; that only produces illegal combinations.
+
+`autoHideApps` temporarily selects the controller's `persistent` effective mode
+when a listed app has a non-minimized, visible window on this output and current
+desktop (including all-desktop windows). It need not overlap the Dock or be
+focused. Matching uses the canonical identity in `WindowService.records` through
+`AppIdentityService.sameApp`; geometry/desktop eligibility stays in
+`DockAutoHideMath`. Missing placement data does not hide an unrelated output.
+Closing, minimizing or moving the last matching window away restores the saved
+mode; a tray-only/background process does not activate a rule. Pointer, popup,
+editing and launcher holds still reveal the Dock, including edge hover/click.
+The initial reveal waits for window data when the list is nonempty, bounded by
+the existing boot timeout. App presence is checked even before Dock dimensions
+are ready. Urgent reveal requests refresh app matching before testing the
+effective mode, since presentation events can precede placement events. The layer-shell reservation and published workspace
+gap follow the effective mode, not animation progress, so temporary reveals do
+not resize windows. `WorkspaceLayoutService` also forwards the optional
+`kwin.layout.update.dockReserved` flag through the daemon to the KWin script;
+clearing only the gap would still leave the full Dock rectangle reserved for
+initial placement. Update all three runtime components together. The configured
+`visibilityMode` is never rewritten.
 
 The hidden Dock reveals only along its own footprint: a hidden Dock responds in
 a 2 logical-pixel strip at the screen edge, over the Dock's actual span, and the
@@ -660,7 +731,7 @@ Non-negotiable invariants:
    hint likewise submits no blur region.
 3. Input is shaped by `DockWindow.mask`: the union of the Dock hit region and
    the handle hit target. All other transparent surface area must pass clicks
-   through. In `always` mode the handle hit target is zero-sized.
+   through. In effective `always` mode the handle hit target is zero-sized.
    A hidden Dock only responds in a **2 logical-pixel strip at the screen edge,
    along the Dock's actual span**. The rest of that edge, and the Dock's future
    footprint above it, remain pass-through. The span follows layout changes and
@@ -676,11 +747,12 @@ Non-negotiable invariants:
    must release its controller hold if the pointer is no longer inside. The
    decorative pill is centred on the Dock's rectangle; it never defines the
    input region.
-4. Dock `exclusiveZone` reserves its full-reveal strip only in `always` mode.
-   That mode also gives newly opened windows the same `workspaceGap` as the
-   Dock's screen-edge float, preserving visible breathing room. Smart and
-   persistent modes publish both values as `0`, so revealing or hiding the
-   Dock never reflows windows or leaves an invisible placement gap.
+4. Dock `exclusiveZone` reserves its full-reveal strip only in effective
+   `always` mode after boot resolves. That mode also gives newly opened windows
+   the same `workspaceGap` as the Dock's screen-edge float, preserving visible
+   breathing room. Effective smart/persistent modes publish both values as `0`,
+   including an active application rule. Edge-triggered reveals never change
+   those reservations or reflow windows.
 5. Editing, dragging, any `DockModelService.activeDockPopup`, an open App
    Launcher, pointer-inside, or a temporary reveal hold are inhibitors that
    force the Dock visible; popups must join the `activeDockPopup` coordinator
@@ -709,7 +781,8 @@ left-click behavior is unchanged.
 Current context menu actions call service methods:
 
 ```text
-Pinned App:  activateApp, unpinApp
+Pinned App:  activateApp, unpinApp, addSeparatorAfter
+Separator:   removeSeparator
 Window:      activateWindow, minimizeWindow, closeWindow, pinApp/unpinApp
 ```
 
@@ -733,6 +806,39 @@ order. It must not reuse the Dock's visual order or pinned list.
 Use `WindowService.records` with the Stage grouping policy; provider-specific
 workspace data stays optional runtime metadata. Do not put Hyprland workspace IDs into the
 canonical app identity or persisted pinned records.
+
+`WindowFamily.mjs` resolves ownership before publishing a window revision.
+Records retain their original application identity and expose `familyKey`,
+`ownerWindowId`, `ownerHandleId`, `familyReason` and `familyPending` separately.
+The KWin bridge supplies the nearest tracked transient parent, walking through
+filtered dialogs. `stageActiveWindowId` follows that parent when an untracked
+dialog has focus, without changing Dock's `activeWindowId` semantics.
+
+For top-level helpers that omit a transient parent, the existing asynchronous
+process probe reads a bounded ancestor chain. The nearest ancestor owning a
+window is accepted only when its process start stamp matches, both executables
+share a private application directory, and the helper has no different visible
+desktop entry. Hidden (`NoDisplay`) helper launchers still require both ancestry
+and directory evidence. System directories, general runtimes, ambiguous owners and
+independent applications do not qualify. This is conservative inference: when
+evidence is unavailable the normal application grouping remains in effect.
+No application names or helper-specific aliases are hard-coded.
+
+Process evidence expires when its live window generation disappears; stale
+replies cannot populate a recycled PID's cache. While evidence is pending,
+automatic demotion waits. Probes have a one-second deadline, and even failure
+settles the record and resumes scheduling. Family changes increment the
+presentation revision and re-evaluate collection without needing a focus change.
+
+Stage uses one family-aware predicate for focus changes, automatic collection,
+card activation and the delayed minimize queue. Dispatch rechecks the current
+family; automatic batches also carry the expected compositor focus so KWin can
+discard a batch made stale in its command queue. Explicit desktop collection
+and user minimization retain their semantics, including sidebar access to a
+manually minimized sibling. New children inherit their owner's manual group.
+`stage-sidebar familyState` exposes title-free ownership diagnostics.
+Regression coverage lives in `tests/window-family` (production decision paths,
+process lifetime, compositor guards and real QML process execution).
 
 The Stage drawer checks overlap and fullscreen windows on
 `WindowService.currentDesktopId`, including windows on all desktops. Windows

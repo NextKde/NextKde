@@ -1,5 +1,6 @@
 import "../../../shared/qml/i18n"
 import QtQuick
+import Kos.Demo as Demo
 import Kos.Icons as Symbols
 
 Rectangle {
@@ -31,7 +32,7 @@ Rectangle {
     border.width: selected ? 3 : 1
     border.color: selected ? accent
         : tileMouse.containsMouse ? "#80ffffff" : "#30ffffff"
-    Behavior on border.color { ColorAnimation { duration: 150 } }
+    Behavior on border.color { ColorAnimation { duration: Demo.AppTheme.motion.base.duration; easing.type: Demo.AppTheme.motion.enterCurve } }
 
     // 缩略图直出:无 MultiEffect、无蒙版图层——圆角已按设备像素烘进缓存图
     // (角外透明),这是"展开全部"模型下免掉每瓦片一层 FBO 的关键。未命中

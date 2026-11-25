@@ -75,6 +75,7 @@ JsonlClient {
         "keepawake.get": true,
         "platform.ping": true,
         "state.read": true,
+        "system.timezone": true,
         "tray.identify": true
     })
     // Per-operation expiry overrides for requests whose legitimate duration

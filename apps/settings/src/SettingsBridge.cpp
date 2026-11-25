@@ -6,6 +6,8 @@
 #include <QThread>
 #include <QTimer>
 
+#include "../../../shared/i18n/SystemLanguage.h"
+
 SettingsBridge::SettingsBridge(QObject* parent)
     : QObject(parent)
     , m_shellClient(this)
@@ -28,11 +30,16 @@ SettingsBridge::SettingsBridge(QObject* parent)
         &SettingsBridge::galleryImportProgress);
     connect(&m_wallpaperLibrary, &WallpaperLibrary::galleryImportFinished, this,
         &SettingsBridge::galleryImportFinished);
+    // Taken before the window loads so its first frame can use the saved
+    // language; the Shell's own i18n snapshot then confirms the value.
+    m_savedLanguage = Kos::I18n::persistedChoice();
 }
 
 SettingsBridge::~SettingsBridge() = default;
 
 QString SettingsBridge::lastError() const { return m_lastError; }
+
+QString SettingsBridge::savedLanguage() const { return m_savedLanguage; }
 
 bool SettingsBridge::isDevelopmentSession() const
 {
@@ -114,6 +121,10 @@ void SettingsBridge::handleReply(RequestKind kind, const QString& payload)
         emit dockRevealIndicatorVisibilityChanged(latestDockState(payload));
         finishDockRequest();
         break;
+    case RequestKind::DockAutoHideApp:
+        emit dockAutoHideAppChanged(latestDockState(payload));
+        finishDockRequest();
+        break;
     case RequestKind::Appearance:
         emit appearanceSnapshotChanged(appearanceSnapshotFromReply(payload));
         break;
@@ -153,6 +164,7 @@ void SettingsBridge::handleReply(RequestKind kind, const QString& payload)
                 apps.append(QVariantMap {
                     { QStringLiteral("name"), o.value(QStringLiteral("name")).toString() },
                     { QStringLiteral("appId"), o.value(QStringLiteral("appId")).toString() },
+                    { QStringLiteral("windowClasses"), o.value(QStringLiteral("windowClasses")).toArray().toVariantList() },
                 });
             }
         }
@@ -203,6 +215,10 @@ void SettingsBridge::failKind(RequestKind kind)
         break;
     case RequestKind::DockRevealIndicatorVisibility:
         emit dockRevealIndicatorVisibilityChanged({ });
+        finishDockRequest();
+        break;
+    case RequestKind::DockAutoHideApp:
+        emit dockAutoHideAppChanged({ });
         finishDockRequest();
         break;
     case RequestKind::Appearance:

@@ -226,12 +226,17 @@ function safeAreaForLayout(layout) {
     let top = output.y + Math.min(output.height, reserved);
     let right = output.x + output.width;
     let bottom = output.y + output.height;
-    if (layout.dockPosition === "left")
-        left = Math.max(left, dock.x + dock.width + gap);
-    else if (layout.dockPosition === "right")
-        right = Math.min(right, dock.x - gap);
-    else
-        bottom = Math.min(bottom, dock.y - gap);
+    // Keep the full-reveal geometry for other consumers, but hidden modes
+    // must not leave an invisible strip in one-time window placement either.
+    // Omission preserves the v1 contract for older Shell clients.
+    if (layout.dockReserved !== false) {
+        if (layout.dockPosition === "left")
+            left = Math.max(left, dock.x + dock.width + gap);
+        else if (layout.dockPosition === "right")
+            right = Math.min(right, dock.x - gap);
+        else
+            bottom = Math.min(bottom, dock.y - gap);
+    }
 
     return {
         x: left,
@@ -310,7 +315,8 @@ function updateLayout(command) {
         barReservedHeight: Math.max(0, Number(command.barReservedHeight) || 0),
         dockPosition: String(command.dockPosition || "bottom"),
         dockRect: normalizedRect(command.dockRect),
-        workspaceGap: Math.max(0, Number(command.workspaceGap) || 0)
+        workspaceGap: Math.max(0, Number(command.workspaceGap) || 0),
+        dockReserved: command.dockReserved !== false
     };
     return true;
 }
@@ -534,6 +540,22 @@ function includeWindow(window) {
         && !isKWinInternalWindow;
 }
 
+// Dialogs and skip-taskbar surfaces can sit between two tracked windows.
+// Follow the compositor's actual relationship, never captions or app names.
+function trackedParentId(window) {
+    const seen = {};
+    if (window) seen[windowId(window)] = true;
+    for (let depth = 0; window && depth < 32; depth++) {
+        window = propertyValue(window, "transientFor", null);
+        if (!window || window.deleted) return "";
+        const id = windowId(window);
+        if (!id || seen[id]) return "";
+        seen[id] = true;
+        if (includeWindow(window)) return id;
+    }
+    return "";
+}
+
 // The ids of the virtual desktops a window is on. KWin scripting exposes
 // `window.desktops` as a list of VirtualDesktop objects with an id; some
 // versions expose bare id strings, so accept both shapes.
@@ -654,14 +676,20 @@ function snapshot() {
         }
     }
     const windows = [];
+    let activeOwnerId = "";
     for (let i = 0; i < all.length; i++) {
         const window = all[i];
+        if (window && !window.deleted && windowId(window) === activeId)
+            activeOwnerId = trackedParentId(window);
         if (!includeWindow(window))
             continue;
         windows.push({
             id: windowId(window),
+            parentId: trackedParentId(window),
             pid: Number(propertyValue(window, "pid", 0)),
             appId: String(window.desktopFileName || window.resourceClass || window.resourceName || ""),
+            // Button exclusions match resourceClass, not the desktop entry ID.
+            resourceClass: String(window.resourceClass || window.resourceName || ""),
             title: String(window.caption || ""),
             // Normalized against the authoritative activeId above: one frame
             // must never mix a stale window.active with fresh minimized.
@@ -691,6 +719,7 @@ function snapshot() {
         });
     }
     const json = JSON.stringify({ type: "snapshot", activeId: activeId,
+        activeOwnerId: activeOwnerId,
         activeDesktop: activeOnDesktopSurface, windows: windows });
     if (json === lastSnapshotJson)
         return;
@@ -974,6 +1003,17 @@ function handleCommand(serialized) {
     }
 
     if (command.action === "minimize-group") {
+        // An automatic batch may wait in the bridge after Shell validated it.
+        // A newer focus invalidates that batch. Explicit desktop collection and
+        // user minimization omit the guard and retain their original semantics.
+        if (typeof command.expectedActiveId === "string") {
+            const current = workspace.activeWindow;
+            if ((current ? windowId(current) : "") !== command.expectedActiveId) {
+                publishAction(command, false);
+                publishSnapshotNow();
+                return;
+            }
+        }
         // 桌面收编/整组退位的原子最小化：N 窗一条命令一个轮询拍内完成。
         // 逐窗命令按桥 50ms/条排队能把 N 窗收编拖到 N*50ms 之后——比
         // 显示桌面开关的 400ms 防抖还长，快速第二击会在管线中途插进来
@@ -1086,7 +1126,8 @@ function watchWindow(window) {
         return;
     const watchedId = windowId(window);
     const metadataSignals = [
-        "captionChanged", "desktopFileNameChanged", "activeChanged",
+        "captionChanged", "desktopFileNameChanged", "windowClassChanged", "activeChanged",
+        "transientChanged",
         "minimizedChanged", "fullScreenChanged", "demandsAttentionChanged",
         "skipTaskbarChanged", "skipSwitcherChanged", "hiddenChanged",
         "maximizedChanged", "maximizeModeChanged", "desktopsChanged"

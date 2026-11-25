@@ -23,7 +23,7 @@ NextKde/
 │   ├── ai/                   portable C++ local inference library (kos-ai)
 │   └── data-service/         Go metrics/history/desktop service
 ├── platform/                 kos-platform C++/Qt daemon
-├── kwin/                     project-owned KWin plugins, bridge script, and glass-effect
+├── kwin/                     project-owned KWin plugins, bridge script, and glass
 ├── packaging/                systemd, desktop files, and the nix packages
 ├── tools/kosctl              lifecycle entry point
 └── docs/                     architecture and operational docs

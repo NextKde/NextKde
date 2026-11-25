@@ -12,7 +12,16 @@ try {
     writeFileSync(join(directory, "InputMethodPresentation.qml"),
         readFileSync(new URL("inputmethod/InputMethodPresentation.qml", source), "utf8")
             .replace("import qs.desktop.modules.common", 'import "."'));
-    copyFileSync(new URL("common/PopupMotion.qml", source), join(directory, "PopupMotion.qml"));
+    // PopupMotion reaches the shell's foundation module through the Kos/Ui
+    // symlink, which does not exist next to this fixture. Ship the three
+    // self-contained files that make up its spring channel, import the fixture
+    // directory and drop the namespace the missing module used to provide.
+    writeFileSync(join(directory, "PopupMotion.qml"),
+        readFileSync(new URL("common/PopupMotion.qml", source), "utf8")
+            .replace('import "../../../Kos/Ui/foundation" as Foundation', 'import "."')
+            .replaceAll("Foundation.SpringMotion", "SpringMotion"));
+    for (const name of ["SpringMotion.qml", "MotionSpring.qml", "MotionSpring.mjs"])
+        copyFileSync(new URL("../../shared/qml/foundation/" + name, import.meta.url), join(directory, name));
     copyFileSync(new URL("inputmethod/InputMethodPlacement.mjs", source), join(directory, "InputMethodPlacement.mjs"));
     writeFileSync(join(directory, "InputMethodService.qml"),
         readFileSync(new URL("inputmethod/InputMethodService.qml", source), "utf8")
@@ -80,15 +89,27 @@ QtObject {
     property var records: []
 }
 `);
+    copyFileSync(new URL("../../shared/qml/foundation/MotionTokens.qml", import.meta.url), join(directory, "MotionTokens.qml"));
     writeFileSync(join(directory, "AppearanceTokens.qml"), `pragma Singleton
 import QtQuick
 QtObject {
-    property QtObject motion: QtObject {
-        property int popupOpenDuration: 150
-        property int popupCloseDuration: 140
+    property MotionTokens motion: MotionTokens {
+        property int popupOpenDuration: base.duration
+        property int popupCloseDuration: base.duration
     }
 }
 `);
+    // PopupMotion also asks the appearance service whether motion is reduced.
+    // The real singleton belongs to the common module, which this fixture does
+    // not load, so it ships the one flag that is read.
+    writeFileSync(join(directory, "AppearanceConfigService.qml"), `pragma Singleton
+import QtQuick
+QtObject {
+    property bool reduceMotion: false
+}
+`);
+    writeFileSync(join(directory, "qmldir"), readFileSync(join(directory, "qmldir"), "utf8")
+        + "singleton AppearanceConfigService 1.0 AppearanceConfigService.qml\n");
     const result = spawnSync(process.argv[2] || "qmltestrunner", ["-input", directory], {
         encoding: "utf8", timeout: 20000,
         env: { ...process.env, QT_QPA_PLATFORM: "offscreen", QT_QUICK_BACKEND: "software",

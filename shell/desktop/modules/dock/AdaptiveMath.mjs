@@ -63,11 +63,14 @@ function clamp(value, min, max) {
 //   screenWidth — current screen width in pixels
 //   hasAccessories — retain height and edge padding for an accessory-only row;
 //                    the caller adds the accessories' reserved widths.
+//   separatorCount — user-placed separators in the pinned run. Each slot is
+//                    one icon spacing plus half a spacing on each side, and
+//                    the row still inserts its normal gap on either side.
 //
 // Returns: {
 //   dockHeight, iconSize, dockWidth,
 //   itemSpacing, hPadding, vPadding, dividerMargin,
-//   iconUnits, infoUnits, dividerCount
+//   iconUnits, infoUnits, dividerCount, separatorCount
 // }
 // The Dock length remains content-driven, but it must never exceed a ratio
 // of the available screen length (width on a bottom dock, height on a side
@@ -81,7 +84,8 @@ export function computeLayout(
     proportions = {},
     maxLengthRatio = MAX_WIDTH_RATIO,
     infoUnitsOverride = INFO_UNITS,
-    hasAccessories = false
+    hasAccessories = false,
+    separatorCount = 0
 ) {
     const p = {
         vpad:    Number.isFinite(Number(proportions?.vpad))    ? Number(proportions.vpad)    : DEFAULT_PROPORTIONS.vpad,
@@ -106,11 +110,15 @@ export function computeLayout(
     // hidden boundary made sparse docks a few pixels wider than their content.
     const dividerCount = (pinnedCount > 0 && windowCount > 0 ? 1 : 0)
         + (hasInfoSlot && pinnedCount + windowCount > 0 ? 1 : 0)
+    const requestedSeparators = Math.floor(Number(separatorCount))
+    const separators = Number.isFinite(requestedSeparators)
+        ? Math.max(0, requestedSeparators) : 0
 
     // ── Item counts ──
     const appIconCount = pinnedCount + windowCount
     const iconUnits = appIconCount + infoUnits
-    const itemCount = pinnedCount + windowCount + dividerCount + (hasInfoSlot ? 1 : 0)
+    const itemCount = pinnedCount + windowCount + dividerCount
+        + (hasInfoSlot ? 1 : 0) + separators
 
     // Guard: nothing to show
     if (iconUnits <= 0 && !hasAccessories) {
@@ -118,7 +126,7 @@ export function computeLayout(
             dockHeight: 0, iconSize: 0, dockWidth: 0,
             itemSpacing: 0, hPadding: 0, vPadding: 0, dividerMargin: 0,
             pillRadius: 0, activeBackgroundGap: 0,
-            iconUnits: 0, infoUnits: 0, dividerCount: 0
+            iconUnits: 0, infoUnits: 0, dividerCount: 0, separatorCount: 0
         }
     }
 
@@ -131,12 +139,14 @@ export function computeLayout(
     //   (itemCount-1)    : gaps between adjacent items in the Row
     //   2*dividerCount   : margin on each side of each divider
     //   2                : left + right edge padding
+    //   2*separators     : user separator slot = spacing + half spacing each side
     const scaleFactor =
           iconUnits
         + (appIconCount + (hasInfoSlot ? 1 : 0)) * 2 * activeGapRatio
         + Math.max(0, itemCount - 1) * p.spacing
         + 2 * dividerCount * p.divmargin
         + 2 * p.hpad
+        + separators * 2 * p.spacing
 
     const fixedOverhead = dividerCount * DEFAULT_PROPORTIONS.dividerWidth
 
@@ -181,7 +191,21 @@ export function computeLayout(
         iconUnits,
         infoUnits,
         dividerCount,
+        separatorCount: separators,
     }
 }
 
-export { MIN_ICON_SIZE, MAX_HEIGHT_RATIO, MAX_WIDTH_RATIO }
+// User separator slot: the icon gap, plus half a gap on each side, with a
+// pixel floor so the 2px hairline keeps a usable grab area when the adaptive
+// layout shrinks the Dock. The floor is applied in DockContainer.restingDockWidth
+// as well, because computeLayout reserves this slot in icon units.
+const MIN_SEPARATOR_SLOT = 12
+
+export function separatorSlotWidth(itemSpacing) {
+    const spacing = Number(itemSpacing)
+    if (!Number.isFinite(spacing) || spacing <= 0)
+        return 0
+    return Math.max(MIN_SEPARATOR_SLOT, spacing + spacing / 2 + spacing / 2)
+}
+
+export { MIN_ICON_SIZE, MIN_SEPARATOR_SLOT, MAX_HEIGHT_RATIO, MAX_WIDTH_RATIO }

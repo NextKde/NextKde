@@ -126,6 +126,7 @@ PanelWindow {
     DockAutoHideController {
         id: hide
         mode: ConfigService.visibilityMode
+        autoHideApps: ConfigService.autoHideApps
         configReady: ConfigService.ready
         windowDataReady: WindowService.providerReady
         position: root.position
@@ -146,7 +147,10 @@ PanelWindow {
     // the height plus the inset that keeps the glass off the physical edge.
     // Floating mode also reserves its proportional inner breathing space;
     // taskbar mode remains a flush edge fill.
-    exclusiveZone: ConfigService.visibilityMode === "always"
+    readonly property bool reservesWorkspace: hide.phase !== "Bootstrapping"
+        && hide.effectiveMode === "always"
+    onReservesWorkspaceChanged: layoutPublishTimer.restart()
+    exclusiveZone: root.reservesWorkspace
         ? (root.vertical
             ? dockContainer.width + root.edgeMargin + root.workspaceMargin
             : dockContainer.height + root.edgeMargin + root.workspaceMargin)
@@ -226,7 +230,7 @@ PanelWindow {
         WorkspaceLayoutService.updateDock(root.screen, root.position, {
             x: root.workspaceDockRect.x, y: root.workspaceDockRect.y,
             width: root.workspaceDockRect.width, height: root.workspaceDockRect.height
-        }, root.workspaceMargin)
+        }, root.reservesWorkspace ? root.workspaceMargin : 0, root.reservesWorkspace)
     }
 
     Timer {
@@ -262,11 +266,12 @@ PanelWindow {
         // Slide along toward the edge as revealProgress reaches 0. The mask
         // region (dockHitRegion) shares these exact coordinates so input tracks
         // the moving glass.
-        x: hide.offsetX + root.restX
-        y: hide.offsetY + root.restY
+        x: hide.offsetX + root.restX + (root.vertical
+            ? (root.position === "left" ? -1 : 1) * StartupReveal.dockOffset * 28 : 0)
+        y: hide.offsetY + root.restY + (root.vertical ? 0 : StartupReveal.dockOffset * 28)
         width: dockContainer.width
         height: dockContainer.height
-        opacity: hide.dockOpacity
+        opacity: hide.dockOpacity * StartupReveal.dockProgress
         scale: hide.dockScale
         transformOrigin: root.vertical
             ? (root.position === "right" ? Item.Right : Item.Left)
@@ -310,6 +315,8 @@ PanelWindow {
             // the published region to the wrapper, whose x/y carry the capsule's
             // offset in this surface.
             blurAnchor: dockWrapper
+            materialOpacity: StartupReveal.dockProgress
+            pointerEffects: AppearanceConfigService.pointerEffectsFor("dock")
         }
 
         DockContainer {

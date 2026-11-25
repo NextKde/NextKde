@@ -15,6 +15,7 @@
 #include <memory>
 #include <optional>
 
+#include "adjustbar.h"
 #include "buttonglyph.h"
 #include "buttonconfig.h"
 #include "titlebarmetrics.h"
@@ -86,6 +87,7 @@ public:
     // something else happens to repaint it.
     void repaintPanels(KWin::EffectWindow *a, KWin::EffectWindow *b);
     void contentChanged(KWin::EffectWindow *window);
+    void captionChanged(KWin::EffectWindow *window, const AppConfig &config);
 
     // ---- the tiling menu --------------------------------------------------
     //
@@ -151,6 +153,12 @@ public:
     // the adjust ring and suppresses the hover ring.
     void setAdjusting(KWin::EffectWindow *, bool adjusting);
     bool adjusting(KWin::EffectWindow *) const;
+    void setAdjustOptions(KWin::EffectWindow *, OverlayMode mode,
+                          MatchScope scope, bool canToggleScope,
+                          bool hasRole, bool hasExistingRule);
+    bool adjustBarContains(const QPointF &logicalPos) const;
+    std::optional<AdjustAction> adjustBarActionAt(const QPointF &logicalPos) const;
+    void setAdjustBarHovered(const QPointF &logicalPos);
 
     // Drop cached geometry for a window that has gone away.
     void forget(KWin::EffectWindow *window);
@@ -170,11 +178,17 @@ public:
     QJsonObject controlDiagnostics(KWin::EffectWindow *) const;
     int samplingWindowCount() const { return m_cache.size(); }
 
-Q_SIGNALS:
-    void sourceRepaint(const QRectF &region);
+    // Whether this window carries any panel state that a caption change could
+    // move: a sampled tint or published hit rects. A caption can change at
+    // frame rate (a terminal's title), and the handler that reacts to it only
+    // has to resolve the window's configuration when there is panel state to
+    // repaint; otherwise the next paint resolves it anyway.
+    bool tracksWindow(KWin::EffectWindow *window) const
+    {
+        return m_cache.contains(window) || m_hits.contains(window);
+    }
 
 private:
-    static ButtonRenderer *s_instance;
     // The light drawn in each of the three positions, left to right. `Type` is
     // what a light *is* -- its colour, its glyph, the action it performs -- and
     // where it sits is a separate decision, so the order lives in this one
@@ -240,6 +254,8 @@ private:
 
     KWin::GLTexture *tileMenuTexture(qreal scale, bool dark, std::optional<TilePreset> hovered);
     QImage buildTileMenu(qreal scale, bool dark, std::optional<TilePreset> hovered) const;
+    KWin::GLTexture *adjustBarTexture(qreal scale, const AdjustBarLayout &layout,
+                                      const AdjustBarState &state);
 
     // Blit one of this effect's textures over a rectangle of the frame, clipped
     // to the part of the window that is actually being painted. The panel and
@@ -248,7 +264,8 @@ private:
     void blit(const KWin::RenderViewport &viewport, const KWin::Region &clip,
               const QRectF &logicalRect, KWin::GLTexture *texture,
               const QColor &modulation = Qt::white,
-              bool sameFrameTint = false, bool tintBackground = true);
+              bool sameFrameTint = false, bool tintBackground = true,
+              qreal opacity = 1.0, qreal brightness = 1.0);
 
     // The light that opens the tiling menu: the one that performs Action::Maximize.
     // Found through typeAt() so that reordering the panel moves the menu's
@@ -293,6 +310,10 @@ private:
 
     struct HitRects {
         bool cooperative = false;
+        // A transparent overlay draws no plate, so gaps between the lights
+        // stay the application's drag area -- except while that window is
+        // being adjusted, when the whole draft panel has to remain grabbable.
+        OverlayMode overlayMode = OverlayMode::Cover;
         QPointF windowOrigin;
         // The drawn panel, and the pointer area it claims: the panel expanded
         // by the intercept margin, never beyond the window's own edge.
@@ -330,8 +351,24 @@ private:
     // committed. Survives invalidateAll(): it belongs to a session that is still
     // running, and a configuration reload is not a reason to throw away what
     // the user is in the middle of doing.
+    struct AdjustOptions {
+        OverlayMode mode = OverlayMode::Cover;
+        MatchScope scope = MatchScope::Window;
+        bool canToggleScope = true;
+        bool hasRole = false;
+        bool hasExistingRule = false;
+    };
+    struct AdjustBarCache {
+        KWin::EffectWindow *window = nullptr;
+        AdjustBarLayout layout;
+        AdjustBarState state;
+        bool hasLayout = false;
+    };
+
     QHash<KWin::EffectWindow *, PanelGeometry> m_pending;
     QSet<KWin::EffectWindow *> m_adjusting;
+    QHash<KWin::EffectWindow *, AdjustOptions> m_adjustOptions;
+    AdjustBarCache m_adjustBar;
 
     KWin::EffectWindow *m_hoverWindow = nullptr;
     Action m_hovered = Action::None;

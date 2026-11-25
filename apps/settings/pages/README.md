@@ -14,7 +14,9 @@ No registry, dependency container or second IPC protocol is introduced.
 - `colors` is a required palette object: the semantic color roles and
   `role(name, fallback)` supplied by the root. Pages must not access the root's
   `theme` id. `materialForm` is a presentation input where applicable.
-- About takes `colors` and an optional application-owned `cache`, with no Shell bridge. Isolated consumers can set
+- About takes `colors`, an optional application-owned `cache` and an optional `updateBackend`
+  (`state`/`busy`/`available`/… plus `check()`, `update()`, `restart()`, `openLog()`; `null` keeps the
+  page loadable alone), with no Shell bridge. Isolated consumers can set
   `loadContributors: false` before creation to suppress automatic GitHub requests.
 - `bridge` is the existing SettingsBridge interface, explicitly injected by the
   root; `null` means unavailable. Pages retain their existing method and snapshot
@@ -22,8 +24,12 @@ No registry, dependency container or second IPC protocol is introduced.
   existing WindowSettings object. Neither dependency is discovered from context
   properties inside extracted pages. The window appearance page also receives
   `bridge` for on-demand running-app discovery through `fgSchedRunningApps()`;
-  its per-app button exclusions use the raw KWin app ID and retain a manual
-  exact-class fallback when Shell IPC is unavailable. A separate refresh action
+  its per-app button exclusions use the actual KWin resource classes, carried
+  separately from desktop entry IDs through `windowClasses`. Running apps remain
+  grouped by app ID and adding an app excludes each reported class. Desktop IDs
+  still supply names and icons; they must never substitute for missing classes.
+  Older Shell replies without classes leave the manual exact-class entry available.
+  A separate refresh action
   remains available when the list is populated and preserves the selected app
   by ID. The selected app and exclusion rows show desktop-entry/theme icons,
   with a generic fallback; action icons retain accessible names and Demo tooltips.

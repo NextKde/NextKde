@@ -56,13 +56,19 @@ Item {
         anchors { left: ring.right; leftMargin: 10; right: parent.right; verticalCenter: parent.verticalCenter }
         spacing: 3
         Text {
+            width: parent.width
             text: root.label
+            elide: Text.ElideRight
             color: ThemeService.foregroundColor
             font { family: AppearanceTokens.typography.textFamily; pixelSize: 13; weight: Font.DemiBold }
         }
         Text {
             width: parent.width
             text: root.detail
+            // "used / total" rarely fits beside the ring on one line; break it
+            // after the slash instead of cutting the total off.
+            wrapMode: Text.WordWrap
+            maximumLineCount: 2
             elide: Text.ElideRight
             color: Qt.rgba(ThemeService.foregroundColor.r, ThemeService.foregroundColor.g, ThemeService.foregroundColor.b, 0.62)
             font { family: AppearanceTokens.typography.displayFamily; pixelSize: 10 }

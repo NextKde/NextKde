@@ -6,11 +6,15 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
+# QFontDatabase exposes no public refresh; the font page rebuilds it through
+# QFontDatabasePrivate so newly installed fonts appear without a restart.
+set(QT_FIND_PRIVATE_MODULES ON)
 find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui Qml Quick QuickControls2 Network)
 if(NOT TARGET kos_demo_ui)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../shared/demo-ui ${CMAKE_CURRENT_BINARY_DIR}/demo-ui)
 endif()
 
+find_package(Fontconfig REQUIRED)
 find_package(KF6Config REQUIRED)
 find_package(KF6KCMUtils REQUIRED)
 find_package(KF6KIO REQUIRED)
@@ -86,6 +90,8 @@ qt_add_executable(kos-settings
     src/WallpaperLibrary.cpp
     src/SettingsRuntime.cpp
     src/CacheMaintenance.cpp
+    src/UpdateController.cpp
+    src/UpdateController.h
     src/FontSettings.cpp
     src/FontSettings.h
     src/PowerSettings.cpp
@@ -110,6 +116,8 @@ target_link_libraries(kos-settings PRIVATE
     Qt6::Core
     Qt6::DBus
     Qt6::Gui
+    Qt6::GuiPrivate
+    Fontconfig::Fontconfig
     Qt6::Qml
     Qt6::Quick
     KF6::ConfigCore
@@ -160,7 +168,8 @@ if(BUILD_TESTING)
     find_program(XVFB_RUN_EXECUTABLE xvfb-run)
     add_executable(kos-settings-fonts-test tests/backend/FontsTest.cpp src/FontSettings.cpp src/FontSettings.h)
     target_include_directories(kos-settings-fonts-test PRIVATE src)
-    target_link_libraries(kos-settings-fonts-test PRIVATE Qt6::Gui Qt6::Qml Qt6::Quick Qt6::Test Qt6::DBus
+    target_link_libraries(kos-settings-fonts-test PRIVATE Qt6::Gui Qt6::GuiPrivate
+        Fontconfig::Fontconfig Qt6::Qml Qt6::Quick Qt6::Test Qt6::DBus
         KF6::KCMUtilsQuick kos_demo_ui kos_demo_ui_plugin)
     target_compile_definitions(kos-settings-fonts-test PRIVATE
         FONT_SETTINGS_PAGE="${CMAKE_CURRENT_SOURCE_DIR}/pages/FontSettingsPage.qml")
@@ -229,6 +238,15 @@ if(BUILD_TESTING)
         SETTINGS_SHELL_DIR="${CMAKE_CURRENT_SOURCE_DIR}/../../shell")
     add_test(NAME kos-settings.backend-modules COMMAND kos-settings-backend-test)
     set_tests_properties(kos-settings.backend-modules PROPERTIES LABELS logic TIMEOUT 20)
+
+    add_executable(kos-settings-update-status-test
+        tests/backend/UpdateStatusTest.cpp
+        src/UpdateController.cpp
+        src/UpdateController.h)
+    target_include_directories(kos-settings-update-status-test PRIVATE src)
+    target_link_libraries(kos-settings-update-status-test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
+    add_test(NAME kos-settings.update-status COMMAND kos-settings-update-status-test)
+    set_tests_properties(kos-settings.update-status PROPERTIES LABELS logic TIMEOUT 20)
 
     add_executable(kos-power-settings-test
         tests/power/backend.cpp

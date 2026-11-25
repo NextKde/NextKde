@@ -537,6 +537,11 @@ QtObject {
             ? tokens.colors.surfaceContainer : "transparent"
         readonly property color elevatedSurfaceColor: tokens.isMaterial
             ? tokens.colors.surfaceContainerHigh : "transparent"
+        readonly property QtObject digitalClock: QtObject {
+            readonly property color artworkStart: tokens.resolvedAppearanceIsDark ? "#536783" : "#fafafa"
+            readonly property color artworkEnd: tokens.resolvedAppearanceIsDark ? "#35465f" : "#ffffff"
+            readonly property color ink: tokens.resolvedAppearanceIsDark ? "#ffffff" : "#242126"
+        }
     }
 
     readonly property QtObject glass: QtObject {
@@ -558,15 +563,12 @@ QtObject {
         readonly property real borderOpacity: tokens.isMaterial ? 0.30 : 0.16
     }
 
-    readonly property QtObject motion: QtObject {
-        readonly property int fastDuration: tokens.isWindows12 ? 120
-            : tokens.isMaterial ? 100 : 135
-        readonly property int normalDuration: tokens.isWindows12 ? 180
-            : tokens.isMaterial ? 220 : 200
-        readonly property int slowDuration: tokens.isWindows12 ? 260
-            : tokens.isMaterial ? 300 : 360
-        readonly property int standardEasing: tokens.isMaterial
-            ? Easing.OutQuart : Easing.OutCubic
+    readonly property MotionTokens motion: MotionTokens {
+        isMaterial: tokens.isMaterial
+        readonly property int fastDuration: fast.duration
+        readonly property int normalDuration: slow.duration
+        readonly property int slowDuration: page.duration
+        readonly property int standardEasing: enterCurve
         readonly property bool springEnabled: tokens.isMacos
         readonly property bool popupAnimatesOnShow: true
         // Whether the shell draws the extra faces a form brings with it -- the
@@ -574,31 +576,36 @@ QtObject {
         readonly property bool drawsFormDecorations: tokens.isMacos
         // Anchored popups share Launchpad's entrance rhythm: a short cubic
         // settle from 0.96 scale with a directional fade/translation.
-        readonly property int popupOpenDuration: 150
-        readonly property int popupCloseDuration: 140
+        readonly property int popupOpenDuration: base.duration
+        readonly property int popupCloseDuration: base.duration
         readonly property real popupStartScale: 0.96
         readonly property real popupAnchorOffset: 20
-        // A widget resize follows the pointer directly while the corner is
-        // held, and this spring takes over the moment it is released, landing
-        // the card on its cell with a little weight. Qt's SpringAnimation has
-        // its own units (spring 0-5, damping 0-1, not SI), so these values were
-        // measured on a one-cell jump: the macOS form overshoots about 5 % and
-        // reaches its final size in ~210 ms; the other forms stay critically
-        // damped to match their tighter motion language. Epsilon is in pixels.
-        readonly property real widgetResizeSpring: springEnabled ? 3.5 : 5.0
-        readonly property real widgetResizeDamping: springEnabled ? 0.30 : 0.50
-        readonly property real widgetResizeMass: 1.0
+        // Widget geometry runs on a frame-synchronised spring (MotionSpring).
+        // FrameAnimation.frameTime drives a closed-form damped oscillator, so
+        // 60 Hz, 120 Hz and 240 Hz trace the same curve. Qt's SpringAnimation
+        // integrates at a fixed 16 ms step, which on a 240 Hz output moved a
+        // released card only ~60 times a second even though every frame was
+        // presented. The pairs below are the continuous equivalent of the
+        // tuning the desktop already reviewed (spring 3.5/damping 0.30 ->
+        // 18.25 rad/s at ratio 0.71; spring 5.0/damping 0.50 -> 30 rad/s at
+        // ratio 1.33), fitted to trajectories captured from SpringAnimation so
+        // the reviewed feel is preserved. Epsilon is in pixels.
+        readonly property real widgetResizeAngularFrequency: springEnabled ? 18.25 : 30.0
+        readonly property real widgetResizeDampingRatio: springEnabled ? 0.71 : 1.33
         readonly property real widgetResizeEpsilon: 0.25
         // Dropping a dragged widget settles with the same physical family as a
-        // resize, so the desktop has one motion language instead of a spring for
-        // size and a fixed easing curve for position. A move can travel most of
-        // the desktop, though, and an overshoot that reads as weight on a
+        // resize, so the desktop has one motion language. A move can travel most
+        // of the desktop, though, and an overshoot that reads as weight on a
         // one-cell resize would carry the card past the screen edge on a long
-        // drop, so the move spring is critically damped: same velocity profile
-        // and settle, no bounce. Measured: reaches its cell in ~310 ms.
-        readonly property real widgetMoveSpring: 5.0
-        readonly property real widgetMoveDamping: 0.50
-        readonly property real widgetMoveMass: 1.0
+        // drop, so the move spring stays critically damped: same settle, no
+        // bounce.
+        readonly property real widgetMoveAngularFrequency: 30.0
+        readonly property real widgetMoveDampingRatio: 1.33
         readonly property real widgetMoveEpsilon: 0.25
+        // Decorative grab feedback (resize handle grip and readout): a touch
+        // softer than critical so it acknowledges the press and then stops.
+        readonly property real widgetGripAngularFrequency: 30.0
+        readonly property real widgetGripDampingRatio: 1.05
+        readonly property real widgetGripEpsilon: 0.005
     }
 }

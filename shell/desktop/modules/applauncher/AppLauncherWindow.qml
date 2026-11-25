@@ -7,8 +7,10 @@ import Quickshell.Widgets
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import qs.desktop.modules.platform
 import "../../../Kos/Ui"
 import "../../../shared/qml/controls" as LiquidControls
+import "LauncherGeometry.mjs" as LauncherGeometry
 
 // Output-bound application-launcher surface. The panel itself spans the
 // output only to make centering reliable. The visible glass card follows Dock
@@ -156,6 +158,7 @@ PanelWindow {
     }
 
     LauncherMotion {
+        motionPolicy: AppearanceTokens.motion
         id: popupMotion
         target: launcherContent
         onSettledOpenChanged: {
@@ -167,32 +170,25 @@ PanelWindow {
         }
     }
     onScreenChanged: console.log("[AppLauncherWindow] screen changed=" + !!screen)
-    readonly property real minimumLauncherWidth: screen ? Math.round(screen.width * 0.50) : 600
-    readonly property real minimumLauncherHeight: 500
-    readonly property bool usesMinimumSize: AppLauncherService.dockWidth < minimumLauncherWidth
-    // Sizing depends on display mode: fullscreen fills screen, center floats
-    // with comfortable dialogue dimensions, bottom follows the Dock.
-    readonly property real launcherWidth: isFullscreenMode
-        ? (screen ? screen.width : 1920)
-        : (isCenterMode
-            ? (screen ? Math.min(Math.max(680, Math.round(screen.width * 0.65)), 1040) : 760)
-            : (isBottomWideMode
-                ? (screen ? Math.round(screen.width * 0.50) : 960)
-                : (usesMinimumSize ? minimumLauncherWidth : AppLauncherService.dockWidth)))
-
-    readonly property real launcherHeight: isFullscreenMode
-        ? (screen ? screen.height : 1080)
-        : (isCenterMode
-            ? (screen ? Math.min(Math.max(520, Math.round(screen.height * 0.68)), 760) : 560)
-            : (!dockAtBottom
-                ? Math.min(Math.max(minimumLauncherHeight, AppLauncherService.dockWidth),
-                    Math.round(screen.height * 0.85))
-                : (usesMinimumSize ? minimumLauncherHeight
-                    : Math.round(screen.height * 0.50))))
+    // Sizing and placement live in LauncherGeometry.mjs so CI can exercise
+    // the math without a compositor: this block used to be an inline ternary
+    // tree, and the side-Dock shape regressions had no test anywhere.
+    readonly property var _cardSize: LauncherGeometry.launcherSize({
+        displayMode: root.displayMode,
+        screenWidth: screen ? screen.width : 0,
+        screenHeight: screen ? screen.height : 0,
+        dockPosition: AppLauncherService.dockPosition,
+        dockWidth: AppLauncherService.dockWidth
+    })
+    readonly property real launcherWidth: _cardSize.width
+    readonly property real launcherHeight: _cardSize.height
     // Preserve the resolved catalogue while hidden. Theme icons deliberately
     // load on the GUI thread, so clearing this model on close made every open
     // rebuild and synchronously decode the first screen of icons.
     property var applications: []
+    // Hidden apps stay in the catalogue; they only leave the grid. This second
+    // projection is the restore panel's model.
+    property var hiddenApplications: []
     property bool applicationsDirty: true
 
     function rebuildApplications() {
@@ -200,11 +196,20 @@ PanelWindow {
         AppPresentationService.revision;
         const catalogue = AppPresentationService.catalog();
         const apps = [];
+        const hidden = [];
         for (let i = 0; i < catalogue.length; i++) {
             const presentation = catalogue[i];
             const appId = presentation.rawAppId;
-            if (!appId || AppLauncherConfigService.hiddenAppIds.indexOf(appId) >= 0)
+            if (!appId)
                 continue;
+            if (AppLauncherConfigService.hiddenAppIds.indexOf(appId) >= 0) {
+                hidden.push({
+                    id: appId,
+                    name: presentation.displayName,
+                    icon: presentation.iconSource
+                });
+                continue;
+            }
             apps.push({
                 id: appId,
                 name: presentation.displayName,
@@ -214,6 +219,7 @@ PanelWindow {
             });
         }
         applications = apps;
+        hiddenApplications = hidden;
         applicationsDirty = false;
     }
 
@@ -265,6 +271,9 @@ PanelWindow {
     readonly property var orderedApplications: AppLauncherConfigService.orderedApplications(applications)
     readonly property var rootGridItems: AppLauncherConfigService.rootGridItems(applications)
     property var openFolder: null
+    // Restore panel for apps hidden with "Hide app". Launcher-local, because
+    // the fullscreen presentation offers no edit mode to reach it from.
+    property bool hiddenAppsOpen: false
     // Keep a stable snapshot during the close animation. `openFolder` remains
     // the live persistence target; `displayedFolder` is only presentation.
     property var displayedFolder: null
@@ -272,8 +281,8 @@ PanelWindow {
     property real folderBlurProgress: folderDialogOpen ? 1 : 0
     Behavior on folderBlurProgress {
         NumberAnimation {
-            duration: 220
-            easing.type: Easing.OutCubic
+            duration: AppearanceTokens.motion.slow.duration
+            easing.type: AppearanceTokens.motion.enterCurve
         }
     }
     property bool folderRenameActive: false
@@ -313,6 +322,7 @@ PanelWindow {
     property real folderMergeProgress: 0
     Behavior on folderMergeProgress {
         NumberAnimation {
+            // motion-exception: Folder-merge dwell follows the drag acceptance clock.
             duration: 650
             easing.type: Easing.Linear
         }
@@ -361,6 +371,7 @@ PanelWindow {
         id: fullscreenSettleAnimation
         target: root
         property: "fullscreenPageDragOffset"
+        // motion-exception: Swipe settling uses remaining travel, not a UI transition tier.
         easing.type: Easing.OutCubic
         onFinished: root.commitFullscreenPageTransition()
     }
@@ -450,6 +461,8 @@ PanelWindow {
         appContextMenu.anchorItem = anchorItem
         appContextMenu.clear()
         appContextMenu.addItem("application-open", I18n.tr("Open app"), "open")
+        appContextMenu.addItem("launcher.menu.sendToDesktop",
+            I18n.tr("Send to Desktop"), "send-to-desktop")
         appContextMenu.addItem("edit-rename", I18n.tr("Edit app"), "edit")
         const pinned = DockModelService.isAppPinned(app.id)
         appContextMenu.addItem(pinned ? "unpin" : "pin",
@@ -460,6 +473,29 @@ PanelWindow {
 
     function dismissApplicationMenu() {
         appContextMenu.hide()
+    }
+
+    // The launcher stays open after sending an app to the desktop, so the
+    // result needs an explicit surface. Success is visible as the new icon;
+    // an existing shortcut or a failed write would otherwise look like a
+    // no-op.
+    function notifyDesktopShortcutResult(ok, created) {
+        if (ok && created)
+            return
+        const summary = ok
+            ? I18n.tr("Shortcut already exists on Desktop")
+            : I18n.tr("Could not create the desktop shortcut")
+        PlatformClient.request("notify", {
+            summary: summary,
+            body: "",
+            icon: "",
+            appName: "NextKDE",
+            urgency: "normal"
+        }, function(response) {
+            if (!response?.ok)
+                console.warn("[AppLauncher] shortcut notify failed: "
+                    + (response?.error?.message || "platform unavailable"))
+        })
     }
 
     function showApplicationEditor(app) {
@@ -479,6 +515,19 @@ PanelWindow {
         editorName = "";
         editorIcon = "";
         editorIconStatus = "";
+    }
+
+    function closeHiddenApps() {
+        hiddenAppsOpen = false;
+        // Hand the keyboard back to search once the modal barrier is gone.
+        searchFocusTimer.restart();
+    }
+
+    // Restoring the last app leaves nothing to list, so the panel retires
+    // itself instead of showing an empty card.
+    onHiddenApplicationsChanged: {
+        if (hiddenAppsOpen && hiddenApplications.length === 0)
+            closeHiddenApps();
     }
 
     function saveApplicationEditor() {
@@ -659,6 +708,7 @@ PanelWindow {
         // Duration scales with the remaining travel so a late flick settles
         // quickly while a full page turn keeps the Launchpad's unhurried glide.
         const dist = Math.abs(to - fullscreenPageDragOffset)
+        // motion-exception: Remaining swipe travel determines the 180–420ms settling window.
         fullscreenSettleAnimation.duration = Math.max(180,
             Math.min(420, Math.round(dist / w * 480)))
         fullscreenSettleAnimation.to = to
@@ -969,6 +1019,8 @@ PanelWindow {
             dismissApplicationMenu();
             editMode = false;
             folderEditMode = false;
+            // A panel left open must not survive into the next launcher open.
+            hiddenAppsOpen = false;
             openFolder = null;
             displayedFolder = null;
             folderDialogOpen = false;
@@ -1101,6 +1153,8 @@ PanelWindow {
                 return;
             if (name === "open")
                 root.launchApplication(app);
+            else if (name === "send-to-desktop")
+                AppActionService.sendToDesktop(app.id);
             else if (name === "edit")
                 AppActionService.edit(app);
             else if (name === "pin")
@@ -1123,6 +1177,16 @@ PanelWindow {
         }
         function onHideRequested(appId) {
             AppLauncherConfigService.hideApplication(appId);
+        }
+        function onDesktopShortcutFinished(appId, ok, created, path, errorCode) {
+            if (ok && created) {
+                console.log("[AppLauncher] desktop shortcut app=" + appId
+                    + " path=" + path);
+                return;
+            }
+            console.log("[AppLauncher] desktop shortcut app=" + appId
+                + " result=" + (errorCode || (ok ? "already-exists" : "failed")));
+            root.notifyDesktopShortcutResult(ok, created);
         }
     }
 
@@ -1206,17 +1270,24 @@ PanelWindow {
 
     Item {
         id: launcherRevealClip
-        anchors.fill: root.isFullscreenMode ? parent : undefined
-        anchors.centerIn: root.isCenterMode ? parent : undefined
-        anchors.horizontalCenter: (root.isBottomMode && root.dockAtBottom)
-            ? parent.horizontalCenter : undefined
-        anchors.bottom: (root.isBottomMode && root.dockAtBottom) ? parent.bottom : undefined
-        anchors.verticalCenter: (root.isBottomMode && !root.dockAtBottom)
-            ? parent.verticalCenter : undefined
-        anchors.left: (root.isBottomMode && root.dockAtLeft) ? parent.left : undefined
-        anchors.right: (root.isBottomMode && root.dockAtRight) ? parent.right : undefined
-        width: root.isFullscreenMode ? parent.width : root.launcherWidth
-        height: root.isFullscreenMode ? parent.height : root.launcherHeight
+        // Explicit geometry, never a runtime anchor-set switch: Qt can retain
+        // a previous anchor set for a frame, which froze this clip's
+        // width/height at the old output size after the Dock returned from a
+        // side edge (the card then opened at 1874x1080 instead of 960x540).
+        // The placement math is unit tested in test_launcher_geometry.mjs.
+        readonly property var rect: LauncherGeometry.revealRect({
+            isFullscreenMode: root.isFullscreenMode,
+            isCenterMode: root.isCenterMode,
+            dockPosition: AppLauncherService.dockPosition,
+            width: root.launcherWidth,
+            height: root.launcherHeight,
+            parentWidth: parent ? parent.width : 0,
+            parentHeight: parent ? parent.height : 0
+        })
+        x: rect.x
+        y: rect.y
+        width: rect.width
+        height: rect.height
         clip: root.isFullscreenMode
 
         // The fullscreen presentation owns the entire output, not merely the
@@ -1471,6 +1542,7 @@ PanelWindow {
                                         selectionColor: Qt.rgba(1, 1, 1, 0.30)
                                         selectedTextColor: AppLauncherService.dockForegroundColor
                                         enabled: !root.editMode && !root.openFolder
+                                            && !root.hiddenAppsOpen
 
                                         onTextEdited: {
                                             root.cancelFullscreenPageTransition();
@@ -1511,7 +1583,7 @@ PanelWindow {
                                             // The icon lights up while the field is
                                             // expanded (focused or holding a query).
                                             opacity: (searchBar.activeFocus || searchBar.text.length > 0) ? 0.95 : 0.65
-                                            Behavior on opacity { NumberAnimation { duration: 300 } }
+                                            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.page.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                                             size: 17
                                         }
 
@@ -1529,9 +1601,10 @@ PanelWindow {
                                                 ? (searchClearMouse.containsMouse ? 0.95 : 0.58) : 0.0
                                             scale: searchBar.text.length > 0 ? 1.0 : 0.5
                                             rotation: searchBar.text.length > 0 ? 0 : -90
-                                            Behavior on opacity { NumberAnimation { duration: 180 } }
+                                            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                                             Behavior on scale {
                                                 NumberAnimation {
+                                                    // motion-exception: Search-clear scale and rotation share the original overshooting Bezier choreography.
                                                     duration: 450
                                                     easing.type: Easing.Bezier
                                                     easing.bezierCurve: [0.34, 1.56, 0.64, 1, 1, 1]
@@ -1561,6 +1634,58 @@ PanelWindow {
                             }
 
                             Rectangle {
+                                id: hiddenAppsButton
+                                // The header's left side is free in every
+                                // presentation; edit mode is not available in
+                                // fullscreen, so the restore entry lives here.
+                                width: 30
+                                height: 26
+                                radius: height / 2
+                                anchors {
+                                    left: parent.left
+                                    verticalCenter: parent.verticalCenter
+                                }
+                                // Nothing to restore means no button at all.
+                                visible: opacity > 0.01
+                                opacity: root.hiddenApplications.length > 0 ? 1.0 : 0.0
+                                scale: root.hiddenApplications.length > 0 ? 1.0 : 0.82
+                                color: hiddenAppsButtonMouse.containsMouse
+                                    ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10)
+                                Behavior on opacity {
+                                    NumberAnimation {
+                                        duration: AppearanceTokens.motion.base.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
+                                    }
+                                }
+                                Behavior on scale {
+                                    NumberAnimation {
+                                        duration: AppearanceTokens.motion.base.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
+                                    }
+                                }
+                                Behavior on color {
+                                    ColorAnimation {
+                                        duration: AppearanceTokens.motion.fast.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
+                                    }
+                                }
+
+                                BundledIcon {
+                                    anchors.centerIn: parent
+                                    name: "launcher.hiddenApps"
+                                    color: root.launcherForegroundColor
+                                    size: 16
+                                }
+                                MouseArea {
+                                    id: hiddenAppsButtonMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: root.hiddenAppsOpen = true
+                                }
+                            }
+
+                            Rectangle {
                                 id: rootEditDoneButton
                                 width: 48
                                 height: 26
@@ -1574,14 +1699,14 @@ PanelWindow {
                                 scale: root.editMode ? 1.0 : 0.82
                                 Behavior on opacity {
                                     NumberAnimation {
-                                        duration: 140
-                                        easing.type: Easing.OutCubic
+                                        duration: AppearanceTokens.motion.base.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
                                     }
                                 }
                                 Behavior on scale {
                                     NumberAnimation {
-                                        duration: 140
-                                        easing.type: Easing.OutCubic
+                                        duration: AppearanceTokens.motion.base.duration
+                                        easing.type: AppearanceTokens.motion.enterCurve
                                     }
                                 }
                                 color: Qt.rgba(0.027, 0.753, 0.376, 1.0)
@@ -1735,6 +1860,7 @@ PanelWindow {
                                 Behavior on x {
                                     enabled: !appDelegate.dragging
                                     NumberAnimation {
+                                        // motion-exception: Drag displacement and held-icon scale retain their original response.
                                         duration: 160
                                         easing.type: Easing.OutCubic
                                     }
@@ -1756,8 +1882,8 @@ PanelWindow {
                             Behavior on opacity {
                                 enabled: !appDelegate.dragging
                                 NumberAnimation {
-                                    duration: 120
-                                    easing.type: Easing.OutCubic
+                                    duration: AppearanceTokens.motion.fast.duration
+                                    easing.type: AppearanceTokens.motion.enterCurve
                                 }
                             }
 
@@ -1822,6 +1948,7 @@ PanelWindow {
                                             property: "rotation"
                                             from: -2.2
                                             to: 2.2
+                                            // motion-exception: Edit-mode wiggle keeps its periodic cadence.
                                             duration: 110
                                             easing.type: Easing.InOutSine
                                         }
@@ -2043,6 +2170,7 @@ PanelWindow {
                                     target: appDelegate
                                     property: "dropOffsetX"
                                     to: appDelegate.dropTargetOffsetX
+                                    // motion-exception: Drop offsets settle before committing the new slot.
                                     duration: 180
                                     easing.type: Easing.OutCubic
                                 }
@@ -2207,7 +2335,7 @@ PanelWindow {
                         color: Qt.rgba(0.05, 0.06, 0.09, 0.34)
                         border.width: 1
                         border.color: Qt.rgba(1, 1, 1, 0.12)
-                        Behavior on width { NumberAnimation { duration: 130; easing.type: Easing.OutCubic } }
+                        Behavior on width { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Row {
                             anchors.centerIn: parent
@@ -2287,14 +2415,15 @@ PanelWindow {
 
                             Behavior on opacity {
                                 NumberAnimation {
-                                    duration: 160
-                                    easing.type: Easing.OutCubic
+                                    duration: AppearanceTokens.motion.base.duration
+                                    easing.type: AppearanceTokens.motion.enterCurve
                                 }
                             }
                             // Liquid inflation: shrink then expand with a soft
                             // overshoot bounce, like the folder is swelling open.
                             Behavior on scale {
                                 NumberAnimation {
+                                    // motion-exception: Folder inflation retains its OutBack overshoot response.
                                     duration: 220
                                     easing.type: Easing.OutBack
                                     easing.overshoot: 1.6
@@ -2402,14 +2531,14 @@ PanelWindow {
                                     scale: root.folderEditMode ? 1.0 : 0.82
                                     Behavior on opacity {
                                         NumberAnimation {
-                                            duration: 140
-                                            easing.type: Easing.OutCubic
+                                            duration: AppearanceTokens.motion.base.duration
+                                            easing.type: AppearanceTokens.motion.enterCurve
                                         }
                                     }
                                     Behavior on scale {
                                         NumberAnimation {
-                                            duration: 140
-                                            easing.type: Easing.OutCubic
+                                            duration: AppearanceTokens.motion.base.duration
+                                            easing.type: AppearanceTokens.motion.enterCurve
                                         }
                                     }
                                     text: I18n.tr("Done")
@@ -2484,6 +2613,7 @@ PanelWindow {
                                         Behavior on x {
                                             enabled: !folderAppDelegate.dragging
                                             NumberAnimation {
+                                                // motion-exception: Folder drag displacement and held-icon scale retain their original response.
                                                 duration: 160
                                                 easing.type: Easing.OutCubic
                                             }
@@ -2504,8 +2634,8 @@ PanelWindow {
                                     }
                                     Behavior on opacity {
                                         NumberAnimation {
-                                            duration: 120
-                                            easing.type: Easing.OutCubic
+                                            duration: AppearanceTokens.motion.fast.duration
+                                            easing.type: AppearanceTokens.motion.enterCurve
                                         }
                                     }
 
@@ -2546,6 +2676,7 @@ PanelWindow {
                                                 property: "rotation"
                                                 from: (index % 2 === 0) ? -1.8 : 1.8
                                                 to: (index % 2 === 0) ? 1.8 : -1.8
+                                                // motion-exception: Folder edit wiggle retains per-icon phase and period.
                                                 duration: (index % 3 === 0) ? 140 : 160
                                                 easing.type: Easing.InOutSine
                                             }
@@ -2603,14 +2734,14 @@ PanelWindow {
                                             scale: root.folderEditMode ? 1.0 : 0.76
                                             Behavior on opacity {
                                                 NumberAnimation {
-                                                    duration: 140
-                                                    easing.type: Easing.OutCubic
+                                                    duration: AppearanceTokens.motion.base.duration
+                                                    easing.type: AppearanceTokens.motion.enterCurve
                                                 }
                                             }
                                             Behavior on scale {
                                                 NumberAnimation {
-                                                    duration: 140
-                                                    easing.type: Easing.OutCubic
+                                                    duration: AppearanceTokens.motion.base.duration
+                                                    easing.type: AppearanceTokens.motion.enterCurve
                                                 }
                                             }
                                             width: 21
@@ -2691,6 +2822,7 @@ PanelWindow {
                                             target: folderAppDelegate
                                             property: "dropOffsetX"
                                             to: folderAppDelegate.dropTargetOffsetX
+                                            // motion-exception: Folder drop offsets settle before committing the new slot.
                                             duration: 180
                                             easing.type: Easing.OutCubic
                                         }
@@ -2708,6 +2840,196 @@ PanelWindow {
                                             folderAppDelegate.heldForEdit = false;
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+
+                    // Restore panel for apps hidden from the launcher. Hiding
+                    // stays an edit action; this is its only way back.
+                    Item {
+                        id: hiddenAppsOverlay
+                        anchors.fill: parent
+                        z: 1000
+                        visible: root.hiddenAppsOpen
+                        focus: visible
+
+                        // Escape retires the panel, not the launcher beneath it.
+                        Keys.onPressed: function (event) {
+                            if (event.key !== Qt.Key_Escape)
+                                return;
+                            root.closeHiddenApps();
+                            event.accepted = true;
+                        }
+
+                        Rectangle {
+                            anchors.fill: parent
+                            color: Qt.rgba(0, 0, 0, 0.18)
+                            MouseArea {
+                                anchors.fill: parent
+                                // Consume every button before lower grid handlers
+                                // can observe it; this is the modal barrier.
+                                acceptedButtons: Qt.AllButtons
+                                preventStealing: true
+                                onClicked: root.closeHiddenApps()
+                            }
+                        }
+
+                        Rectangle {
+                            id: hiddenAppsDialog
+                            anchors.centerIn: parent
+                            width: Math.min(360, parent.width - 80)
+                            readonly property real rowHeight: 44
+                            readonly property real pad: 20
+                            readonly property real headerHeight: 30
+                            // Height follows the rows until the list would take
+                            // more than about two thirds of the launcher; the
+                            // ListView scrolls from there.
+                            height: Math.min(parent.height * 0.65,
+                                pad * 2 + headerHeight + 12
+                                    + Math.max(rowHeight,
+                                        root.hiddenApplications.length * rowHeight))
+                            radius: 18
+                            color: Qt.rgba(0.08, 0.09, 0.12, 0.82)
+
+                            Item {
+                                id: hiddenAppsHeader
+                                anchors {
+                                    top: parent.top
+                                    left: parent.left
+                                    right: parent.right
+                                    margins: hiddenAppsDialog.pad
+                                }
+                                height: hiddenAppsDialog.headerHeight
+
+                                ShellText {
+                                    anchors {
+                                        left: parent.left
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    text: I18n.tr("Hidden apps")
+                                    color: AppLauncherService.dockForegroundColor
+                                    style: Text.Outline
+                                    styleColor: Qt.rgba(0, 0, 0, 0.38)
+                                    font {
+                                        pixelSize: 17
+                                        weight: Font.DemiBold
+                                    }
+                                }
+                                BundledIcon {
+                                    anchors {
+                                        right: parent.right
+                                        verticalCenter: parent.verticalCenter
+                                    }
+                                    name: "launcher.closeEditor"
+                                    color: AppLauncherService.dockForegroundColor
+                                    size: 22
+                                    MouseArea {
+                                        anchors.fill: parent
+                                        anchors.margins: -8
+                                        cursorShape: Qt.PointingHandCursor
+                                        onClicked: root.closeHiddenApps()
+                                    }
+                                }
+                            }
+
+                            ListView {
+                                id: hiddenAppsList
+                                anchors {
+                                    top: hiddenAppsHeader.bottom
+                                    topMargin: 12
+                                    left: parent.left
+                                    right: parent.right
+                                    bottom: parent.bottom
+                                    leftMargin: hiddenAppsDialog.pad
+                                    rightMargin: hiddenAppsDialog.pad
+                                    bottomMargin: hiddenAppsDialog.pad
+                                }
+                                clip: true
+                                // Swallow the wheel while the modal is open, even
+                                // when the rows fit, so the grid cannot scroll
+                                // underneath it.
+                                boundsBehavior: Flickable.StopAtBounds
+                                model: root.hiddenApplications
+
+                                delegate: Item {
+                                    required property var modelData
+                                    width: ListView.view.width
+                                    height: hiddenAppsDialog.rowHeight
+
+                                    AppIcon {
+                                        id: hiddenAppIcon
+                                        width: 24
+                                        height: 24
+                                        anchors {
+                                            left: parent.left
+                                            verticalCenter: parent.verticalCenter
+                                        }
+                                        source: modelData.icon
+                                            || AppPresentationService.genericIconSource()
+                                        opacityMultiplier: IconAppearanceService.mode === "color" ? 1.0 : IconAppearanceService.opacity
+                                        saturation: IconAppearanceService.saturation
+                                        tintEnabled: IconAppearanceService.tintEnabled
+                                        tintColor: IconAppearanceService.tintColor
+                                    }
+
+                                    GlassText {
+                                        anchors {
+                                            left: hiddenAppIcon.right
+                                            leftMargin: 12
+                                            right: restorePill.left
+                                            rightMargin: 12
+                                            verticalCenter: parent.verticalCenter
+                                        }
+                                        text: modelData.name
+                                        color: AppLauncherService.dockForegroundColor
+                                        elide: Text.ElideRight
+                                        font {
+                                            pixelSize: 13
+                                            weight: Font.Medium
+                                        }
+                                    }
+
+                                    Rectangle {
+                                        id: restorePill
+                                        anchors {
+                                            right: parent.right
+                                            verticalCenter: parent.verticalCenter
+                                        }
+                                        width: restoreLabel.implicitWidth + 24
+                                        height: 26
+                                        radius: height / 2
+                                        color: restoreArea.containsMouse
+                                            ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10)
+                                        Behavior on color {
+                                            ColorAnimation {
+                                                duration: AppearanceTokens.motion.fast.duration
+                                                easing.type: AppearanceTokens.motion.enterCurve
+                                            }
+                                        }
+                                        GlassText {
+                                            id: restoreLabel
+                                            anchors.centerIn: parent
+                                            text: I18n.tr("Restore")
+                                            color: AppLauncherService.dockForegroundColor
+                                            font {
+                                                pixelSize: 11
+                                                weight: Font.Medium
+                                            }
+                                        }
+                                        MouseArea {
+                                            id: restoreArea
+                                            anchors.fill: parent
+                                            hoverEnabled: true
+                                            cursorShape: Qt.PointingHandCursor
+                                            onClicked: AppLauncherConfigService.unhideApplication(modelData.id)
+                                        }
+                                    }
+                                }
+                                // Same wheel/trackpad policy as the app grid; the
+                                // rows only scroll once they outgrow the card.
+                                KosKineticScroll {
+                                    flickable: hiddenAppsList
                                 }
                             }
                         }
@@ -2841,7 +3163,8 @@ PanelWindow {
                                             color: iconActionMouse.containsMouse ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(1, 1, 1, 0.10)
                                             Behavior on color {
                                                 ColorAnimation {
-                                                    duration: 120
+                                                    duration: AppearanceTokens.motion.fast.duration
+                                                    easing.type: AppearanceTokens.motion.enterCurve
                                                 }
                                             }
                                             GlassText {
@@ -2979,7 +3302,8 @@ PanelWindow {
                                             color: editorButtonMouse.containsMouse ? (modelData.name === "save" ? Qt.rgba(1, 1, 1, 0.34) : Qt.rgba(1, 1, 1, 0.20)) : (modelData.name === "save" ? Qt.rgba(1, 1, 1, 0.22) : Qt.rgba(1, 1, 1, 0.10))
                                             Behavior on color {
                                                 ColorAnimation {
-                                                    duration: 120
+                                                    duration: AppearanceTokens.motion.fast.duration
+                                                    easing.type: AppearanceTokens.motion.enterCurve
                                                 }
                                             }
                                             GlassText {

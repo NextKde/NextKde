@@ -35,8 +35,8 @@ PanelWindow {
     readonly property real revealProgress: popupMotion.progress
     PopupMotion {
         id: popupMotion
-        openDuration: 90
-        closeDuration: 90
+        openDuration: AppearanceTokens.motion.instant.duration
+        closeDuration: AppearanceTokens.motion.instant.duration
     }
 
     signal closeRequested
@@ -759,7 +759,7 @@ PanelWindow {
             enabled: root.mode === "clipboard" && root.clipboardSettingsOpen
             scale: 0.96 + 0.04 * opacity
             transformOrigin: Item.TopRight
-            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
             z: 20
             width: 320
             height: settingsContent.implicitHeight + 24
@@ -875,7 +875,7 @@ PanelWindow {
                         color: ClipboardService.watchImages
                             ? "#34c759"
                             : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(0, 0, 0, 0.15))
-                        Behavior on color { ColorAnimation { duration: 150 } }
+                        Behavior on color { ColorAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Rectangle {
                             width: 18
@@ -883,7 +883,7 @@ PanelWindow {
                             radius: 9
                             anchors.verticalCenter: parent.verticalCenter
                             x: ClipboardService.watchImages ? parent.width - width - 2 : 2
-                            Behavior on x { NumberAnimation { duration: 150; easing.type: Easing.OutQuad } }
+                            Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
                             color: "#ffffff"
                         }
 
@@ -1190,7 +1190,7 @@ PanelWindow {
                             || pinButtonMouse.containsMouse
                             || resultMouse.containsMouse
                             || resultItem.index === root.selectedIndex ? 1.0 : 0.0
-                        Behavior on opacity { NumberAnimation { duration: 100 } }
+                        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Rectangle {
                             anchors.centerIn: parent
@@ -1232,7 +1232,7 @@ PanelWindow {
                         opacity: deleteBtnMouse.containsMouse
                             || resultMouse.containsMouse
                             || resultItem.index === root.selectedIndex ? 1.0 : 0.0
-                        Behavior on opacity { NumberAnimation { duration: 100 } }
+                        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
                         Rectangle {
                             anchors.centerIn: parent

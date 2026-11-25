@@ -64,9 +64,11 @@ private:
     QRect m_rect;
     QRegion m_visible;
     bool m_fallback = false;
+    bool m_usedFallback = false;
     QRect m_tintRect;
     qreal m_deviceScale = 1;
     qreal m_probeTop = 0;
+    qreal m_panelBottom = 0;
     qreal m_backgroundBottom = -1;
     QRectF m_probeRect;
     QByteArray m_pixels;

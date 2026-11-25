@@ -35,7 +35,12 @@ Item {
     property color endColor: "transparent"
     property bool showSurface: true
     property color materialSurfaceColor: AppearanceTokens.surface.widgetFill
-    readonly property bool usesColorArtwork: AppearanceConfigService.widgetStyle === "color"
+    // Widgets normally honour the colour-artwork style. A host that must keep
+    // the compositor-backed material (the desktop grouped view) opts out, so
+    // it still gets glass/tonal in the colour-artwork appearance.
+    property bool allowColorArtwork: true
+    readonly property bool usesColorArtwork:
+        allowColorArtwork && AppearanceConfigService.widgetStyle === "color"
     readonly property real radius: AppearanceTokens.widget.radius
 
     // The active form's surface policy. Everything below reads this instead of

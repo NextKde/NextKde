@@ -4,7 +4,7 @@
     SPDX-License-Identifier: MIT
   </copyright>
 
-  <interface name="kos_surface_shape_manager_v1" version="8">
+  <interface name="kos_surface_shape_manager_v1" version="9">
     <description summary="surface-local compositor shape metadata">
       Creates independent shape declarations for regions inside a wl_surface.
       Coordinates and radius use surface-local logical units.
@@ -44,7 +44,7 @@
     request (set_role is a no-op), and each new request is appended after
     destroy so the destructor opcode is unchanged.
   -->
-  <interface name="kos_surface_shape_v1" version="8">
+  <interface name="kos_surface_shape_v1" version="9">
     <request name="set_geometry">
       <arg name="x" type="int"/>
       <arg name="y" type="int"/>
@@ -186,6 +186,21 @@
       <arg name="green" type="fixed"/>
       <arg name="blue" type="fixed"/>
       <arg name="opacity" type="fixed"/>
+    </request>
+    <!--
+      Per-shape pointer interaction mask. Bit 0: hover light, bit 1: lens
+      parallax, bit 2: click ripple. Shapes on pre-v9 resources default to all
+      bits set, which is the historical behaviour. Deliberately after every
+      earlier request: the destructor and all existing opcodes must stay
+      unchanged for older clients.
+    -->
+    <request name="set_pointer_effects" since="9">
+      <description summary="per-shape pointer interaction mask">
+        flags bit 0 enables the hover light, bit 1 the lens parallax and bit 2
+        the click ripple for this shape. Bits outside 0..2 are ignored.
+        Clients must check the negotiated version before sending this request.
+      </description>
+      <arg name="flags" type="uint"/>
     </request>
   </interface>
 </protocol>

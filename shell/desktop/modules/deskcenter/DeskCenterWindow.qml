@@ -115,7 +115,6 @@ PanelWindow {
     // widget uses integer spans, giving desktop cards the intentional, large
     // iPadOS scale rather than a collection of small floating macOS tiles.
     readonly property int columns: 10
-    readonly property int widgetColumns: widgetLayout.columns
     readonly property real sideMargin: 20
     // Keep card sizing tied to the original grid metrics. The larger visual
     // insets should consume the flexible desktop-file field on the right,
@@ -154,6 +153,7 @@ PanelWindow {
     property bool timerRunning: false
     property bool timerHasStarted: false
     property bool timerView: false
+    property string systemTimeZone: ""
     property bool editMode: false
     property bool widgetLibraryOpen: false
     property var activeDragCard: null
@@ -237,6 +237,21 @@ PanelWindow {
     function configureWidget(id) {
         widgetConfiguration.openFor(id)
     }
+    // The loaded grouped content, if the card is on screen. Its own editor is
+    // the only visible rename surface while the normal icon field is hidden.
+    property var groupsContentItem: null
+
+    function beginGroupsRename(entry) {
+        const path = entry?.path ?? ""
+        if (!path || !groupsContentItem)
+            return
+        // The context menu owns focus while closing; defer the editor's grab
+        // by one turn, like beginInlineRename does for the normal icon field.
+        Qt.callLater(function() {
+            if (root.groupsContentItem)
+                root.groupsContentItem.beginRename(path)
+        })
+    }
 
     function enterWidgetEditMode(openLibrary) {
         desktopFileGrid.clearDesktopSelection()
@@ -268,7 +283,7 @@ PanelWindow {
         clock: I18n.tr("Clock"), weather: I18n.tr("Weather"),
         calendar: I18n.tr("Calendar"), todo: I18n.tr("To-Do"),
         system: I18n.tr("System"), activity: I18n.tr("Activity"),
-        music: I18n.tr("Music")
+        music: I18n.tr("Music"), groups: I18n.tr("Grouped View")
     })
     // Referencing the singleton starts the shared activity recorder once the
     // desktop surface is available.
@@ -292,6 +307,15 @@ PanelWindow {
             root.depthPointerX = 0
             root.depthPointerY = 0
         }
+    }
+    Component.onCompleted: PlatformClient.request("system.timezone", {}, function(response) {
+        if (response?.ok)
+            root.systemTimeZone = String(response.result?.timeZone || "")
+    })
+
+    function toggleClockStyle() {
+        DeskCenterConfigService.setClockStyle(
+            DeskCenterConfigService.clockStyle === "analog" ? "digital" : "analog")
     }
 
     function formattedTimer() {
@@ -404,7 +428,16 @@ PanelWindow {
             priority: priority, startColor: startColor, endColor: endColor,
             surface: false }
     }
-    readonly property var widgetDefinitions: {
+    readonly property bool groupsWidgetVisible:
+        !AppearanceConfigService.isDeskCenterWidgetHidden("groups")
+    // Widgets are authored on the active output only; the grouped view follows
+    // that rule, and only its own output hides the normal file icons.
+    readonly property bool groupsWidgetShown:
+        groupsWidgetVisible
+        && !!groupsPlacement
+        && root.screen?.name === ScreenLifecycle.activeScreen?.name
+
+    readonly property var flowWidgetDefinitions: {
         // Make the binding depend on persisted configuration changes.
         const revision = DeskCenterConfigService.revision
         // Reading the visibility list here is what makes the switch in the
@@ -412,7 +445,11 @@ PanelWindow {
         // re-evaluates this property, and `placements` packs whatever is left.
         const hidden = AppearanceConfigService.hiddenDeskCenterWidgets
         const definitions = [
-            configuredWidget("clock", 100, "#536783", "#35465f"),
+            configuredWidget("clock", 100,
+                DeskCenterConfigService.clockStyle === "digital"
+                    ? AppearanceTokens.widget.digitalClock.artworkStart : "#536783",
+                DeskCenterConfigService.clockStyle === "digital"
+                    ? AppearanceTokens.widget.digitalClock.artworkEnd : "#35465f"),
             configuredWidget("weather", 90, "#536b94", "#394b70"),
             configuredWidget("calendar", 80, "#fff8fa", "#f3e8ed"),
             configuredWidget("todo", 75, "#f2faf7", "#e2f1eb"),
@@ -425,6 +462,10 @@ PanelWindow {
             byId[widget.id] = widget
         const ordered = []
         for (const id of DeskCenterConfigService.orderedIds()) {
+            // The grouped view is anchored to the top-right below; it must not
+            // join the left flow or shift the file area.
+            if (id === "groups")
+                continue
             if (byId[id] && hidden.indexOf(id) < 0)
                 ordered.push(byId[id])
         }
@@ -437,6 +478,23 @@ PanelWindow {
         }
         return ordered
     }
+    readonly property var groupsWidgetDefinition: {
+        const revision = DeskCenterConfigService.revision
+        if (!groupsWidgetVisible)
+            return null
+        const widget = configuredWidget("groups", 110, "#51415d", "#332a3d")
+        // Compact only this output's projection on a short screen; the saved
+        // medium (2x3) span remains untouched. Below two rows the grouped
+        // content cannot draw its tabs and member grid, so a screen that
+        // short keeps the normal icon view instead of a broken card.
+        const rows = Math.min(widget.rows, usableRows)
+        if (rows < 2)
+            return null
+        return Object.assign({}, widget, { rows: rows })
+    }
+    readonly property var widgetDefinitions: groupsWidgetDefinition
+        ? flowWidgetDefinitions.concat([groupsWidgetDefinition])
+        : flowWidgetDefinitions
     readonly property var weatherTheme: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay)
 
     function packWidgets(definitions, columnCount, rowCount) {
@@ -455,15 +513,31 @@ PanelWindow {
             / (reservedFileMetrics.cellHeight + reservedFileMetrics.gap)))
     readonly property string widgetGeometry: maximumWidgetColumns + ":" + usableRows
 
-    readonly property var widgetLayout: WidgetLayout.fitWidgets(
-        widgetDefinitions, 4, maximumWidgetColumns, usableRows)
-    readonly property var placements: widgetLayout.placements
+    readonly property var flowWidgetLayout: WidgetLayout.fitWidgets(
+        flowWidgetDefinitions, 4, maximumWidgetColumns, usableRows)
+    readonly property var flowPlacements: flowWidgetLayout.placements
+    readonly property var groupsPlacement: groupsWidgetDefinition
+        ? WidgetLayout.placeAnchoredWidget(groupsWidgetDefinition,
+            flowPlacements, columns, usableRows)
+        : null
+    readonly property var placements: groupsPlacement
+        ? flowPlacements.concat([groupsPlacement])
+        : flowPlacements
+    // The file area starts after the left flow only; the anchored grouped view
+    // does not consume a file column.
+    readonly property int widgetColumns: flowWidgetLayout.columns
+
     function resizeWidget(widgetId, columns, rows) {
         const placement = placementFor(widgetId)
-        if (![1, 2].includes(columns) || ![1, 2].includes(rows)
-                || !placement || !WidgetLayout.canPlace(placements, widgetId,
+        const limit = WidgetLayout.maxSpanFor(widgetId)
+        const minimum = WidgetLayout.minSpanFor(widgetId)
+        const maxColumns = widgetId === "groups"
+            ? root.columns : maximumWidgetColumns
+        if (columns < minimum[0] || rows < minimum[1] || columns > limit[0]
+                || rows > limit[1] || !placement
+                || !WidgetLayout.canPlace(placements, widgetId,
                 placement.column, placement.row, columns, rows,
-                maximumWidgetColumns, usableRows)) return false
+                maxColumns, usableRows)) return false
         DeskCenterConfigService.savePosition(desktopOutput, placements,
             widgetId, placement.column, placement.row, widgetGeometry)
         DeskCenterConfigService.setSpan(widgetId, columns, rows)
@@ -597,8 +671,14 @@ PanelWindow {
         opacity: root.editMode ? 1 : 0
         visible: root.editMode || opacity > 0
         enabled: root.editMode
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration } }
-        anchors { top: parent.top; right: parent.right; topMargin: root.topInset; rightMargin: 24 }
+        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
+        // Editing chrome lives on the free bottom edge. The top corners belong
+        // to the widget layout (left flow, top-right grouped card), so a
+        // corner-anchored toolbar moved whenever a card was shown or resized.
+        x: (parent.width - width) / 2
+        y: parent.height - root.bottomInset - height
+        width: implicitWidth
+        height: implicitHeight
         spacing: 8
 
         Repeater {
@@ -756,7 +836,9 @@ PanelWindow {
         // last target geometry and colour for the entire fade-out.
         property rect lastGeometry: Qt.rect(0, 0, 0, 0)
         readonly property rect previewGeometry: dragged !== null
-            ? Qt.rect(root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+            ? Qt.rect(WidgetLayout.insetRightEdge(
+                    root.leftInset + dragged.dropPosition.column * (root.cellSize + root.gap),
+                    root.spanSize(dragged.displayColumns), root.width, root.rightInset),
                 root.topInset + dragged.dropPosition.row * (root.cellSize + root.gap),
                 root.spanSize(dragged.displayColumns), root.spanSize(dragged.displayRows))
             : lastGeometry
@@ -779,6 +861,7 @@ PanelWindow {
             NumberAnimation {
                 // Appear promptly, leave a little faster: the highlight should
                 // never trail the card that is landing.
+                // motion-exception: Drop-preview fade follows the landing card; retain its shortened release.
                 duration: widgetDropPreview.dragged !== null
                     ? AppearanceTokens.motion.fastDuration
                     : AppearanceTokens.motion.fastDuration * 0.6
@@ -862,22 +945,37 @@ PanelWindow {
             // jump. This flag is assigned by that handler itself, so it is
             // already exact when the writes happen.
             property bool pointerHeld: false
+            // Per-card resize limits. The grouped view and the weather card
+            // are the two widgets whose declared spans exceed the ordinary
+            // two-cell ceiling, so the handle reads both the ceiling and the
+            // floor from WidgetLayout instead of hard-coding "groups ? 3 : 2".
+            readonly property var sizeLimit: WidgetLayout.maxSpanFor(modelData.id)
+            readonly property var sizeFloor: WidgetLayout.minSpanFor(modelData.id)
+            // The anchored grouped view may move across the whole grid; every
+            // other card stays inside the left widget field.
+            readonly property int maxDropColumns: modelData.id === "groups"
+                ? root.columns : root.maximumWidgetColumns
             readonly property var dropPosition: WidgetLayout.snappedPosition(
                 x - root.leftInset, y - root.topInset,
                 displayColumns, displayRows, root.cellSize, root.gap,
-                root.maximumWidgetColumns, root.usableRows)
+                maxDropColumns, root.usableRows)
             readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
                 modelData.id, dropPosition.column, dropPosition.row,
-                displayColumns, displayRows, root.maximumWidgetColumns, root.usableRows)
+                displayColumns, displayRows, maxDropColumns, root.usableRows)
             visible: preview || placement !== null
+            // Desktop widgets are part of the login arrival, not a static
+            // layer that appears before the wallpaper, bar and dock.
+            opacity: StartupReveal.widgetProgress
+            enabled: StartupReveal.widgetProgress > 0
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
-            scale: widgetDrag.active ? 1.035 : 1
-            // The clock is the one card whose glass outline is a shape rather
-            // than a rectangle: it draws MaterialFlower, so its surface has to
-            // be the flower itself — no card fill, no rectangular KWin material,
-            // and frost clipped to the petal outline.
+            // The analog clock uses MaterialFlower's petal outline; the digital
+            // clock uses the regular rounded widget surface.
             flowerShapedSurface: modelData.id === "clock"
+                && DeskCenterConfigService.clockStyle === "analog"
             materialSurfaceColor: root.materialWidgetSurface(modelData.id)
+            // The grouped view keeps the compositor material even when the
+            // colour-artwork widget style is active.
+            allowColorArtwork: modelData.id !== "groups"
             title: modelData.title
             startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
             endColor: modelData.id === "weather" ? root.weatherTheme.secondary : modelData.endColor
@@ -885,8 +983,22 @@ PanelWindow {
             // SurfaceShape listens to Item geometry and scale changes, not
             // Translate.x/y. Move the anchor itself so the native glass and
             // the QML content publish the same position on every drag frame.
-            x: preview ? 0 : root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap) + dragOffsetX
-            y: preview ? 0 : root.topInset + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
+            //
+            // Geometry runs through frame-synchronised springs instead of
+            // Behaviors on these bindings: Qt's SpringAnimation integrates at a
+            // fixed 16 ms step, so on a 240 Hz output a released card moved in
+            // ~60 Hz quanta while the compositor kept presenting every frame.
+            // The grid is laid out from the left inset but still sized with the
+            // original 8 px layout margins, so its rightmost column overflows
+            // the right inset. Cap the committed cell here: the top-right
+            // anchored grouped view then keeps the same visible margin as every
+            // other card. The committed span (not the resize preview) decides
+            // the cap so a resize drag never drags the card's left edge along.
+            readonly property real targetX: preview ? 0 : WidgetLayout.insetRightEdge(
+                root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap),
+                root.spanSize(displayColumns), root.width, root.rightInset) + dragOffsetX
+            readonly property real targetY: preview ? 0 : root.topInset
+                + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
             // The card and every widget inside it lay themselves out for the
             // cell size they have committed to, never for the mid-drag preview:
             // switching a widget to its other layout at the halfway point made
@@ -896,66 +1008,108 @@ PanelWindow {
             readonly property int displayRows: preview ? previewRows : placement?.rows ?? 1
             // While the corner is held, the card follows the magnetised
             // pointer position; the moment it is released the size switches to
-            // the committed cell and the spring below takes it there.
-            width: preview ? parent.naturalWidth : resizeHandle.resizing ? resizeHandle.previewWidth
-                : root.spanSize(displayColumns)
-            height: preview ? parent.naturalHeight : resizeHandle.resizing ? resizeHandle.previewHeight
-                : root.spanSize(displayRows)
-            // A released card lands on its cell instead of sliding there: the
-            // old fixed cubic stopped dead at the destination, which is what
-            // made the snap read as abrupt. The spring carries the release into
-            // the cell and settles with a few pixels of weight.
-            Behavior on x {
-                enabled: !card.pointerHeld && !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetMoveSpring
-                    damping: AppearanceTokens.motion.widgetMoveDamping
-                    mass: AppearanceTokens.motion.widgetMoveMass
-                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
-                }
-            }
-            Behavior on y {
-                enabled: !card.pointerHeld && !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetMoveSpring
-                    damping: AppearanceTokens.motion.widgetMoveDamping
-                    mass: AppearanceTokens.motion.widgetMoveMass
-                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
-                }
-            }
-            // Size is the one change that moves a lot of pixels at once, so it
-            // settles instead of jumping: the drag itself tracks the pointer
-            // one-to-one, and releasing hands the corner to this spring, which
-            // lands it on the grid with a little weight. Reduced motion still
-            // gets the new size, just without the travel.
-            Behavior on width {
-                enabled: !card.preview && !resizeHandle.resizing && !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetResizeSpring
-                    damping: AppearanceTokens.motion.widgetResizeDamping
-                    mass: AppearanceTokens.motion.widgetResizeMass
-                    epsilon: AppearanceTokens.motion.widgetResizeEpsilon
-                }
-            }
-            Behavior on height {
-                enabled: !card.preview && !resizeHandle.resizing && !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetResizeSpring
-                    damping: AppearanceTokens.motion.widgetResizeDamping
-                    mass: AppearanceTokens.motion.widgetResizeMass
-                    epsilon: AppearanceTokens.motion.widgetResizeEpsilon
-                }
-            }
+            // the committed cell and the spring takes it there.
+            readonly property real targetWidth: preview ? parent.naturalWidth
+                : resizeHandle.resizing
+                ? resizeHandle.previewWidth : root.spanSize(displayColumns)
+            readonly property real targetHeight: preview ? parent.naturalHeight
+                : resizeHandle.resizing
+                ? resizeHandle.previewHeight : root.spanSize(displayRows)
             // The lift belongs to the same motion family as the drop, so the
             // card does not land while it is still shrinking on another curve.
-            Behavior on scale {
+            readonly property real targetScale: widgetDrag.active ? 1.035 : 1
+
+            x: springX.value
+            y: springY.value
+            width: springWidth.value
+            height: springHeight.value
+            // Keep the login arrival scale independent of the drag spring.
+            // SurfaceShape follows this scale together with the QML content.
+            scale: springScale.value * (0.97 + 0.03 * StartupReveal.widgetProgress)
+
+            // A held pointer owns the value one-to-one (follow) and the same
+            // spring keeps its last velocity when the card is released, so the
+            // momentum of the drag carries into the cell instead of stopping
+            // dead. The move spring is critically damped: a long drop must not
+            // overshoot past the screen edge.
+            MotionSpring {
+                id: springX
+                target: card.targetX
+                follow: card.pointerHeld
                 enabled: !AppTheme.reduceMotion
-                SpringAnimation {
-                    spring: AppearanceTokens.motion.widgetMoveSpring
-                    damping: AppearanceTokens.motion.widgetMoveDamping
-                    mass: AppearanceTokens.motion.widgetMoveMass
-                    epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            }
+            MotionSpring {
+                id: springY
+                target: card.targetY
+                follow: card.pointerHeld
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetMoveEpsilon
+            }
+            MotionSpring {
+                id: springWidth
+                target: card.targetWidth
+                follow: resizeHandle.resizing
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetResizeAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetResizeDampingRatio
+                epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+            }
+            MotionSpring {
+                id: springHeight
+                target: card.targetHeight
+                follow: resizeHandle.resizing
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetResizeAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetResizeDampingRatio
+                epsilon: AppearanceTokens.motion.widgetResizeEpsilon
+            }
+            MotionSpring {
+                id: springScale
+                target: card.targetScale
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetMoveAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetMoveDampingRatio
+                epsilon: AppearanceTokens.motion.widgetGripEpsilon
+            }
+            // The resize readout lifts with the grab on the same frame clock.
+            MotionSpring {
+                id: springReadoutScale
+                target: readout.visible ? 1.0 : 0.86
+                enabled: !AppTheme.reduceMotion
+                angularFrequency: AppearanceTokens.motion.widgetGripAngularFrequency
+                dampingRatio: AppearanceTokens.motion.widgetGripDampingRatio
+                epsilon: AppearanceTokens.motion.widgetGripEpsilon
+            }
+            // One frame callback advances every channel, and it stops as soon
+            // as all of them have settled, so idle cards cost nothing.
+            FrameAnimation {
+                running: springX.animating || springY.animating
+                    || springWidth.animating || springHeight.animating
+                    || springScale.animating || springReadoutScale.animating
+                onTriggered: {
+                    springX.advance(frameTime)
+                    springY.advance(frameTime)
+                    springWidth.advance(frameTime)
+                    springHeight.advance(frameTime)
+                    springScale.advance(frameTime)
+                    springReadoutScale.advance(frameTime)
                 }
+            }
+            // Placement arrives asynchronously at startup and whenever a widget
+            // is shown again: prime to the cell there instead of springing in
+            // from the window origin.
+            onVisibleChanged: {
+                springX.snap()
+                springY.snap()
+                springWidth.snap()
+                springHeight.snap()
+                springScale.snap()
+                springReadoutScale.snap()
             }
 
             TapHandler {
@@ -1044,6 +1198,37 @@ PanelWindow {
                 }
             }
 
+            Rectangle {
+                objectName: card.modelData.id === "clock" ? "widget-clock-style" : ""
+                z: 80
+                visible: root.editMode && card.modelData.id === "clock"
+                activeFocusOnTab: visible
+                Accessible.role: Accessible.Button
+                Accessible.name: clockStyleLabel.text
+                Accessible.description: I18n.tr("Clock")
+                Accessible.onPressAction: root.toggleClockStyle()
+                anchors { left: parent.left; top: parent.top; leftMargin: 8; topMargin: 40 }
+                width: clockStyleLabel.implicitWidth + 16
+                height: 26
+                radius: 9
+                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, Qt.rgba(0, 0, 0, 0.56))
+                border.width: activeFocus ? 2 : 0
+                border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, "white")
+                Keys.onSpacePressed: root.toggleClockStyle()
+                Keys.onReturnPressed: root.toggleClockStyle()
+                Keys.onEnterPressed: root.toggleClockStyle()
+                Text {
+                    id: clockStyleLabel
+                    objectName: "widget-clock-style-label"
+                    anchors.centerIn: parent
+                    text: DeskCenterConfigService.clockStyle === "analog"
+                        ? I18n.tr("Digital") : I18n.tr("Analog")
+                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
+                    font { family: AppearanceTokens.typography.textFamily; pixelSize: 10; weight: Font.DemiBold }
+                }
+                TapHandler { onTapped: root.toggleClockStyle() }
+            }
+
             WidgetResizeHandle {
                 id: resizeHandle
                 z: 80
@@ -1051,16 +1236,21 @@ PanelWindow {
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
+                maximumColumns: card.sizeLimit[0]
+                maximumRows: card.sizeLimit[1]
+                minimumColumns: card.sizeFloor[0]
+                minimumRows: card.sizeFloor[1]
                 animate: !AppTheme.reduceMotion
                 previewAllowed: card.placement !== null && WidgetLayout.canPlace(
                     root.placements, card.modelData.id, card.placement.column, card.placement.row,
-                    previewColumns, previewRows, root.maximumWidgetColumns, root.usableRows)
+                    previewColumns, previewRows, card.maxDropColumns, root.usableRows)
                 onCommitted: function(columns, rows) {
                     root.resizeWidget(card.modelData.id, columns, rows)
                 }
             }
 
             Rectangle {
+                id: readout
                 z: 81
                 visible: resizeHandle.resizing
                 anchors.centerIn: parent
@@ -1070,11 +1260,7 @@ PanelWindow {
                 color: resizeHandle.previewAllowed ? "#b0000000" : "#c0a02020"
                 // The readout lands with the grab instead of blinking on, so the
                 // eye is already on the corner when the size starts to change.
-                scale: visible ? 1.0 : 0.86
-                Behavior on scale {
-                    enabled: !AppTheme.reduceMotion
-                    SpringAnimation { spring: 5; damping: 0.35; mass: 1; epsilon: 0.005 }
-                }
+                scale: springReadoutScale.value
                 Text {
                     id: resizePreview
                     anchors.centerIn: parent
@@ -1099,13 +1285,58 @@ PanelWindow {
                 enabled: !card.preview && !root.editMode
                 // The clock resolves monochrome ink in its face. Keep its text
                 // out of the extra saturation texture so it renders at the
-                // window's resolution. Other glass artwork is desaturated.
+                // window's resolution. Other glass artwork is desaturated; the
+                // grouped view carries full-colour app icons, so it stays out.
                 layer.enabled: AppearanceConfigService.widgetStyle === "glass"
                     && card.modelData.id !== "clock"
+                    && card.modelData.id !== "groups"
 	                layer.effect: MultiEffect {
 	                    saturation: -1.0
 	                    colorization: 0.0
                 }
+
+            Loader {
+                id: groupsContentLoader
+                anchors.fill: parent
+                active: card.visible && card.modelData.id === "groups"
+                onLoaded: root.groupsContentItem = item
+                onActiveChanged: {
+                    if (!active)
+                        root.groupsContentItem = null
+                }
+                sourceComponent: Component {
+                    DesktopGroupsContent {
+                        objectName: "desktop-groups-content"
+                        entries: desktopFileGrid.orderedEntries
+                        initialCategory: root.desktopFiles.layout.groupSelectedCategory
+                        editing: root.editMode
+                        // Keep the member labels and folder artwork in sync
+                        // with the desktop's own display settings.
+                        showExtensions: desktopFileGrid.desktopLayout.showExtensions
+                        folderCustomizations: desktopFileGrid._folderCustomCache
+                        iconSize: desktopFileGrid.desktopLayout.iconSize
+                        renameCallback: function(entry, name) {
+                            return desktopFileGrid.commitRename(entry, name)
+                        }
+                        onCategorySelected: function(category) {
+                            root.desktopFiles.setGroupSelectedCategory(category)
+                        }
+                        onOpenEntryRequested: function(entry) {
+                            root.desktopFiles.openEntry(entry)
+                        }
+                        onContextMenuRequested: function(entry, x, y) {
+                            // The shared menu reads the desktop selection, so
+                            // make the right-clicked member the only selection
+                            // before building its items.
+                            desktopFileGrid.setSelectedPaths(
+                                entry?.path ? [entry.path] : [])
+                            desktopFileGrid.showMenu(entry,
+                                Qt.point(x - desktopFileGrid.x,
+                                    y - desktopFileGrid.y))
+                        }
+                    }
+                }
+            }
 
             Loader {
                 anchors.fill: parent
@@ -1128,7 +1359,8 @@ PanelWindow {
                 // including while a newly loaded card grows from zero height.
                 property real pageProgress: root.timerView ? 1 : 0
                 Behavior on pageProgress {
-                    NumberAnimation { duration: 240; easing.type: Easing.OutCubic }
+                    enabled: !AppearanceConfigService.reduceMotion
+                    NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
                 }
 
                 Item {
@@ -1137,16 +1369,13 @@ PanelWindow {
                     height: parent.height
                     y: -height * clockPages.pageProgress
 
-                // The flower itself is not drawn here: this card is a regular
-                // Material card whose outline happens to be the flower, so its
-                // paint comes from the card surface like every other card's.
-                // Painting a second flower here is what made the clock read as a
-                // different surface -- its own colour, its own opacity, its own
-                // outline. The clock only adds its face below.
+                // Neither face paints its card surface: DeskWidgetCard owns the
+                // analog flower outline and the digital rounded outline.
 
                 DeskClockFace {
                     id: analogClock
                     objectName: "desktop-clock-face"
+                    visible: DeskCenterConfigService.clockStyle === "analog"
                     anchors.fill: parent
                     anchors.margins: 14
                     date: clock.date
@@ -1160,6 +1389,25 @@ PanelWindow {
                     minuteColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.tertiary : markColor
                     secondColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#ee7659")
                     hubColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ee7659")
+                }
+
+                Loader {
+                    anchors.fill: parent
+                    anchors.margins: 14
+                    active: DeskCenterConfigService.clockStyle === "digital"
+                    sourceComponent: Component {
+                        DeskDigitalClockFace {
+                            anchors.fill: parent
+                            date: clock.date
+                            systemTimeZone: root.systemTimeZone
+                            monochrome: AppearanceConfigService.widgetStyle === "glass"
+                            cornerRadius: Math.max(0, AppearanceTokens.widget.radius - 14)
+                            cityColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            timeColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            offsetColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                            ringColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
+                        }
+                    }
                 }
 
 	                Rectangle {
@@ -1568,7 +1816,7 @@ PanelWindow {
                     text: WeatherService.forecastDays.length > 0
                         ? I18n.tr("High %1°  Low %2°").arg(WeatherService.forecastDays[0].high)
                             .arg(WeatherService.forecastDays[0].low)
-                        : I18n.tr("Updating forecast")
+                        : (WeatherService.loading ? I18n.tr("Updating forecast") : "")
 	                    color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.74), 0.74)
                     font.pixelSize: 11
                 }
@@ -2273,6 +2521,7 @@ PanelWindow {
                             SequentialAnimation on y {
                                 running: musicNotes.running
                                 loops: Animation.Infinite
+                                // motion-exception: Music-note loops keep their phase, lifetime and fade envelope.
                                 PauseAnimation { duration: index * 620 }
                                 NumberAnimation { from: musicNotes.height - 14; to: -20; duration: 2200 + index * 180; easing.type: Easing.OutSine }
                             }
@@ -2555,7 +2804,7 @@ PanelWindow {
                         readonly property string widgetSize: card.displayRows > 1 ? "large"
                             : card.displayColumns > 1 ? "medium" : "small"
                         readonly property int itemLimit: widgetSize === "large" ? 6
-                            : widgetSize === "medium" ? 3 : 0
+                            : widgetSize === "medium" ? (PimWidgetService.errorMessage ? 2 : 3) : 0
                         readonly property var tasks:
                             PimWidgetService.pendingTodos(itemLimit)
                         // In the shared glass modes the card material is the
@@ -2607,7 +2856,7 @@ PanelWindow {
                             font { pixelSize: 13; weight: Font.Bold }
                         }
                         Text {
-                            visible: todoContent.widgetSize === "small"
+                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
                             anchors.centerIn: parent
                             anchors.verticalCenterOffset: 12
                             text: String(PimWidgetService.pendingTodos(99).length)
@@ -2615,15 +2864,15 @@ PanelWindow {
                             font { pixelSize: 38; weight: Font.DemiBold }
                         }
                         Text {
-                            visible: todoContent.widgetSize === "small"
+                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
                             anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
-                            text: I18n.tr("todos")
+                            text: PimWidgetService.cached ? I18n.tr("Cached data") : I18n.tr("todos")
                             color: AppearanceTokens.content.ink("#686873", 0.6)
                             font.pixelSize: 10
                         }
                         Column {
                             visible: todoContent.widgetSize !== "small"
-                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: 10 }
+                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: todoStatus.visible ? todoStatus.height + 14 : 10 }
                             spacing: 4
                             Repeater {
                                 model: todoContent.tasks
@@ -2671,11 +2920,11 @@ PanelWindow {
                             }
                             Text {
                                 visible: todoContent.tasks.length === 0
-                                    && PimWidgetService.state !== "not-installed"
+                                    && (PimWidgetService.ready || PimWidgetService.showFeedback)
                                 anchors.horizontalCenter: parent.horizontalCenter
                                 // Only a ready snapshot can mean all tasks are done.
                                 // App installation is handled when the card is opened.
-                                text: PimWidgetService.ready
+                                text: PimWidgetService.ready && !PimWidgetService.errorMessage
                                     ? I18n.tr("All done for today")
                                     : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
                                 width: Math.max(0, parent.width - 16)
@@ -2686,6 +2935,19 @@ PanelWindow {
                                 color: AppearanceTokens.content.ink("#6c6c75", 0.6)
                                 font.pixelSize: 11
                             }
+                        }
+                        Text {
+                            id: todoStatus
+                            visible: todoContent.widgetSize === "small" ? !PimWidgetService.available
+                                : todoContent.tasks.length > 0 && !!PimWidgetService.errorMessage
+                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; bottomMargin: 10 }
+                            text: PimWidgetService.errorMessage || I18n.tr("Todo service not connected")
+                            horizontalAlignment: Text.AlignHCenter
+                            wrapMode: Text.Wrap
+                            maximumLineCount: todoContent.widgetSize === "small" ? 3 : 2
+                            elide: Text.ElideRight
+                            color: AppearanceTokens.content.ink("#6c6c75", 0.6)
+                            font.pixelSize: todoContent.widgetSize === "small" ? 11 : 9
                         }
                     }
                 }
@@ -2801,8 +3063,7 @@ PanelWindow {
                         }
                     }
                     Text {
-                        visible: PimWidgetService.state !== "not-installed"
-                            && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
+                        visible: PimWidgetService.showFeedback
                         width: parent.width
                         text: PimWidgetService.errorMessage
                         maximumLineCount: 2
@@ -2811,6 +3072,17 @@ PanelWindow {
                         elide: Text.ElideRight
                         font.pixelSize: 9
                     }
+                }
+                Text {
+                    visible: calendarContent.narrow && PimWidgetService.state !== "not-installed"
+                        && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
+                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 100 }
+                    text: PimWidgetService.errorMessage
+                    maximumLineCount: 2
+                    wrapMode: Text.Wrap
+                    elide: Text.ElideRight
+                    color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
+                    font.pixelSize: 9
                 }
                 Item {
                     id: monthGrid
@@ -2894,12 +3166,6 @@ PanelWindow {
         height: root.height - y - root.bottomInset
         clip: false
         readonly property int iconSize: desktopLayout.iconSize
-        // Keep the label optically paired with the three user-selectable
-        // icon sizes instead of leaving it at a fixed desktop-small size.
-        readonly property int fileNameFontSize: iconSize === 72 ? 14
-            : iconSize === 56 ? 11 : 9
-        readonly property int fileNameFontWeight: iconSize === 72 ? Font.Bold
-            : iconSize === 56 ? Font.DemiBold : Font.Medium
         // Reserve real gutters around every icon.  The gaps are not merely
         // visual: they belong to the desktop background so users can start a
         // rubber-band selection between neighbouring files.
@@ -2998,6 +3264,7 @@ PanelWindow {
             property: "folderDropProgress"
             from: 0
             to: 1
+            // motion-exception: Folder-drop progress is the drag acceptance dwell timer.
             duration: 380
             easing.type: Easing.Linear
             onFinished: {
@@ -3110,7 +3377,7 @@ PanelWindow {
 
         function gridPositionForIndex(index) {
             return {
-                x: (columnCount - 1 - Math.floor(index / rowCount)) * itemWidth,
+                x: columnForIndex(index) * itemWidth,
                 y: (index % rowCount) * itemHeight
             }
         }
@@ -3175,7 +3442,7 @@ PanelWindow {
             const previousPositions = ({})
             for (let index = 0; index < next.length; ++index) {
                 previousPositions[next[index].path] = ({
-                    x: (columnCount - 1 - Math.floor(index / rowCount)) * itemWidth,
+                    x: columnForIndex(index) * itemWidth,
                     y: (index % rowCount) * itemHeight
                 })
             }
@@ -3188,7 +3455,7 @@ PanelWindow {
                 return candidate.path === path
             })
             previousPositions[path] = ({
-                x: (columnCount - 1 - Math.floor(sourceNewIndex / rowCount)) * itemWidth,
+                x: columnForIndex(sourceNewIndex) * itemWidth,
                 y: (sourceNewIndex % rowCount) * itemHeight
             })
             if (!wasPreviewed) {
@@ -3209,17 +3476,6 @@ PanelWindow {
                 return paths.indexOf(path) < 0
             }).concat(paths))
             desktopLayout.sync()
-        }
-
-        function saveVisualOrder() {
-            const next = []
-            for (let index = 0; index < desktopFileVisualModel.items.count; ++index) {
-                const item = desktopFileVisualModel.items.get(index)
-                if (item?.model)
-                    next.push(item.model)
-            }
-            if (next.length === orderedEntries.length)
-                saveOrder(next)
         }
 
         function arrange(compare) {
@@ -3266,7 +3522,7 @@ PanelWindow {
         }
 
         function setIconSize(size) {
-            if (size !== 40 && size !== 56 && size !== 72)
+            if (size !== 32 && size !== 40 && size !== 56 && size !== 72)
                 return
             desktopLayout.iconSize = size
             desktopLayout.sync()
@@ -3277,6 +3533,22 @@ PanelWindow {
                 return
             desktopLayout.iconSpacing = spacing
             desktopLayout.sync()
+        }
+
+        function setShortcutAlignment(alignment) {
+            if (alignment !== "left" && alignment !== "right")
+                return
+            desktopLayout.shortcutAlignment = alignment
+            desktopLayout.sync()
+        }
+
+        function columnForIndex(index) {
+            return DesktopGridMetrics.columnForSlot(index, rowCount,
+                columnCount, desktopLayout.shortcutAlignment)
+        }
+        function indexForCell(column, row) {
+            return DesktopGridMetrics.slotForCell(column, row, rowCount,
+                columnCount, desktopLayout.shortcutAlignment)
         }
 
         function displayName(entry) {
@@ -3419,7 +3691,7 @@ PanelWindow {
             const next = additive ? selectionBase.slice() : []
             for (let index = 0; index < orderedEntries.length; ++index) {
                 const entry = orderedEntries[index]
-                const column = columnCount - 1 - Math.floor(index / rowCount)
+                const column = columnForIndex(index)
                 const row = index % rowCount
                 if (column < 0)
                     continue
@@ -3511,8 +3783,12 @@ PanelWindow {
                 createNewFile()
             else if (kind === "openEntry")
                 root.desktopFiles.openEntry(entry)
-            else if (kind === "rename")
-                beginInlineRename(entry)
+            else if (kind === "rename") {
+                if (root.groupsWidgetShown)
+                    root.beginGroupsRename(entry)
+                else
+                    beginInlineRename(entry)
+            }
             else if (kind === "openWithMore")
                 openWithDialog.show(entry)
             else if (kind === "trash") {
@@ -3645,17 +3921,31 @@ PanelWindow {
                 items.push(_ctxAct(I18n.tr("New File"), "newFile"))
                 items.push(_ctxAct(I18n.tr("New Folder"), "newFolder"))
                 items.push(_ctxAct(I18n.tr("Paste"), "paste"))
+                items.push({ separator: true })
+                // One click, remembered state: the grouped view is a
+                // projection of the same entries, never a change to the
+                // underlying files or their saved slots.
+                items.push(_ctxCheck(I18n.tr("Grouped View"), "toggleGroupsWidget",
+                    null, root.groupsWidgetVisible))
+                items.push({ separator: true })
                 const arrange = [
                     _ctxAct(I18n.tr("By Name"), "arrangeByName"),
                     _ctxAct(I18n.tr("By Type"), "arrangeByType"),
                     _ctxAct(I18n.tr("By Modified (newest)"), "arrangeModifiedNew"),
-                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld")
+                    _ctxAct(I18n.tr("By Modified (oldest)"), "arrangeModifiedOld"),
+                    { separator: true },
+                    _ctxCheck(I18n.tr("Align Left"), "setShortcutAlignment", "left",
+                        desktopLayout.shortcutAlignment === "left"),
+                    _ctxCheck(I18n.tr("Align Right"), "setShortcutAlignment", "right",
+                        desktopLayout.shortcutAlignment === "right")
                 ]
                 items.push(_ctxSub(I18n.tr("Arrange"), arrange, "arrange"))
                 items.push(_ctxAct(I18n.tr("Reset icon order"), "resetLayout"))
                 items.push(_ctxCheck(I18n.tr("Show file extensions"), "toggleExtensions", null,
                     desktopLayout.showExtensions))
-                const sizeKids = [[40, I18n.tr("Small")], [56, I18n.tr("Medium")], [72, I18n.tr("Large")]]
+                const sizeKids = [[32, I18n.tr("Extra Small")],
+                    [40, I18n.tr("Small")], [56, I18n.tr("Medium")],
+                    [72, I18n.tr("Large")]]
                     .map(([px, l]) => _ctxCheck(l, "setIconSize", px,
                         iconSize === px))
                 items.push(_ctxSub(I18n.tr("Icon Size"), sizeKids, "iconSize"))
@@ -3715,14 +4005,30 @@ PanelWindow {
                 break
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
+            case "setShortcutAlignment": setShortcutAlignment(v); break
+            case "toggleGroupsWidget": {
+                AppearanceConfigService.setDeskCenterWidgetVisible("groups",
+                    !root.groupsWidgetVisible)
+                desktopFileGrid.clearDesktopSelection()
+                break
+            }
             case "refresh": triggerContextAction("refresh"); break
+            // Session entries live in a submenu; without these the menu closes
+            // and the command is dropped.
+            case "lock":
+            case "suspend":
+            case "switch":
+            case "logout":
+            case "reboot":
+            case "poweroff":
+                triggerContextAction(cmd); break
             }
         }
 
         function indexAt(pointX, pointY) {
             const column = Math.max(0, Math.min(columnCount - 1, Math.floor(pointX / itemWidth)))
             const row = Math.max(0, Math.min(rowCount - 1, Math.floor(pointY / itemHeight)))
-            const index = (columnCount - 1 - column) * rowCount + row
+            const index = indexForCell(column, row)
             return Math.max(0, Math.min(orderedEntries.length - 1, index))
         }
 
@@ -3791,7 +4097,10 @@ PanelWindow {
             id: externalDesktopDrop
             anchors.fill: parent
             z: 20
-            enabled: false
+            // The free-slot surface owns external drops while it is visible.
+            // The grouped widget hides it, so this fallback keeps
+            // "copy to desktop" working over the widget.
+            enabled: root.groupsWidgetShown
             onEntered: function(drag) {
                 // Ignore a desktop icon's own outgoing URI drag.
                 drag.accepted = drag.hasUrls && !drag.source
@@ -3886,468 +4195,16 @@ PanelWindow {
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.34) }
             z: 1
             Behavior on opacity {
-                NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve }
             }
         }
 
-        GridView {
-            id: desktopFileView
-            anchors.fill: parent
-            visible: false
-            interactive: false
-            clip: true
-            flow: GridView.FlowLeftToRight
-            layoutDirection: Qt.RightToLeft
-            verticalLayoutDirection: GridView.TopToBottom
-            cellWidth: desktopFileGrid.itemWidth
-            cellHeight: desktopFileGrid.itemHeight
-            displaced: Transition {
-                NumberAnimation { properties: "x,y"; easing.type: Easing.OutQuad }
-            }
-            model: DelegateModel {
-                id: desktopFileVisualModel
-                // FreeSlotDesktopDemo is the active desktop implementation.
-                // This legacy GridView remains only as dormant reference code;
-                // an invisible QML view can still instantiate delegates, which
-                // would decode every image thumbnail a second time. Keep its
-                // model empty unless it is deliberately made visible again.
-                model: desktopFileView.visible
-                    ? desktopFileGrid.orderedEntries : []
-                delegate: DropArea {
-                id: fileDelegate
-                required property var modelData
-                width: desktopFileView.cellWidth
-                height: desktopFileView.cellHeight
-                onEntered: function(drag) {
-                    desktopFileVisualModel.items.move(
-                        drag.source.DelegateModel.itemsIndex,
-                        minimalDragIcon.DelegateModel.itemsIndex)
-                }
-
-                // Intentionally mirrors Qt's Dynamic View Ordering example:
-                // a visual DelegateModel, a DropArea per cell, and one item
-                // reparented to the GridView while DragHandler moves it.
-                Item {
-                    id: minimalDragIcon
-                    width: fileDelegate.width
-                    height: fileDelegate.height
-                    z: minimalDragHandler.active ? 100 : 0
-                    Drag.active: minimalDragHandler.active
-                    Drag.source: minimalDragIcon
-                    Drag.hotSpot.x: width / 2
-                    Drag.hotSpot.y: height / 2
-                    states: State {
-                        when: minimalDragHandler.active
-                        ParentChange { target: minimalDragIcon; parent: desktopFileView.contentItem }
-                    }
-
-                    // 文件类型图标走系统主题（freedesktop MIME 名）；主题缺这个
-                    // 图标时才退回自带的线条图案。
-                    IconImage {
-                        id: minimalDragThemeIcon
-                        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
-                        width: desktopFileGrid.iconSize * 0.75
-                        height: width
-                        // Theme icon: synchronous, see AppIcon.qml.
-                        asynchronous: false
-                        source: SystemIconResolver.sourceFromCandidates(
-                            SystemIconResolver.candidates("desktop.file." + modelData.kind), "text-x-generic")
-                    }
-                    BundledIcon {
-                        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
-                        visible: minimalDragThemeIcon.status !== Image.Ready
-                        name: desktopFileGrid.iconFor(modelData.kind)
-                        color: Qt.rgba(1, 1, 1, 0.88)
-                        size: desktopFileGrid.iconSize * 0.75
-                        outlined: true
-                    }
-                    Text {
-                        anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: desktopFileGrid.iconSize + 12; leftMargin: 5; rightMargin: 5 }
-                        text: desktopFileGrid.displayName(modelData)
-                        elide: Text.ElideRight
-                        maximumLineCount: 2
-                        wrapMode: Text.Wrap
-                        horizontalAlignment: Text.AlignHCenter
-                        color: "white"
-                        style: Text.Outline
-                        styleColor: Qt.rgba(0, 0, 0, 0.72)
-                        font { pixelSize: desktopFileGrid.fileNameFontSize; weight: desktopFileGrid.fileNameFontWeight }
-                    }
-                    DragHandler {
-                        id: minimalDragHandler
-                        onActiveChanged: {
-                            if (!active)
-                                desktopFileGrid.saveVisualOrder()
-                        }
-                    }
-                }
-
-                Item {
-                    id: fileVisual
-                    visible: false
-                    width: fileDelegate.width
-                    height: fileDelegate.height
-                    z: reorderDrag.active ? 100 : 0
-                    Drag.active: reorderDrag.active && fileDelegate.draggingSingle
-                    Drag.source: fileDelegate
-                    Drag.hotSpot.x: width / 2
-                    Drag.hotSpot.y: height / 2
-                    states: State {
-                        when: reorderDrag.active && fileDelegate.draggingSingle
-                        ParentChange { target: fileVisual; parent: desktopFileView.contentItem }
-                        PropertyChanges { target: fileVisual; x: fileDelegate.x; y: fileDelegate.y }
-                    }
-
-                Rectangle {
-                    // Match the actual pointer target rather than colouring
-                    // the complete grid cell.  The cell edge stays visibly
-                    // and interactively empty for lasso selection.
-                    anchors.fill: filePointer
-                    radius: 10
-                    // Hover is intentionally quieter than selection: both
-                    // use the neutral black material introduced above.
-                    opacity: desktopFileGrid.isSelected(modelData.path) ? 1
-                        : filePointer.containsMouse ? 0.38 : 0
-                    color: Qt.rgba(0, 0, 0, 0.46)
-                    border { width: 1; color: Qt.rgba(1, 1, 1, 0.28) }
-                    Behavior on opacity {
-                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-                    }
-                }
-                Item {
-                    // The target folder shows the exact hold progress rather
-                    // than a vague hover state. Releasing before it fills is
-                    // always treated as an icon reorder.
-                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: desktopFileGrid.iconSize + 5 }
-                    width: desktopFileGrid.iconSize
-                    height: 4
-                    visible: modelData.kind === "folder"
-                        && desktopFileGrid.folderDropCandidatePath === modelData.path
-                    opacity: visible ? 1 : 0
-                    Behavior on opacity {
-                        NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
-                    }
-                    Rectangle {
-                        anchors.fill: parent
-                        radius: height / 2
-                        color: Qt.rgba(1, 1, 1, 0.22)
-                    }
-                    Rectangle {
-                        width: parent.width * desktopFileGrid.folderDropProgress
-                        height: parent.height
-                        radius: height / 2
-                        color: Qt.rgba(1, 1, 1, 0.88)
-                    }
-                }
-                // Finder-style destination feedback: only actual folders can
-                // receive a drop, so files never imply an unsupported action.
-                Rectangle {
-                    anchors { fill: parent; margins: 3 }
-                    radius: 10
-                    visible: opacity > 0.01
-                    opacity: modelData.kind === "folder"
-                        && desktopFileGrid.dropFolderPath === modelData.path ? 1 : 0
-                    color: Qt.rgba(0, 0, 0, 0.56)
-                    border { width: 1; color: Qt.rgba(1, 1, 1, 0.62) }
-                    Behavior on opacity {
-                        NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
-                    }
-                }
-                Item {
-                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 8 }
-                    width: desktopFileGrid.iconSize
-                    height: desktopFileGrid.iconSize
-                    scale: (filePointer.containsMouse ? 1.035 : 1)
-                        * (fileDelegate.opening ? 0.96 : 1)
-                    transform: Translate {
-                        y: filePointer.containsMouse ? -2 : 0
-                        Behavior on y {
-                            NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-                        }
-                    }
-                    Behavior on scale {
-                        NumberAnimation { duration: 130; easing.type: Easing.OutCubic }
-                    }
-                    Item {
-                        id: imageThumbnailFrame
-                        anchors { fill: parent; margins: 4 }
-                        visible: modelData.kind === "image"
-                        opacity: imageThumbnail.status === Image.Ready ? 1 : 0
-                        Behavior on opacity {
-                            NumberAnimation { duration: 170; easing.type: Easing.OutCubic }
-                        }
-                        Image {
-                            id: imageThumbnail
-                            anchors.fill: parent
-                            source: modelData.kind === "image" ? "file://" + modelData.path : ""
-                            fillMode: Image.PreserveAspectCrop
-                            // Keep this dormant legacy delegate safe if it is
-                            // ever re-enabled: desktop thumbnails must never
-                            // decode their original multi-megapixel images.
-                            sourceSize.width: Math.max(1, Math.ceil(width * 2))
-                            sourceSize.height: Math.max(1, Math.ceil(height * 2))
-                            asynchronous: true
-                            cache: false
-                            smooth: true
-                            // OpacityMask below renders this source. A plain
-                            // Rectangle.clip only clips to a rectangle and
-                            // cannot apply radius to the image pixels.
-                            visible: false
-                        }
-                        Rectangle {
-                            id: imageThumbnailMask
-                            anchors.fill: parent
-                            radius: 5
-                            visible: false
-                        }
-                        OpacityMask {
-                            anchors.fill: parent
-                            source: imageThumbnail
-                            maskSource: imageThumbnailMask
-                        }
-                    }
-                    AppIcon {
-                        id: launcherIcon
-                        anchors.fill: parent
-                        source: modelData.kind === "launcher"
-                            ? AppPresentationService.iconSource(modelData.icon) : ""
-                        // Theme icon: synchronous, see AppIcon.qml.
-                        asynchronous: false
-                        visible: source !== "" && imageStatus === Image.Ready
-                    }
-                    // Folder artwork and custom emblem share one scalable composition.
-                    DesktopFolderIcon {
-                        readonly property var folderCustom: modelData.kind === "folder"
-                            ? desktopFileGrid.folderCustomFor(modelData.path) : null
-                        anchors.centerIn: parent
-                        width: desktopFileGrid.iconSize
-                        height: desktopFileGrid.iconSize
-                        visible: modelData.kind === "folder"
-                        color: folderCustom && folderCustom.color ? folderCustom.color : "#70b6ff"
-                        emoji: folderCustom ? folderCustom.emoji || "" : ""
-                    }
-                    IconImage {
-                        id: desktopThemeIcon
-                        anchors.centerIn: parent
-                        width: desktopFileGrid.iconSize * 0.75
-                        height: width
-                        // Theme icon: synchronous, see AppIcon.qml.
-                        asynchronous: false
-                        source: SystemIconResolver.sourceFromCandidates(
-                            SystemIconResolver.candidates("desktop.file." + modelData.kind), "text-x-generic")
-                        visible: source !== "" && status === Image.Ready
-                            && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
-                            && (modelData.kind !== "launcher" || launcherIcon.imageStatus !== Image.Ready)
-                            && modelData.kind !== "folder"
-                    }
-                    BundledIcon {
-                        anchors.centerIn: parent
-                        // A broken or unsupported image still behaves like a
-                        // normal desktop file instead of becoming invisible.
-                        // Folders use the composed artwork above. 主题没带
-                        // 这个类型图标时才由这里接手。
-                        visible: desktopThemeIcon.status !== Image.Ready
-                            && (modelData.kind !== "image" || imageThumbnail.status !== Image.Ready)
-                            && (modelData.kind !== "launcher" || launcherIcon.imageStatus !== Image.Ready)
-                            && modelData.kind !== "folder"
-                        name: desktopFileGrid.iconFor(modelData.kind)
-                        color: Qt.rgba(1, 1, 1, 0.88)
-                        size: desktopFileGrid.iconSize * 0.75
-                        outlined: true
-                    }
-                }
-                Text {
-                    anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: desktopFileGrid.iconSize + 12; leftMargin: 5; rightMargin: 5 }
-                    opacity: fileDelegate.isRenaming ? 0 : 1
-                    visible: opacity > 0.01
-                    text: desktopFileGrid.displayName(modelData)
-                    elide: Text.ElideRight
-                    maximumLineCount: 2
-                    wrapMode: Text.Wrap
-                    horizontalAlignment: Text.AlignHCenter
-                    color: "white"
-                    style: Text.Outline
-                    styleColor: Qt.rgba(0, 0, 0, 0.72)
-                    font { pixelSize: desktopFileGrid.fileNameFontSize; weight: desktopFileGrid.fileNameFontWeight }
-                    Behavior on opacity {
-                        NumberAnimation { duration: 110; easing.type: Easing.OutCubic }
-                    }
-                }
-                MouseArea {
-                    id: filePointer
-                    enabled: false
-                    // The complete cell used to be clickable, leaving no
-                    // genuine blank area between adjacent files.  Keep a
-                    // compact content target around the icon and label.
-                    anchors {
-                        left: parent.left
-                        right: parent.right
-                        top: parent.top
-                        bottom: parent.bottom
-                        leftMargin: 9
-                        rightMargin: 9
-                        topMargin: 4
-                        bottomMargin: 6
-                    }
-                    acceptedButtons: Qt.LeftButton | Qt.RightButton
-                    hoverEnabled: true
-                    onPressed: function(mouse) {
-                        if (mouse.button === Qt.RightButton) {
-                            if (!desktopFileGrid.isSelected(modelData.path))
-                                desktopFileGrid.selectOnly(modelData.path)
-                            desktopFileGrid.contextEntry = modelData
-                            desktopFileGrid.showMenu(modelData,
-                                fileDelegate.mapToItem(root, mouse.x, mouse.y))
-                        } else {
-                            fileDelegate.dragEnabled = !(mouse.modifiers & Qt.ControlModifier)
-                            if (mouse.modifiers & Qt.ControlModifier)
-                                desktopFileGrid.toggleSelection(modelData.path)
-                            else if (!desktopFileGrid.isSelected(modelData.path))
-                                desktopFileGrid.selectOnly(modelData.path)
-                            fileDelegate.dragMoved = false
-                            desktopFileGrid.activateKeyboard()
-                        }
-                    }
-                    onClicked: function(mouse) {
-                        if (fileDelegate.dragMoved || mouse.button !== Qt.LeftButton
-                                || (mouse.modifiers & Qt.ControlModifier))
-                            return
-                        if (!desktopFileGrid.isSelected(modelData.path)) {
-                            desktopFileGrid.selectOnly(modelData.path)
-                            return
-                        }
-                        // Finder icon view enters rename after a second,
-                        // deliberately slow click on an already selected item.
-                        const now = Date.now()
-                        const elapsed = now - previousClickTime
-                        previousClickTime = now
-                        if (!fileDelegate.dragMoved && elapsed >= 350 && elapsed <= 1200)
-                            desktopFileGrid.beginInlineRename(modelData)
-                    }
-                    onDoubleClicked: function(mouse) {
-                        if (fileDelegate.dragMoved || Date.now() < fileDelegate.suppressOpenUntil
-                                || mouse.button !== Qt.LeftButton)
-                            return
-                        fileDelegate.opening = true
-                        openFeedback.restart()
-                    }
-                }
-                // DragHandler supplies a direct gesture translation. Unlike
-                // MouseArea's positional callback it never derives the next
-                // pointer position from an item that is itself transformed.
-                DragHandler {
-                    id: reorderDrag
-                    enabled: false
-                    target: fileVisual
-                    acceptedButtons: Qt.LeftButton
-                    acceptedModifiers: Qt.NoModifier
-                    onActiveChanged: {
-                        if (active) {
-                            fileDelegate.dragHandlerStarted = true
-                            fileDelegate.dragMoved = true
-                            fileDelegate.draggingSingle = true
-                        } else if (fileDelegate.dragHandlerStarted) {
-                            if (fileDelegate.draggingSingle)
-                                desktopFileGrid.saveVisualOrder()
-                            fileDelegate.draggingSingle = false
-                            fileDelegate.dragHandlerStarted = false
-                        }
-                    }
-                }
-                Timer {
-                    id: openFeedback
-                    interval: 90
-                    repeat: false
-                    onTriggered: {
-                        fileDelegate.opening = false
-                        root.desktopFiles.openEntry(modelData)
-                    }
-                }
-                Rectangle {
-                    id: inlineRenameFrame
-                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: desktopFileGrid.iconSize + 10 }
-                    width: Math.min(parent.width - 10, Math.max(68, inlineRenameInput.contentWidth + 18))
-                    height: 23
-                    radius: 5
-                    opacity: fileDelegate.isRenaming ? 1 : 0
-                    visible: opacity > 0.01
-                    color: "#ffffff"
-                    border { width: 1; color: "#0a84ff" }
-                    z: 2
-                    transform: Translate {
-                        y: fileDelegate.isRenaming ? 0 : 2
-                        Behavior on y {
-                            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                        }
-                    }
-                    Behavior on opacity {
-                        NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
-                    }
-                    function commit() {
-                        if (desktopFileGrid.renamingPath !== modelData.path)
-                            return
-                        const newName = inlineRenameInput.text.trim()
-                        const newPath = root.desktopFiles.directory + "/" + newName
-                        // Reject name collisions synchronously so the folder
-                        // customisation is not migrated to a path that will
-                        // never be created.
-                        if (newPath !== modelData.path) {
-                            const clash = root.desktopFiles.entries.some(function(e) {
-                                return e.path === newPath
-                            })
-                            if (clash) {
-                                root.desktopFiles.lastError = I18n.tr("That name is already in use")
-                                return
-                            }
-                        }
-                        if (root.desktopFiles.renameEntry(modelData, inlineRenameInput.text)) {
-                            // Migrate folder customisation to the new path so
-                            // renaming a folder does not discard its color/emoji.
-                            if (newPath !== modelData.path)
-                                desktopFileGrid.migrateFolderCustom(modelData.path, newPath)
-                            desktopFileGrid.renamingPath = ""
-                        }
-                    }
-                    onVisibleChanged: {
-                        if (!visible)
-                            return
-                        inlineRenameInput.text = modelData.name
-                        inlineRenameInput.forceActiveFocus()
-                        inlineRenameInput.select(0, desktopFileGrid.renameSelectionEnd(modelData))
-                    }
-                    TextInput {
-                        id: inlineRenameInput
-                        anchors { fill: parent; leftMargin: 6; rightMargin: 6 }
-                        color: "#1d1d1f"
-                        selectByMouse: true
-                        selectionColor: "#252529"
-                        selectedTextColor: "white"
-                        verticalAlignment: TextInput.AlignVCenter
-                        horizontalAlignment: TextInput.AlignHCenter
-                        font { pixelSize: desktopFileGrid.fileNameFontSize; weight: desktopFileGrid.fileNameFontWeight }
-                        onActiveFocusChanged: {
-                            if (!activeFocus && fileDelegate.isRenaming)
-                                inlineRenameFrame.commit()
-                        }
-                        Keys.onReturnPressed: function(event) {
-                            inlineRenameFrame.commit()
-                            event.accepted = true
-                        }
-                        Keys.onEscapePressed: function(event) {
-                            desktopFileGrid.renamingPath = ""
-                            event.accepted = true
-                        }
-                    }
-                }
-            }
-        }
-
-            }
-        }
 
         FreeSlotDesktopDemo {
             id: freeSlotDesktop
-            visible: !root.isDashboardMode
+            // The grouped widget hides the icon field but never touches its
+            // slots or order, so hiding the widget restores it exactly.
+            visible: !root.groupsWidgetShown
             x: -desktopFileGrid.x
             y: -desktopFileGrid.y
             width: root.width
@@ -4359,6 +4216,7 @@ PanelWindow {
             baseCellWidth: desktopFileGrid.preferredItemWidth
             baseCellHeight: desktopFileGrid.itemHeight
             density: desktopFileGrid.desktopLayout.iconSpacing
+            alignment: desktopFileGrid.desktopLayout.shortcutAlignment
             iconVisualSize: desktopFileGrid.iconSize + 12
             showExtensions: desktopFileGrid.desktopLayout.showExtensions
             folderCustomizations: desktopFileGrid._folderCustomCache
@@ -4419,8 +4277,7 @@ PanelWindow {
         Rectangle {
             id: reorderInsertionMarker
             readonly property int markerColumn: desktopFileGrid.reorderInsertionIndex < 0 ? 0
-                : desktopFileGrid.columnCount - 1
-                    - Math.floor(desktopFileGrid.reorderInsertionIndex / desktopFileGrid.rowCount)
+                : desktopFileGrid.columnForIndex(desktopFileGrid.reorderInsertionIndex)
             readonly property int markerRow: desktopFileGrid.reorderInsertionIndex < 0 ? 0
                 : desktopFileGrid.reorderInsertionIndex % desktopFileGrid.rowCount
             x: markerColumn * desktopFileGrid.itemWidth + 7
@@ -4434,13 +4291,12 @@ PanelWindow {
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.48) }
             z: 8
             Behavior on opacity {
-                NumberAnimation { duration: 90; easing.type: Easing.OutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.instant.duration; easing.type: AppearanceTokens.motion.enterCurve }
             }
         }
 
         ContextMenu {
             id: desktopContextMenu
-            reserveIconSpace: true
             capsuleReveal: true
             // The anchor is only a 4px cursor marker; use the Wi-Fi pill size.
             capsuleSourceWidth: 137
@@ -4497,7 +4353,7 @@ PanelWindow {
             radius: 16
             visible: openWithMotion.mapped
             opacity: openWithMotion.progress
-            scale: 0.96 + 0.04 * openWithMotion.progress
+            scale: 0.96 + 0.04 * openWithMotion.geometryProgress
             enabled: openWithMotion.interactive
             color: Qt.rgba(0.12, 0.12, 0.15, 0.98)
             border { width: 1; color: Qt.rgba(1, 1, 1, 0.18) }

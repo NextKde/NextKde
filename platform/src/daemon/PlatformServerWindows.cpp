@@ -44,6 +44,8 @@ bool validLayoutPayload(const QJsonObject &payload)
         && validRect(payload.value(QStringLiteral("dockRect")))
         && finiteNumber(payload.value(QStringLiteral("barReservedHeight")), 0.0, 4096.0)
         && finiteNumber(payload.value(QStringLiteral("workspaceGap")), 0.0, 512.0)
+        && (!payload.contains(QStringLiteral("dockReserved"))
+            || payload.value(QStringLiteral("dockReserved")).isBool())
         && (dockPosition == QStringLiteral("bottom")
             || dockPosition == QStringLiteral("left")
             || dockPosition == QStringLiteral("right"));

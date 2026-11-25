@@ -21,6 +21,19 @@ import qs.desktop.modules.inputmethod
 Item {
     id: shell
 
+    // I18nService is a QML singleton, so nothing applies the persisted UI
+    // language unless it is touched. Touch it here, in the first property
+    // binding: root bindings are evaluated before the children below are
+    // created, and several surfaces build their I18n.tr() strings once while
+    // they are created (e.g. the Dock's trash menu in Component.onCompleted),
+    // so a later application would leave those in the system locale. The
+    // singleton reads its state file synchronously and applies the saved
+    // language while it is built, so the first frame is already translated.
+    // Without this the desktop started in the system locale and only flipped
+    // when Settings first called the i18n-settings IPC below — which looked
+    // like the language changing on every update restart.
+    readonly property string _uiLanguage: I18nService.language
+
     IpcHandler {
         target: "notification-settings"
         function snapshot(): string {
@@ -64,6 +77,8 @@ Item {
                     running: ThemeWallpaperService.running,
                     waiting: ThemeWallpaperService.idleDelay.running,
                     hasVisibleWindows: ThemeWallpaperService.hasVisibleWindows,
+                    eligible: ThemeWallpaperService.idleEligible,
+                    locked: ThemeWallpaperService.locked,
                     phase: ThemeWallpaperService.phase,
                     preview: ThemeWallpaperService.preview
                 },
@@ -103,6 +118,13 @@ Item {
                 },
                 spatialEnabled: AppearanceConfigService.spatialWallpaperEnabled,
                 spatialReady: SpatialWallpaperService.ready,
+                spatialMotion: {
+                    running: SpatialWallpaperService.motionRunning,
+                    waiting: SpatialWallpaperService.motion.idleDelay.running,
+                    hasVisibleWindows: SpatialWallpaperService.motion.hasVisibleWindows,
+                    eligible: SpatialWallpaperService.motion.idleEligible,
+                    locked: SpatialWallpaperService.motion.locked
+                },
                 spatialPrepared: SpatialWallpaperService.prepared,
                 spatialBusy: SpatialWallpaperService.requestInFlight,
                 spatialPreparing: SpatialWallpaperService.preparationRequested,
@@ -248,6 +270,7 @@ Item {
     // An unavailable platform fails the write immediately; ShortcutsService
     // publishes again once its config is ready and the transport reconnects.
     Component.onCompleted: {
+        StartupReveal.initialize()
         IconThemeReloadService.initialize()
         // Watch kdeglobals so 使用系统字体 follows a font changed in System
         // Settings without restarting the shell, and so the first value is
@@ -308,6 +331,15 @@ Item {
                 iconOpacity: ConfigService.iconOpacity,
                 iconTintColor: ConfigService.iconTintColor,
                 visibilityMode,
+                autoHideApps: ConfigService.autoHideApps,
+                // Settings gets the same canonical identities as the Dock,
+                // never the foreground scheduler's provider-specific classes.
+                runningApps: WindowService.records.reduce((apps, record) => {
+                    const id = record.identity?.desktopId || ""
+                    if (id && !apps.some(app => app.appId === id))
+                        apps.push({ appId: id, name: record.identity.name || id })
+                    return apps
+                }, []),
                 windowGrouping,
                 showLauncher: ConfigService.showLauncher,
                 showTrash: ConfigService.showTrash,
@@ -400,6 +432,14 @@ Item {
             return snapshot()
         }
 
+        function updateAutoHideApp(appId: string, enabled: bool): string {
+            const accepted = ConfigService.updateAutoHideApp(appId, enabled)
+            const state = JSON.parse(snapshot())
+            if (!accepted)
+                state.error = "Dock app auto-hide request failed"
+            return JSON.stringify(state)
+        }
+
         function updateWindowGrouping(mode: string): string {
             ConfigService.updateWindowGrouping(mode)
             return snapshot()
@@ -490,6 +530,8 @@ Item {
                 barLayoutMode: AppearanceConfigService.barLayoutMode,
                 barMacStyle: AppearanceConfigService.barMacStyle,
                 barMacTint: AppearanceConfigService.barMacTint,
+                reduceMotion: AppearanceConfigService.reduceMotion,
+                startupRevealDuration: AppearanceConfigService.startupRevealDuration,
                 dockWindowAnimationStyle:
                     AppearanceConfigService.dockWindowAnimationStyle,
                 // The family the desktop would draw with, so the Settings page
@@ -616,6 +658,11 @@ Item {
             return snapshot()
         }
 
+        function updateStartupMotion(reduced: bool, duration: int): string {
+            AppearanceConfigService.updateStartupMotion(reduced, duration)
+            return snapshot()
+        }
+
         function updateDockWindowAnimationStyle(style: string): string {
             AppearanceConfigService.updateDockWindowAnimationStyle(style)
             return snapshot()
@@ -721,6 +768,7 @@ Item {
         function snapshot(): string {
             return JSON.stringify({
                 shellReady: true,
+                startupReveal: { phase: StartupReveal.phase, progress: StartupReveal.progress },
                 platformConnected: PlatformClient.connected,
                 dataConnected: DataClient.connected,
                 outputAvailable: ScreenLifecycle.outputAvailable,
@@ -787,6 +835,10 @@ Item {
             ContextMenuCoordinator.dismissForGlobalPointerPress(x, y, timestamp)
         }
     }
+
+    // The login spinner runs in its own process so it keeps moving while this
+    // one is busy building the desktop; see StartupSplash.qml.
+    StartupSplash {}
 
     QuickSearch {
         id: quickSearch

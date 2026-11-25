@@ -4,6 +4,7 @@ import "../foundation" as Foundation
 
 Button {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(ControlForm.materialForm)
     property bool secondary: false
     property bool destructive: false
     hoverEnabled: true
@@ -14,7 +15,7 @@ Button {
     rightPadding: 16
     // §4.1：hover 只改背景不改 scale；§5 Pressed：scale .96、100ms。
     scale: down ? 0.96 : 1
-    Behavior on scale { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : 100; easing.type: Easing.OutCubic } }
+    Behavior on scale { NumberAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : root.motionPolicy.instant.duration; easing.type: root.motionPolicy.enterCurve } }
     opacity: enabled ? 1 : 0.38
     contentItem: Label {
         text: root.text
@@ -46,7 +47,7 @@ Button {
             color: root.down
                 ? (Foundation.AppTheme.dark ? Qt.rgba(1, 1, 1, 0.12) : Qt.rgba(0, 0, 0, 0.10))
                 : (Foundation.AppTheme.dark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
-            Behavior on color { ColorAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : 150 } }
+            Behavior on color { ColorAnimation { duration: Foundation.AppTheme.reduceMotion ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
         }
         // §4.2/§5 Focus：外环 2px accent，偏移 2（margins −4 扣描边 2 留白恰 2px），
         // 圆角 +2（胶囊 radius 随环高度自然 +2）；失焦或禁用即移除。

@@ -1,7 +1,14 @@
 pragma Singleton
 import QtQuick
+import "../foundation" as Foundation
 
 QtObject {
+    readonly property Foundation.MotionTokens motion: Foundation.MotionTokens {}
+    readonly property Foundation.MotionTokens materialMotion: Foundation.MotionTokens { isMaterial: true }
+    function motionFor(materialForm) {
+        return materialForm ? materialMotion : motion
+    }
+
     property var _backdrops: []
 
     // §5 输入/搜索焦点补充：焦点外环颜色回退（系统 accent 无彩或明度越界时用）。

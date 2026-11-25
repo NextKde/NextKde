@@ -1,0 +1,15 @@
+{
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "NextKDE"
+            }
+        ],
+        "Category": "Appearance",
+        "Description": "Glass surface materials for KWin",
+        "EnabledByDefault": false,
+        "License": "GPL",
+        "Name": "KOS Glass",
+        "Version": "2.0.0"
+    }
+}

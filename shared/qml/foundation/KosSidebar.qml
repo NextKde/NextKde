@@ -18,7 +18,7 @@ Item {
     enabled: expanded
 
     Behavior on Layout.preferredWidth {
-        NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.InOutCubic }
+        NumberAnimation { duration: AppTheme.motionNormal; easing.type: AppTheme.motion.settleCurve }
     }
     Rectangle {
         id: body

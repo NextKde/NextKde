@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QStringList>
 #include <QPointer>
+#include <QTimer>
 
 namespace KosPlatform {
 
@@ -116,16 +117,13 @@ private:
     void setupDbusListeners();
     void teardownDbusListeners();
     void queryKWinCaret();
-    void notifyState();
+    void notifyState(bool immediate = true);
     void parseAndStoreProperty(const QString &prop);
 
     bool acquireTakeover();
     void releaseTakeover();
-    bool backupOriginalFcitxAddons();
     bool setFcitxAddons(bool classicUi, bool kimpanel);
-    bool restartFcitx();
     bool waitForPanelAdapter();
-    bool saveRecoveryState();
     void recoverOriginalFcitxAddons();
     QString recoveryPath() const;
 
@@ -141,11 +139,11 @@ private:
     bool m_addonsChanged = false;
     QString m_error;
 
-    bool m_hasOriginalAddonState = false;
-    bool m_origClassicUiEnabled = true;
-    bool m_origKimpanelEnabled = false;
-
     quint64 m_kwinCaretSerial = 0;
+
+    // One pending snapshot per event-loop turn; lifecycle boundaries flush it.
+    QTimer m_stateTimer;
+    QJsonObject m_lastPublishedState;
 
     // State cache
     bool m_imEnabled = true;

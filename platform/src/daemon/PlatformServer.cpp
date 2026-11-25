@@ -28,6 +28,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QStringList>
+#include <QTimeZone>
 #include <QTimer>
 #include <functional>
 
@@ -90,6 +91,13 @@ PlatformServer::PlatformServer(QObject *parent)
         QDBusConnectionInterface::DontAllowReplacement);
     connect(&m_server, &QLocalServer::newConnection,
             this, &PlatformServer::acceptConnections);
+    // QML surfaces must stop output polling as soon as DPMS turns the
+    // outputs off. Forward the authoritative ScreenSaver transition instead
+    // of making every consumer poll GetActive during the lock.
+    QDBusConnection::sessionBus().connect(
+        QStringLiteral("org.freedesktop.ScreenSaver"), QStringLiteral("/ScreenSaver"),
+        QStringLiteral("org.freedesktop.ScreenSaver"), QStringLiteral("ActiveChanged"),
+        this, SLOT(onScreenSaverActiveChanged(bool)));
     const QString wlPaste = QStandardPaths::findExecutable(QStringLiteral("wl-paste"));
     const QString cliphist = QStandardPaths::findExecutable(QStringLiteral("cliphist"));
     if (wlPaste.isEmpty() || cliphist.isEmpty()) {
@@ -132,6 +140,10 @@ PlatformServer::PlatformServer(QObject *parent)
 
 PlatformServer::~PlatformServer()
 {
+    // Release the input-panel lease while server members still exist. QObject
+    // child destruction otherwise runs after the derived members are gone.
+    delete m_kimpanelBridge;
+    m_kimpanelBridge = nullptr;
     // QLocalServer owns accepted sockets and is destroyed after the tracking
     // containers below. Disconnect first so socket destruction cannot call
     // clientDisconnected() after those containers have already been freed.
@@ -326,6 +338,17 @@ void PlatformServer::sendEvent(QLocalSocket *socket, const QJsonObject &event)
                         {QStringLiteral("event"), eventName},
                         {QStringLiteral("payload"), payloadVal}};
     writeClientMessage(socket, message);
+}
+
+void PlatformServer::onScreenSaverActiveChanged(bool locked)
+{
+    const QJsonObject event{
+        {QStringLiteral("event"), QStringLiteral("session.lock-changed")},
+        {QStringLiteral("payload"), QJsonObject{{QStringLiteral("locked"), locked}}}
+    };
+    const QList<QLocalSocket *> sockets = m_buffers.keys();
+    for (QLocalSocket *socket : sockets)
+        sendEvent(socket, event);
 }
 
 void PlatformServer::broadcastKWinEvent(const QJsonObject &event)
@@ -592,6 +615,12 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("keepawake"),
                 QStringLiteral("inputmethod.kimpanel"),
             }},
+        });
+        return;
+    }
+    if (op == QStringLiteral("system.timezone")) {
+        respond(socket, request, true, QJsonObject{
+            {QStringLiteral("timeZone"), QString::fromUtf8(QTimeZone::systemTimeZoneId())},
         });
         return;
     }

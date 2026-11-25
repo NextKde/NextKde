@@ -1,9 +1,11 @@
 import QtQuick
+import "../../../shared/qml/foundation" as Foundation
 
 // Tile progress animations keep the original spread effect. The stationary glass
 // fades independently and reaches full opacity before the tiles settle.
 Item {
     id: motion
+    property var motionPolicy: Foundation.AppTheme.motion
     required property Item target
     parent: target.parent
     property bool requestedOpen: false
@@ -26,7 +28,7 @@ Item {
         prepare();
         mapped = true;
         requestedOpen = true;
-        startGlassFade(1, 100, Easing.OutCubic);
+        startGlassFade(1, motionPolicy.instant.duration, motion.motionPolicy.enterCurve);
         changing = false;
         finishIfSettled();
     }
@@ -35,7 +37,7 @@ Item {
         prepare();
         requestedOpen = false;
         if (mapped)
-            startGlassFade(0, 200, Easing.OutCubic);
+            startGlassFade(0, motionPolicy.slow.duration, motion.motionPolicy.enterCurve);
         else
             glassFinished = true;
         changing = false;

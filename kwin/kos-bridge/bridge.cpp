@@ -15,11 +15,20 @@
 
 #include <effect/effecthandler.h>
 #include <effect/effectwindow.h>
+#include <core/rendertarget.h>
 #include <core/renderviewport.h>
+#include <scene/windowitem.h>
 #include <input.h>
 #include <window.h>
+#include <scene/decorationitem.h>
+#include <scene/surfaceitem.h>
+#include <scene/windowitem.h>
+#include <algorithm>
+#include <cmath>
+#include <type_traits>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QTimer>
 #include <xcb/xcb.h>
 #include <cstring>
 
@@ -73,6 +82,58 @@ bool appearanceEligible(const KWin::EffectWindow *window)
     return true;
 }
 
+// KWin 6.7 changed scene regions from integer to floating point. Keep the
+// mapping inside a template so each build only compiles its own overload.
+template<typename RegionT>
+KWin::Region mapOpaqueToDevice(KWin::Item *item, const RegionT &opaque,
+                               const KWin::RenderViewport &viewport)
+{
+    if constexpr (std::is_same_v<RegionT, KWin::Region>) {
+        return viewport.mapToDeviceCoordinatesAligned(item->mapToScene(opaque));
+    } else {
+        return viewport.mapToDeviceCoordinatesAligned(item->mapToScene(opaque).rounded());
+    }
+}
+
+// Device-coordinate region a window's own content actually paints solid.
+// Client surfaces and server-side decorations each expose their opaque
+// region; shadow and outline items expose nothing, which is what we want:
+// only an opaque pixel of the upper window may replace a lower one.
+KWin::Region opaqueContentDeviceRegion(KWin::EffectWindow *window,
+                                       const KWin::RenderViewport &viewport)
+{
+    auto *item = window->windowItem();
+    if (!item) {
+        return {};
+    }
+    KWin::Region region;
+    const auto add = [&](KWin::Item *child) {
+        if (!child || !child->isVisible()) {
+            return;
+        }
+        const auto opaque = child->opaque();
+        // Clients are free to declare a huge number of opaque rectangles.
+        // Mapping all of them on the paint path is not worth it; such a
+        // window simply does not occlude for us.
+        if (opaque.isEmpty() || opaque.rects().size() > 128) {
+            return;
+        }
+        region |= mapOpaqueToDevice(child, opaque, viewport);
+    };
+    add(item->surfaceItem());
+    add(item->decorationItem());
+    return region;
+}
+
+bool sameContour(const WindowAppearance::ContinuousStyle &a,
+                 const WindowAppearance::ContinuousStyle &b)
+{
+    return qFuzzyCompare(a.radius + 1.0, b.radius + 1.0)
+        && qFuzzyCompare(a.smoothness + 1.0, b.smoothness + 1.0)
+        && qFuzzyCompare(a.size.width() + 1.0, b.size.width() + 1.0)
+        && qFuzzyCompare(a.size.height() + 1.0, b.size.height() + 1.0);
+}
+
 } // namespace
 
 BridgeEffect::BridgeEffect()
@@ -85,8 +146,6 @@ BridgeEffect::BridgeEffect()
 {
     KWin::effects->setProperty(SharedWindowSourceProperty,
         QVariant::fromValue(static_cast<QObject *>(this)));
-    connect(m_renderer.get(), &ButtonRenderer::sourceRepaint, this,
-        [this](const QRectF &rect) { m_continuousClip->invalidateRegion(rect); });
     connect(KWin::effects, &KWin::EffectsHandler::windowDataChanged, this,
         [this](KWin::EffectWindow *window, int role) {
             if (role == DockSourceAnimationRole) {
@@ -117,7 +176,11 @@ BridgeEffect::BridgeEffect()
 #endif
     m_cooperative = std::make_unique<CooperativeControls>(
         KWin::waylandServer() ? KWin::waylandServer()->display() : nullptr,
-        [this](KWin::EffectWindow *window) { return m_config->getAppConfig(windowQueryFor(window)); }, this);
+        [this](KWin::EffectWindow *window) {
+            return m_input ? m_input->configForWindow(window)
+                           : m_config->getAppConfig(windowQueryFor(window));
+        },
+        this);
     connect(m_cooperative.get(), &CooperativeControls::changed, this, [this](KWin::SurfaceInterface *surface) {
         for (auto *window : KWin::effects->stackingOrder()) {
             if (!window->window() || (surface && window->window()->surface() != surface)) continue;
@@ -129,14 +192,48 @@ BridgeEffect::BridgeEffect()
     });
 
     const auto watchWindowState = [this](KWin::EffectWindow *window) {
+        if (m_input) {
+            m_input->trackWindow(window);
+        }
         connect(window, &KWin::EffectWindow::windowDamaged, this,
                 [this, window] { m_renderer->contentChanged(window); });
+        if (auto *native = window->window()) {
+            const QPointer<KWin::EffectWindow> guarded(window);
+            connect(native, &KWin::Window::captionChanged, this,
+                    [this, guarded] {
+                        if (guarded && m_input) {
+                            m_input->captionChanged(guarded);
+                        }
+                        // Captions change at frame rate in a terminal, and
+                        // resolving a configuration walks the rule lists. Only
+                        // a window the renderer has panel state for can need
+                        // anything from that walk: for the rest, the paint
+                        // path resolves the configuration when it draws.
+                        if (guarded && m_renderer && m_input
+                            && m_renderer->tracksWindow(guarded)) {
+                            m_renderer->captionChanged(guarded, m_input->configForWindow(guarded));
+                        }
+                    });
+        }
+        if (window->windowItem()) {
+            const QPointer<KWin::EffectWindow> guarded(window);
+            connect(window->windowItem(), &KWin::Item::visibleChanged, this,
+                    [this, guarded] {
+                        if (guarded && guarded->isMinimized()
+                            && (!guarded->windowItem() || !guarded->windowItem()->isVisible())) {
+                            m_renderer->dropSamplingCache(guarded);
+                        }
+                    }, Qt::QueuedConnection);
+        }
         connect(window, &KWin::EffectWindow::minimizedChanged, this,
                 [this, window] {
-                    // Let the minimize animation capture its validated controls,
-                    // then release this hidden window's CPU/GPU sample buffers.
+                    // Let the minimize animation keep its validated controls until
+                    // all animation visibility references end, then release sample buffers.
                     QTimer::singleShot(500, this, [this, guarded = QPointer<KWin::EffectWindow>(window)] {
-                        if (guarded && guarded->isMinimized()) m_renderer->dropSamplingCache(guarded);
+                        if (guarded && guarded->isMinimized()
+                            && (!guarded->windowItem() || !guarded->windowItem()->isVisible())) {
+                            m_renderer->dropSamplingCache(guarded);
+                        }
                     });
                 });
         connect(window, &KWin::EffectWindow::windowFullScreenChanged,
@@ -242,7 +339,7 @@ void BridgeEffect::reconfigure(ReconfigureFlags flags)
 {
     Q_UNUSED(flags)
     // An in-flight draft must not retain the previous geometry policy.
-    if (m_input) m_input->cancelAdjustment();
+    if (m_input) m_input->reconfigured();
     if (m_config) {
         m_config->load();
     }
@@ -274,7 +371,8 @@ QString BridgeEffect::debug(const QString &parameter) const
     QJsonArray windows;
     for (auto *window : KWin::effects->stackingOrder()) {
         if (!window->window()) continue;
-        AppConfig config = m_config->getAppConfig(windowQueryFor(window));
+        AppConfig config = m_input ? m_input->configForWindow(window)
+                                   : m_config->getAppConfig(windowQueryFor(window));
         const bool declared = m_cooperative && m_cooperative->configureWindow(window, config);
         auto entry = m_renderer->controlDiagnostics(window);
         entry.insert("declared", declared);
@@ -383,6 +481,29 @@ bool
 #else
 void
 #endif
+BridgeEffect::paintWindow(const KWin::RenderTarget &renderTarget,
+                          const KWin::RenderViewport &viewport,
+                          KWin::EffectWindow *window, int mask,
+                          const KWin::Region &deviceRegion,
+                          KWin::WindowPaintData &data)
+{
+    auto *previousScreenFramebuffer = m_screenFramebuffer;
+    m_screenFramebuffer = renderTarget.framebuffer();
+#ifdef KOS_KWIN_PAINT_RESULT_API
+    const bool painted = Effect::paintWindow(renderTarget, viewport, window, mask, deviceRegion, data);
+    m_screenFramebuffer = previousScreenFramebuffer;
+    return painted;
+#else
+    Effect::paintWindow(renderTarget, viewport, window, mask, deviceRegion, data);
+    m_screenFramebuffer = previousScreenFramebuffer;
+#endif
+}
+
+#ifdef KOS_KWIN_PAINT_RESULT_API
+bool
+#else
+void
+#endif
 BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
                         const KWin::RenderViewport &viewport,
                         KWin::EffectWindow *window, int mask,
@@ -392,14 +513,52 @@ BridgeEffect::drawWindow(const KWin::RenderTarget &renderTarget,
     if (window->data(WindowSourceCaptureRole).toBool()) {
         return Effect::drawWindow(renderTarget, viewport, window, mask, deviceRegion, data);
     }
-    const bool capture = window->data(LegacyWindowSourceCaptureRole).toBool();
-    if (!capture && drawSharedWindow(renderTarget, viewport, window, mask, deviceRegion, data, {})) {
+    const bool legacyCapture = window->data(LegacyWindowSourceCaptureRole).toBool();
+    // A continuous window is marked translucent so the scene paints the
+    // background under its clipped corners. That also disables KWin's own
+    // occlusion culling for it, so windows completely behind other opaque
+    // windows keep being captured and drawn. Skip those here instead: the
+    // covering windows paint later in this same pass, so their pixels are
+    // still written. Anything transformed (morphs, animations, slide) keeps
+    // the normal path, because its geometry no longer describes the screen.
+    if (!legacyCapture && !(mask & PAINT_WINDOW_TRANSFORMED)
+        && !window->data(DockSourceAnimationRole).toBool()
+        && fullyOccluded(window, viewport)) {
+        m_renderer->clearHits(window);
 #ifdef KOS_KWIN_PAINT_RESULT_API
         return true;
 #else
         return;
 #endif
     }
+    if (!legacyCapture && drawSharedWindow(renderTarget, viewport, window, mask, deviceRegion, data, {})) {
+#ifdef KOS_KWIN_PAINT_RESULT_API
+        return true;
+#else
+        return;
+#endif
+    }
+    const PaintTransform neutralCheck{
+        .xScale = data.xScale(),
+        .yScale = data.yScale(),
+        .zScale = data.zScale(),
+        .xTranslate = data.xTranslation(),
+        .yTranslate = data.yTranslation(),
+        .zTranslate = data.zTranslation(),
+        .rotationAngle = data.rotationAngle(),
+        .opacity = data.opacity(),
+        .brightness = data.brightness(),
+        .saturation = data.saturation(),
+    };
+    // Built-in KWin OffscreenEffects (such as Magic Lamp) redirect windows into
+    // their own FBO with infinite region and neutral WindowPaintData without
+    // setting LegacyWindowSourceCaptureRole. Include KOS controls in those
+    // captures even when continuous corners are disabled (e.g. square maximized).
+    const bool offscreenCapture = renderTarget.framebuffer()
+        && renderTarget.framebuffer() != m_screenFramebuffer
+        && deviceRegion == KWin::Region::infinite()
+        && neutralCheck.isNeutral();
+    const bool capture = legacyCapture || offscreenCapture;
 #ifdef KOS_KWIN_PAINT_RESULT_API
     if (KWin::EglContext::currentContext() != KWin::effects->openglContext())
         return false;
@@ -428,8 +587,16 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
         m_appearance->prepare(window, false);
         return false;
     }
+    // An animated consumer deforms the captured texture, so its controls have
+    // to be part of the source. A stationary frame keeps them out: the panel
+    // and its tint are then drawn as an overlay above the finished window.
+    // Hover, menu and tint changes repaint only the panel instead of
+    // invalidating the whole-window source, and the source itself changes only
+    // when the window content is damaged.
+    const bool morphing = static_cast<bool>(morph);
     const bool result = m_continuousClip->paint(target, viewport, window, mask, region, data,
-        *style, [this, window](const auto &sourceTarget, const auto &sourceViewport) {
+        *style, [this, window, morphing](const auto &sourceTarget, const auto &sourceViewport,
+                                        const auto &sourceRegion) {
             const QVariant previous = window->data(WindowSourceCaptureRole);
             window->setData(WindowSourceCaptureRole, true);
             KWin::WindowPaintData sourceData;
@@ -439,9 +606,11 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
 #endif
             KWin::effects->drawWindow(sourceTarget, sourceViewport, window,
                 PAINT_WINDOW_TRANSFORMED | PAINT_WINDOW_TRANSLUCENT,
-                KWin::Region::infinite(), sourceData);
+                sourceRegion, sourceData);
 #ifdef KOS_KWIN_PAINT_RESULT_API
-            if (painted)
+            if (painted && morphing)
+#else
+            if (morphing)
 #endif
                 paintButtons(sourceTarget, sourceViewport, window, 0, KWin::Region::infinite(), sourceData, true);
             window->setData(WindowSourceCaptureRole, previous);
@@ -453,10 +622,16 @@ bool BridgeEffect::drawSharedWindow(const KWin::RenderTarget &target,
         }, morph);
     if (!result) {
         // The source could not be allocated/uploaded. Restore native rounding
-        // before the downstream scene (or legacy Dock capture) paints it.
+        // before the downstream scene (or legacy Dock capture) paints it,
+        // which also paints the controls through the ordinary path.
         m_appearance->prepare(window, false);
+    } else if (!morphing) {
+        // The window is on screen now; draw its controls above it, clipped to
+        // the part of the panel this frame repaints.
+        paintButtons(target, viewport, window, mask, region, data, false);
     }
-    if (window->data(DockSourceAnimationRole).toBool() || (mask & PAINT_WINDOW_TRANSFORMED))
+    if (window->data(DockSourceAnimationRole).toBool() || (mask & PAINT_WINDOW_TRANSFORMED)
+        || !window->isVisible() || window->isDeleted())
         m_renderer->clearHits(window);
     else if (result)
         m_renderer->syncHits(window);
@@ -519,8 +694,9 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     // These are already rejected by ButtonRenderer::paint. Skip the rule
     // lookup and stacking-order walk for them as well; shell and popup
     // surfaces can repaint frequently while never having a button panel.
-    if (window->isFullScreen()
-        || (!sourceCapture && !window->isVisible()) || !window->isManaged()
+    // Hidden/minimized windows only enter drawWindow while an animation holds
+    // a visibility or deleted reference; let them keep their cached controls.
+    if (window->isFullScreen() || !window->isManaged()
         || (!window->isNormalWindow() && !window->isDialog())
         || window->isSkipSwitcher() || window->isSpecialWindow()) {
         m_renderer->clearHits(window, sourceCapture);
@@ -536,7 +712,8 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     // the caption, the role and the type. Read here rather than inside the
     // configuration so that the configuration stays a lookup and does not have
     // to know what an effect window is.
-    AppConfig config = m_config->getAppConfig(windowQueryFor(window));
+    AppConfig config = m_input ? m_input->configForWindow(window)
+                               : m_config->getAppConfig(windowQueryFor(window));
     if (m_cooperative) m_cooperative->configureWindow(window, config);
     if (config.usesClientControls(window->hasDecoration())
         || (!window->hasDecoration() && !config.cooperativeControls && m_gtkNativeWindows.contains(window))) {
@@ -551,11 +728,28 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
         return;
     }
 
-    // Always intersect with our own occlusion-culled region. The compositor
-    // only culls on its optimised painting path; on the generic path (used
-    // whenever any window is transformed) deviceRegion is the whole screen, so
-    // relying on it alone lets a lower window's panel show through an upper one.
-    const KWin::Region clip = sourceCapture ? deviceRegion : visibleRegionFor(window, viewport, deviceRegion);
+    const PaintTransform transform{
+        .xScale = data.xScale(),
+        .yScale = data.yScale(),
+        .zScale = data.zScale(),
+        .xTranslate = data.xTranslation(),
+        .yTranslate = data.yTranslation(),
+        .zTranslate = data.zTranslation(),
+        .rotationAngle = data.rotationAngle(),
+        .opacity = data.opacity(),
+        .brightness = data.brightness(),
+        .saturation = data.saturation(),
+        // Captures deliberately set TRANSFORMED to draw the
+        // raw source; their actual paint data must stay neutral.
+        .transformed = !sourceCapture && (mask & PAINT_WINDOW_TRANSFORMED),
+    };
+
+    // Always intersect with our own occlusion-culled region for resting
+    // windows. Offscreen source captures and geometrically moving windows use
+    // deviceRegion directly (generic screen painting runs bottom-to-top).
+    const KWin::Region clip = (sourceCapture || !transform.isIdentityGeometry())
+        ? deviceRegion
+        : visibleRegionFor(window, viewport, deviceRegion);
     if (clip.isEmpty()) {
         // Nothing of this window is on screen, so nothing of its panel is
         // either.
@@ -564,18 +758,7 @@ void BridgeEffect::paintButtons(const KWin::RenderTarget &renderTarget,
     }
 
     m_renderer->paint(renderTarget, viewport, window, config, clip,
-                      PaintTransform{
-                          .xScale = data.xScale(),
-                          .yScale = data.yScale(),
-                          .xTranslate = data.xTranslation(),
-                          .yTranslate = data.yTranslation(),
-                          .opacity = data.opacity(),
-                          .brightness = data.brightness(),
-                          .saturation = data.saturation(),
-                          // Captures deliberately set TRANSFORMED to draw the
-                          // raw source; their actual paint data must stay neutral.
-                          .transformed = !sourceCapture && (mask & PAINT_WINDOW_TRANSFORMED),
-                      }, sourceCapture);
+                      transform, sourceCapture);
 }
 
 KWin::Region BridgeEffect::visibleRegionFor(KWin::EffectWindow *window,
@@ -615,6 +798,104 @@ KWin::Region BridgeEffect::visibleRegionFor(KWin::EffectWindow *window,
         visible = visible.subtracted(toRegion(above));
     }
     return visible;
+}
+
+bool BridgeEffect::fullyOccluded(KWin::EffectWindow *window,
+                                 const KWin::RenderViewport &viewport) const
+{
+    if (!window || !window->windowItem() || !window->isVisible() || !m_appearance) {
+        return false;
+    }
+    // Native-rounded windows are not marked translucent, so KWin computes
+    // their opaque region and culls this window itself. Only the continuous
+    // path lost that and needs the check.
+    const auto style = m_appearance->continuousStyle(window);
+    if (!style) {
+        return false;
+    }
+    // Fullscreen effects paint bottom-to-top with an infinite deviceRegion,
+    // so geometry no longer says which pixels this pass covers.
+    if (KWin::effects->activeFullScreenEffect()) {
+        return false;
+    }
+    if (window->opacity() < 1.0 || window->windowItem()->opacity() < 1.0) {
+        return false;
+    }
+
+    const auto windows = KWin::effects->stackingOrder();
+    const int index = windows.indexOf(window);
+    if (index < 0 || index + 1 >= windows.size()) {
+        return false;
+    }
+
+    const KWin::Rect output = viewport.deviceRect();
+    // Everything this window can paint: the shader quad is exactly
+    // expandedGeometry, and both shadow layers live inside it. Clipping to
+    // the output keeps off-screen shadow from demanding coverage.
+    const KWin::Rect target =
+        viewport.mapToDeviceCoordinatesAligned(window->expandedGeometry()) & output;
+    if (target.isEmpty()) {
+        return false;
+    }
+    const KWin::Rect targetFrame =
+        viewport.mapToDeviceCoordinatesAligned(window->frameGeometry());
+    const qreal scale = viewport.scale();
+    const bool targetFillsOutput = targetFrame.x() <= output.x()
+        && targetFrame.y() <= output.y() && targetFrame.right() >= output.right()
+        && targetFrame.bottom() >= output.bottom();
+
+    KWin::Region covered;
+    for (int i = index + 1; i < windows.size(); ++i) {
+        KWin::EffectWindow *above = windows[i];
+        if (!above || !above->isVisible() || above->isMinimized()
+            || !above->isOnCurrentDesktop() || !above->isOnCurrentActivity()
+            || above->data(DockSourceAnimationRole).toBool()
+            || above->opacity() < 1.0 || !above->windowItem()
+            || above->windowItem()->opacity() < 1.0) {
+            continue;
+        }
+        const auto aboveStyle = m_appearance->continuousStyle(above);
+        if (!aboveStyle) {
+            continue;
+        }
+        const KWin::Rect frame =
+            viewport.mapToDeviceCoordinatesAligned(above->frameGeometry());
+        // A window whose frame misses the target contributes nothing to the
+        // coverage union; skip mapping its opaque regions.
+        if (!frame.intersects(target)) {
+            continue;
+        }
+        KWin::Region content = opaqueContentDeviceRegion(above, viewport);
+        content &= KWin::Region(frame);
+        if (content.isEmpty()) {
+            continue;
+        }
+        // The contour paints every pixel of the frame except the corner
+        // regions. Subtracting the whole corner squares under-approximates
+        // that, which is the safe direction: never claim coverage the shader
+        // does not actually provide.
+        //
+        // Two windows with the same frame and the same contour are the one
+        // case where the corner slivers match exactly, so the upper window
+        // paints every pixel the lower one would. That is the stacked
+        // maximized/fullscreen case, where no shadow reaches the screen.
+        const bool sameOutputContour = targetFillsOutput
+            && frame == targetFrame && sameContour(*style, *aboveStyle);
+        if (!sameOutputContour) {
+            const int cut = qCeil(std::max<qreal>(0.0, aboveStyle->radius) * scale);
+            if (cut > 0 && cut * 2 < frame.width() && cut * 2 < frame.height()) {
+                content -= KWin::Region(frame.x(), frame.y(), cut, cut);
+                content -= KWin::Region(frame.right() - cut, frame.y(), cut, cut);
+                content -= KWin::Region(frame.x(), frame.bottom() - cut, cut, cut);
+                content -= KWin::Region(frame.right() - cut, frame.bottom() - cut, cut, cut);
+            }
+        }
+        covered |= content;
+        if (covered.contains(target)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace KOS

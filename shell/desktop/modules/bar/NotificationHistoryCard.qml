@@ -3,6 +3,7 @@ import QtQuick.Controls
 import Quickshell
 import qs.desktop.modules.common
 import qs.desktop.modules.dock
+import qs.desktop.modules.notifications
 import "../../../shared/qml/i18n"
 import "../../../Kos/Ui"
 
@@ -19,18 +20,34 @@ Item {
     property string appIcon: ""
     property string desktopEntry: ""
     property real timestamp: 0
+    property int notifId: 0
+    property string actionsJson: ""
     property real clockNow: Date.now()
     property bool showPreview: true
     property bool detailsExpanded: false
     property bool sizeReady: false
     property bool interactive: true
     property bool compositorGlass: AppearanceTokens.surface.usesKwinBlur
+    // Forwarded by the embedding pane; the Control Center opts this card's
+    // glass into the pointer effects, the standalone history window does not.
+    property int pointerEffects: 0
     property Item captureAnchor: null
     property rect clipSceneRect: Qt.rect(0, 0, -1, -1)
     property real backdropScale: 1
     property real glassOpacity: 1
     readonly property real compactHeight: 112
-    readonly property bool canExpand: showPreview && (detailsExpanded || bodyText.truncated || summaryText.truncated)
+    // Serialized {identifier, label} pairs from the live notification; the
+    // labels are already translated at snapshot time.
+    readonly property var parsedActions: {
+        if (!actionsJson || actionsJson.length === 0)
+            return []
+        try { return JSON.parse(actionsJson) } catch (error) { return [] }
+    }
+    // Actions live in the expanded view: the chevron shows whenever a row
+    // has actions, so a short-bodied notification still gets an expand
+    // affordance, and the collapsed deck keeps its fixed 112px geometry.
+    readonly property bool canExpand: showPreview && (detailsExpanded || bodyText.truncated
+        || summaryText.truncated || parsedActions.length > 0)
     readonly property color ink: glass.foregroundColor
     readonly property alias blurRegion: glass.blurRegion
     readonly property alias fixedCaptureSupported: glass.fixedCaptureSupported
@@ -49,12 +66,17 @@ Item {
             Math.max(0, right - left) * width / bounds.width,
             Math.max(0, bottom - top) * height / bounds.height)
     }
-    implicitHeight: detailsExpanded && showPreview ? Math.max(compactHeight, message.implicitHeight + 54) : compactHeight
+    implicitHeight: {
+        let base = detailsExpanded && showPreview ? Math.max(compactHeight, message.implicitHeight + 54) : compactHeight
+        if (actionRows.visible)
+            base += actionRows.implicitHeight + 6
+        return base
+    }
     height: implicitHeight
     Component.onCompleted: sizeReady = true
     Behavior on height {
         enabled: card.sizeReady && !AppTheme.reduceMotion
-        NumberAnimation { duration: AppTheme.motionNormal; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: AppTheme.motionNormal; easing.type: AppearanceTokens.motion.enterCurve }
     }
     clip: true
     enabled: interactive
@@ -66,6 +88,7 @@ Item {
     Keys.onSpacePressed: if (canExpand) detailsRequested(!detailsExpanded)
     signal removeRequested(int key)
     signal detailsRequested(bool expanded)
+    signal actionActivated(string identifier)
 
     Item {
         id: nativeOutline
@@ -76,6 +99,7 @@ Item {
         id: glass
         anchors.fill: parent
         radius: 24
+        pointerEffects: card.pointerEffects
         // Text is a sibling, and never paints into the rounded corners. Native
         // glass needs no offscreen QML layer or mask for this empty surface.
         maskContent: !useKwinEffect || fallbackEnabled
@@ -159,11 +183,32 @@ Item {
             elide: Text.ElideRight
         }
     }
+    // Action rows, anchored under the message block (never a child of the
+    // Column positioner -- invisible children still take layout space).
+    // Same NotificationActionRow the banner's expanded list uses; this card
+    // answers activated by bubbling the identifier to the pane, which
+    // invokes through the live registry and relaunches the app on a miss.
+    Column {
+        id: actionRows
+        visible: card.detailsExpanded && card.parsedActions.length > 0
+        anchors { left: message.left; right: message.right; top: message.bottom; topMargin: 6 }
+        spacing: 6
+        Repeater {
+            model: card.parsedActions
+            NotificationActionRow {
+                required property var modelData
+                label: modelData.label || modelData.identifier || ""
+                textColor: card.ink
+                onActivated: card.actionActivated(modelData.identifier || "")
+            }
+        }
+    }
     TapHandler {
         enabled: card.canExpand && card.interactive
         gesturePolicy: TapHandler.ReleaseWithinBounds
         onTapped: eventPoint => {
-            if (eventPoint.position.x < card.width - 46 || eventPoint.position.y > 38)
+            if ((eventPoint.position.x < card.width - 46 || eventPoint.position.y > 38)
+                && eventPoint.position.y < (actionRows.visible ? actionRows.y - 6 : Infinity))
                 card.detailsRequested(!card.detailsExpanded)
         }
     }

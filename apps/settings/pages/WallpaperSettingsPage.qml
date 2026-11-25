@@ -820,12 +820,12 @@ ColumnLayout {
             }
 
             Text {
-                id: themeOptions
+                id: wallpaperMotionHint
                 width: parent.width - 32
                 anchors.horizontalCenter: parent.horizontalCenter
-                visible: page.galleryCategory === "themes"
+                visible: page.currentIsTheme || page.spatialEnabled
                 height: visible ? contentHeight + 16 : 0
-                text: I18n.tr("Plays automatically after 10 seconds without windows on the desktop and pauses when windows appear. The preview always plays.")
+                text: I18n.tr("Wallpaper motion pauses while application windows are visible and resumes after 5 seconds on an empty desktop. Previews play immediately.")
                 color: page.colors.secondaryText
                 font.pixelSize: 12
                 wrapMode: Text.WordWrap
@@ -1001,7 +1001,7 @@ ColumnLayout {
     Text {
         Layout.fillWidth: true
         Layout.leftMargin: 13
-        text: page.galleryCategory === "themes" ? I18n.tr("Tap an app, then use the arrow in the bottom-right for the animated desktop preview. It plays automatically after 10 seconds without desktop windows and lowers its cost on battery.") : page.galleryCategory === "slideshow" ? I18n.tr("Selected ") + page.selectedSlideshowImages.length + I18n.tr(" images · slideshow starts with at least two, preview on the desktop.") : page.galleryCategory === "colors" ? I18n.tr("Tap a color to apply a gradient wallpaper; custom colors stay in the list and can be removed on hover.") : page.galleryItems.length ? I18n.tr("Pick an image to apply it as the desktop wallpaper directly.") : I18n.tr("No images yet; add images or a folder.")
+        text: page.galleryCategory === "themes" ? I18n.tr("Select a theme to apply it, or use Desktop preview to try it first.") : page.galleryCategory === "slideshow" ? I18n.tr("Selected ") + page.selectedSlideshowImages.length + I18n.tr(" images · slideshow starts with at least two, preview on the desktop.") : page.galleryCategory === "colors" ? I18n.tr("Tap a color to apply a gradient wallpaper; custom colors stay in the list and can be removed on hover.") : page.galleryItems.length ? I18n.tr("Pick an image to apply it as the desktop wallpaper directly.") : I18n.tr("No images yet; add images or a folder.")
         color: page.colors.secondaryText
         font.pixelSize: 12
         wrapMode: Text.Wrap

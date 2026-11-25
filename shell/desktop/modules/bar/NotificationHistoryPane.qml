@@ -16,6 +16,10 @@ Item {
     property Item captureAnchor: null
     property Item outerViewport: null
     property bool compositorGlass: AppearanceTokens.surface.usesKwinBlur
+    // Protocol v9 pointer mask for every glass this pane owns, including the
+    // notification cards. The embedded Control Center passes its own value;
+    // the standalone history window leaves them static.
+    property int pointerEffects: 0
     // Standalone history can show an empty state; embedded controls hide it.
     property bool showEmptyState: true
     property real backdropScale: 1
@@ -72,6 +76,17 @@ Item {
         else delete next[key]
         detailStates = next
     }
+    // History rows hold no live state of their own: an action click invokes
+    // through the live registry, and when the object is gone -- the app
+    // replaced or closed it -- the action degrades to opening the app, the
+    // same fallback macOS shows for dead notifications.
+    function invokeHistoryAction(painted, identifier) {
+        if (NotificationHistoryService.invokeAction(painted.notifId, identifier))
+            return
+        const entry = AppPresentationService.entryFor(painted.desktopEntry)
+        if (entry && entry.id)
+            DockModelService.launchApp(String(entry.id), function() {}, function() { return true })
+    }
     property bool modelReady: false
     ListModel { id: displayedRows }
     function reconcileRows() {
@@ -92,7 +107,8 @@ Item {
         for (let i = 0; i < count; ++i) {
             const row = source.get(i)
             desired.push({historyKey:row.historyKey, appName:row.appName, appIcon:row.appIcon,
-                desktopEntry:row.desktopEntry, summary:row.summary, body:row.body, timestamp:row.timestamp})
+                desktopEntry:row.desktopEntry, summary:row.summary, body:row.body, timestamp:row.timestamp,
+                notifId:row.notifId, actionsJson:row.actionsJson})
         }
         const keys = new Set(desired.map(row => row.historyKey))
         for (let i = displayedRows.count - 1; i >= 0; --i)
@@ -164,16 +180,16 @@ Item {
     Timer { interval: 60000; repeat: true; running: pane.active; onTriggered: pane.clockNow = Date.now() }
     Behavior on height {
         enabled: pane.active && pane.glassOpacity > 0.999 && !AppTheme.reduceMotion
-        NumberAnimation { duration: 300; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: AppearanceTokens.motion.page.duration; easing.type: AppearanceTokens.motion.enterCurve }
     }
     Behavior on revealProgress {
-        NumberAnimation { duration: AppTheme.reduceMotion ? 0 : 300; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: AppTheme.reduceMotion ? 0 : AppearanceTokens.motion.page.duration; easing.type: AppearanceTokens.motion.enterCurve }
     }
     NumberAnimation {
         id: scrollHome
         target: historyList; property: "contentY"
-        duration: AppTheme.reduceMotion ? 0 : 220
-        easing.type: Easing.OutCubic
+        duration: AppTheme.reduceMotion ? 0 : AppearanceTokens.motion.slow.duration
+        easing.type: AppearanceTokens.motion.enterCurve
         onFinished: { historyList.positionViewAtBeginning(); pane.folding = false; pane.expanded = false }
     }
     onActiveChanged: if (!active) { historyList.cancelFlick(); scrollHome.stop(); folding = false }
@@ -209,6 +225,7 @@ Item {
                 anchors.fill: parent
                 visible: button.glassButton && button.backdropVisible
                 radius: 16
+                pointerEffects: pane.pointerEffects
                 useKwinEffect: pane.compositorGlass
                 captureAnchor: pane.captureAnchor
                 blurAnchor: buttonPlate
@@ -262,19 +279,35 @@ Item {
             topMargin: 36; bottomMargin: pane.expanded || NotificationHistoryService.count <= 3 ? 0 : 12 * (1 - pane.revealProgress) }
         clip: true
         spacing: 0
-        cacheBuffer: pane.expanded ? 112 : 600
+        // Expanded decks scroll through every notification; a small cache kept
+        // recreating card delegates during the scroll (each one is a full glass
+        // card) and that was the whole scroll stutter: 112 px gave 5-200 fps
+        // chaos, covering the deck gives a steady ~240 fps.
+        // The buffer scales with the viewport, not with the model: the deck is
+        // height-capped (~24 rows), so 4x the viewport covers it on a real
+        // panel while a small pane -- a headless software-rendered run --
+        // instantiates a bounded number of cards. Instantiating the whole deck
+        // in one synchronous refill there stalled the first frames long enough
+        // to eat a just-started kinetic flick entirely.
+        cacheBuffer: pane.expanded ? Math.min(2400, 4 * height) : 600
         activeFocusOnTab: pane.visibleListRect.height > 0
         Accessible.name: I18n.tr("Notification list")
         boundsBehavior: Flickable.StopAtBounds
         flickDeceleration: 1800
         maximumFlickVelocity: 2200
         model: displayedRows
-        ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded; width: 3 }
-        displaced: Transition { NumberAnimation { property: "y"; duration: 240; easing.type: Easing.OutCubic } }
+        // The preview deck sizes itself to its three rows, so there is nothing
+        // to scroll; a bar that cannot be used is only a stray mark. The
+        // expanded deck genuinely overflows and keeps its bar.
+        ScrollBar.vertical: ScrollBar {
+            policy: pane.expanded ? ScrollBar.AsNeeded : ScrollBar.AlwaysOff
+            width: 3
+        }
+        displaced: Transition { NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve } }
         add: Transition {
             // The popup supplies its entrance fade. Only later arrivals need one.
             enabled: pane.active && pane.glassOpacity > 0.999 && !AppTheme.reduceMotion
-            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 220 }
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
         }
         delegate: Item {
             id: cell
@@ -286,6 +319,8 @@ Item {
             required property string summary
             required property string body
             required property real timestamp
+            required property int notifId
+            required property string actionsJson
             readonly property bool notificationCell: true
             readonly property bool revealed: true
             readonly property var cardItem: cardLoader.item
@@ -293,13 +328,13 @@ Item {
             property bool registeredExit: false
             property real frozenHeight: 0
             property var painted: ({key:historyKey, appName:appName, appIcon:appIcon, desktopEntry:desktopEntry,
-                summary:summary, body:body, timestamp:timestamp})
+                summary:summary, body:body, timestamp:timestamp, notifId:notifId, actionsJson:actionsJson})
             width: historyList.width
             height: exiting ? frozenHeight : (cardItem ? cardItem.height : 112) + 8
             enabled: !exiting && revealed
             ListView.onRemove: {
                 painted = {key:historyKey, appName:appName, appIcon:appIcon, desktopEntry:desktopEntry,
-                    summary:summary, body:body, timestamp:timestamp}
+                    summary:summary, body:body, timestamp:timestamp, notifId:notifId, actionsJson:actionsJson}
                 frozenHeight = height
                 exiting = true
                 if (pane.historyGroupVisible(cell) && frozenHeight > 0) {
@@ -313,8 +348,8 @@ Item {
                 id: exitMotion
                 PauseAnimation { duration: pane.historyClearDelays[cell.painted.key] || 0 }
                 ParallelAnimation {
-                    NumberAnimation { target: cell; property: "x"; to: 18; duration: 180; easing.type: Easing.InCubic }
-                    NumberAnimation { target: cell; property: "opacity"; to: 0; duration: 180; easing.type: Easing.InCubic }
+                    NumberAnimation { target: cell; property: "x"; to: 18; duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.exitCurve }
+                    NumberAnimation { target: cell; property: "opacity"; to: 0; duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.exitCurve }
                 }
                 onFinished: { cell.releaseExit(); cell.ListView.delayRemove = false }
             }
@@ -323,12 +358,15 @@ Item {
                 width: parent.width
                 active: cell.revealed || cell.exiting
                 sourceComponent: NotificationHistoryCard {
+                    pointerEffects: pane.pointerEffects
                     width: cardLoader.width
                     historyKey: cell.painted.key
                     appName: cell.painted.appName; appIcon: cell.painted.appIcon; desktopEntry: cell.painted.desktopEntry
                     summary: cell.painted.summary; body: cell.painted.body; timestamp: cell.painted.timestamp
+                    notifId: cell.painted.notifId; actionsJson: cell.painted.actionsJson
                     detailsExpanded: pane.detailStates[cell.painted.key] === true
                     onDetailsRequested: value => pane.setDetails(cell.painted.key, value)
+                    onActionActivated: identifier => pane.invokeHistoryAction(cell.painted, identifier)
                     clockNow: pane.clockNow
                     showPreview: NotificationPolicyService.showPreview
                     interactive: !cell.exiting && (cell.index < 3 || pane.expanded)
@@ -390,9 +428,11 @@ Item {
             && emptyOutline.width > 0 && emptyOutline.height > 0
         Behavior on opacity {
             enabled: pane.active && !AppTheme.reduceMotion
+            // motion-exception: keep the existing empty-state glass crossfade.
             NumberAnimation { duration: 360; easing.type: Easing.InOutSine }
         }
         radius: 24
+        pointerEffects: pane.pointerEffects
         blurAnchor: emptyOutline
         backdropRadius: Math.min(radius, emptyOutline.width / 2, emptyOutline.height / 2)
         useKwinEffect: pane.compositorGlass

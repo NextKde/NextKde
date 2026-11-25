@@ -3,7 +3,7 @@
 [English](WindowAppearance.md)
 
 面向 AI 贡献者。源码在 `kwin/kos-bridge/windowappearance/`、`kwin/kos-decoration/`、
-`kwin/glass-effect/`、`shell/native/surface-shape/`。按[开发指南](Development.zh-CN.md)只在 VM 构建安装，
+`kwin/glass/`、`shell/native/surface-shape/`。按[开发指南](Development.zh-CN.md)只在 VM 构建安装，
 原生插件改动后注销登录或重启。本文替代历史方案和审计过程记录。
 
 ## 窗口所有权与回退
@@ -15,7 +15,25 @@ Bridge 连续圆角通过 KWin `OffscreenEffect` 缓存**窗口自身内容**，
 
 效果链 Glass → Dock/Stage → Bridge（20 → 50 → 100）。动画捕获已裁剪源；Bridge 不缓存后续动画输出或背景模糊。
 连续窗口需透明遮挡语义，让裁角后背景参与绘制；为性能删除此标志可能造成黑角。
+该标志同时关闭 KWin 自身的遮挡剔除，因此只有当上层不透明连续窗口完整覆盖本窗口
+可能绘制的全部区域（expandedGeometry 与输出求交）时，Bridge 才跳过捕获、取色、按钮与绘制。
+覆盖判定用上层客户端的不透明区域并减去整个角方块，属保守近似；同外框且同轮廓的两个窗口
+（堆叠的最大化/全屏）视为精确覆盖，因为此时屏幕内没有阴影。变换中的窗口、Dock 形变和
+活动全屏效果仍走正常路径。
+静止帧的捕获只含客户端内容与装饰；按钮面板及其取色在裁剪窗口之后作为覆盖层绘制，
+悬停、菜单、取色变化只重绘面板，不再让整窗源失效。动画（morph）捕获仍包含面板，
+因为形变会让面板一起移动。
 Glass 用真实视觉轮廓，不再次应用旧圆弧输入半径。
+
+Mime 的 Windows 客户端保留自己的外观：`kwin/common/windoweffectpolicy.h` 统一识别
+`mime` 和 `mime.<非空应用ID>`（不区分大小写，也匹配 X11 window class 的空白分隔字段）。
+Bridge 不对这些窗口增加圆角、描边、外框或阴影；窗口映射后才更新应用标识时，恢复已施加的
+KOS 外观并释放连续裁剪。Glass 不创建它们的模糊缓存，也不应用模糊、液态材质或表面展开变换；
+这是先于显式 blur 请求、强制 blur 和名单配置的硬排除，不改变其他应用的 KDE blur 合约。
+因此不需要逐个配置 AutoCAD、夸克等 guest 应用，也不会误匹配 `mimetype-editor` 等非 Mime 标识。
+此排除不裁去客户端自己的透明留白、阴影或圆角，也不禁用 Dock/Stage 窗口动画。
+`kos-window.effect-policy` 检查标识边界；Bridge 的 `appearance_lifecycle_test` 检查逐窗口恢复与重入。
+应用最终外观仍需在 VM 中使用新插件、注销重新登录后对比，不以离线策略测试代替图形验收。
 
 连续缓存预算 256 MiB 并检查 GPU 纹理上限，着色器/资源/几何/预算失败则记录原因并回退原生圆弧。
 几何、缩放、配置、预算变化后重考虑拒绝项，不每帧反复分配。窗口删除或关闭效果时释放引用。
@@ -53,7 +71,8 @@ VM 验收进入/退出、手势取消、反复激活、多输出变动、动态�
 源码目录 `window-appearance.example.json` 供查字段，保留用户规则并合并字段，不整份覆盖。
 配置错误保留上次有效状态。应用匹配先完整 window class，再 desktop/resource 标识，不猜标题。
 
-保留描边物理/逻辑像素及 schema-1 转换语义；阴影参数为逻辑像素的高斯 sigma，不是完整外延。
+保留描边物理/逻辑像素及 schema-1 转换语义；阴影参数为逻辑像素的高斯 sigma，不是完整外延；
+`offsetY` 以逻辑像素把投影整体下移，外框轮廓本身不动。
 焦点过渡预留两态所需边距，有界重绘定时器空闲后停止。
 全屏始终关闭 KOS 圆角/描边/阴影/按钮以覆盖输出，离开时恢复；最大化按配置。
 设置 → 窗口外观 → 圆角幅度下方的 **最大化时取消圆角** 开关，将
@@ -93,7 +112,9 @@ CI 检查按钮锚点、大小/间距手势锁定、全局配置优先级、覆�
 ## Surface-shape 协议
 
 `kos-surface-shape-v1.xml` 定义版本协商，保留接口/操作码顺序。
-v1–7 维持原即时行为；v8 通过 manager commit 在下一次 `wl_surface.commit` 锁存 pending 状态，绘制只读 committed。
+v1–7 维持原即时行为；v8 通过 manager commit 在下一次 `wl_surface.commit` 锁存 pending 状态。
+v9 在末尾追加逐 shape 指针效果掩码（`set_pointer_effects`：hover 光、透镜视差、点击光），同样随 commit 锁存；
+从未发送的客户端保持三类效果全开，低于 v9 的客户端不得发送该请求。绘制只读 committed。
 检查原子批次及旧客户端。v8 显式几何即使空/隐藏也拥有表面，不回退整窗模糊；未声明普通窗口保留旧模糊路径。
 
 圆角矩形携带几何、视觉圆角、scrim、连续模糊 sigma、材质透明度、展开/捕获参数。

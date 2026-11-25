@@ -9,6 +9,7 @@ import "../foundation" as Foundation
 // field whose choices live in a small rounded sheet shared by settings rows.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     // Width follows the content: left pad + label + gap + glyph + right pad.
     // The floor keeps a placeholder-only field from collapsing.
@@ -170,7 +171,7 @@ Item {
             color: root.darkAppearance
                 ? Qt.rgba(1, 1, 1, menu.opened ? 0.12 : 0.06)
                 : Qt.rgba(0, 0, 0, menu.opened ? 0.08 : 0.04)
-            Behavior on color { ColorAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            Behavior on color { ColorAnimation { duration: root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         // Specular glint parked in the upper-left arc, like the LiquidGlassButton
@@ -192,7 +193,7 @@ Item {
                 }
                 GradientStop { position: 1; color: Qt.rgba(1, 1, 1, 0.0) }
             }
-            Behavior on opacity { NumberAnimation { duration: 150; easing.type: Easing.OutCubic } }
+            Behavior on opacity { NumberAnimation { duration: root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
         }
 
         Text {
@@ -257,13 +258,13 @@ Item {
         onOpened: scroller.focusCurrent()
         enter: Transition {
             ParallelAnimation {
-                // §3 motion.duration.fast=150 / §2.11 只允许五档（原 demo 140 不在档）。
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 150; easing.type: Easing.OutCubic }
-                NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: 150; easing.type: Easing.OutCubic }
+                // Ordinary feedback follows the shared motion policy.
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve }
+                NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve }
             }
         }
         exit: Transition {
-            NumberAnimation { property: "opacity"; to: 0; duration: 100 }
+            NumberAnimation { property: "opacity"; to: 0; duration: root.motionPolicy.instant.duration; easing.type: root.motionPolicy.exitCurve }
         }
         background: Rectangle {
             radius: 12
@@ -348,8 +349,8 @@ Item {
                                 : (hit.containsMouse
                                    ? (root.darkAppearance ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.06))
                                    : "transparent")
-                            // §4.1「过渡 150ms」/ §3 motion.duration.fast=150（原 demo 120 不在档）。
-                            Behavior on color { ColorAnimation { duration: 150 } }
+                            // Ordinary feedback follows the shared motion policy.
+                            Behavior on color { ColorAnimation { duration: root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
                         }
                         Text {
                             anchors.left: parent.left

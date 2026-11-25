@@ -9,6 +9,7 @@ import "../foundation" as Foundation
 // Decorative reflection is independent from actual keyboard focus.
 Item {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
 
     // Width follows the content: left pad + label + gap + glyph + right pad.
     // The floor keeps a placeholder-only field from collapsing.
@@ -245,7 +246,7 @@ Item {
                     color: root.mutedTextColor
                     rotation: root.indicatorStyle !== "upDown" && menu.opened ? 180 : 0
                     Behavior on rotation {
-                        NumberAnimation { duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic }
+                        NumberAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve }
                     }
                 }
             }
@@ -306,12 +307,12 @@ Item {
         onClosed: { if (root.enabled) root.forceActiveFocus(Qt.PopupFocusReason) }
         enter: Transition {
             ParallelAnimation {
-                NumberAnimation { property: "opacity"; from: root.popupMaterialForm ? 1 : 0; to: 1; duration: root.reduceMotion || root.popupMaterialForm ? 0 : 140; easing.type: Easing.OutCubic }
-                NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: root.reduceMotion ? 0 : 150; easing.type: Easing.OutCubic }
+                NumberAnimation { property: "opacity"; from: root.popupMaterialForm ? 1 : 0; to: 1; duration: root.reduceMotion || root.popupMaterialForm ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve }
+                NumberAnimation { property: "scale"; from: 0.97; to: 1; duration: root.reduceMotion ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve }
             }
         }
         exit: Transition {
-            NumberAnimation { property: "opacity"; to: root.popupMaterialForm ? 1 : 0; duration: root.reduceMotion || root.popupMaterialForm ? 0 : 100 }
+            NumberAnimation { property: "opacity"; to: root.popupMaterialForm ? 1 : 0; duration: root.reduceMotion || root.popupMaterialForm ? 0 : root.motionPolicy.instant.duration; easing.type: root.motionPolicy.exitCurve }
         }
         background: Item {
             LiquidOuterShadow {

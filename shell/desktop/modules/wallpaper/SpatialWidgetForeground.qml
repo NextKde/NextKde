@@ -1,3 +1,4 @@
+import qs.desktop.modules.common
 import QtQuick
 
 // This item lives in the desktop's Bottom-layer window. It has no input
@@ -11,7 +12,7 @@ Item {
     property bool suspended: false
     readonly property bool meshRendererAvailable: subject.meshRendererAvailable
     readonly property bool ready: subject.visualReady && SpatialWallpaperService.layeredReady
-    visible: ready && !suspended
+    visible: ready && !suspended && SpatialWallpaperService.motionRunning
 
     DepthWallpaperLayer {
         id: subject
@@ -44,7 +45,7 @@ Item {
             // Keep the item mapped while transparent. Its hover observer
             // must remain active until the pointer actually leaves the card.
             opacity: subject.opacity * (widgetHover.hovered ? 0 : 1)
-            Behavior on opacity { NumberAnimation { duration: 140 } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
             HoverHandler { id: widgetHover }
             property var source: subjectTexture
             property vector2d viewport: Qt.vector2d(root.width, root.height)

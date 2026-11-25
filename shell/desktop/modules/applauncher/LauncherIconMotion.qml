@@ -1,4 +1,5 @@
 import QtQuick
+import "../../../shared/qml/foundation" as Foundation
 
 // Keep the tile pose and opacity on the same GUI-thread animation timeline as
 // the glass. The previous render-thread Animators used an opaque prewarm that
@@ -6,6 +7,7 @@ import QtQuick
 // The GridView cell and all layout inside the target remain fixed.
 Item {
     id: motion
+    property var motionPolicy: controller ? controller.motionPolicy : Foundation.AppTheme.motion
     required property Item target
     required property bool opened
     required property var controller
@@ -40,10 +42,10 @@ Item {
         const destination = opened ? 1 : 0;
         poseJob.from = progress;
         poseJob.to = destination;
-        poseJob.duration = Math.max(1, Math.round(300 * Math.abs(destination - progress)));
+        poseJob.duration = Math.max(1, Math.round(motionPolicy.page.duration * Math.abs(destination - progress)));
         opacityJob.from = fadeProgress;
         opacityJob.to = destination;
-        opacityJob.duration = Math.max(1, Math.round(200 * Math.abs(destination - fadeProgress)));
+        opacityJob.duration = Math.max(1, Math.round(motionPolicy.slow.duration * Math.abs(destination - fadeProgress)));
         if (!counted) {
             counted = true;
             controller.iconStarted();
@@ -75,7 +77,7 @@ Item {
     Component.onDestruction: release()
     property ParallelAnimation animation: ParallelAnimation {
         onFinished: motion.release()
-        NumberAnimation { id: poseJob; target: motion; property: "progress"; easing.type: Easing.OutCubic }
-        NumberAnimation { id: opacityJob; target: motion; property: "fadeProgress"; easing.type: Easing.OutCubic }
+        NumberAnimation { id: poseJob; target: motion; property: "progress"; easing.type: motion.motionPolicy.enterCurve }
+        NumberAnimation { id: opacityJob; target: motion; property: "fadeProgress"; easing.type: motion.motionPolicy.enterCurve }
     }
 }

@@ -3,6 +3,7 @@ import Quickshell.Wayland
 import Quickshell.Widgets
 import Quickshell.Services.Notifications
 import QtQuick
+import QtQuick.Effects
 import Qt5Compat.GraphicalEffects
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
@@ -28,15 +29,22 @@ PanelWindow {
     WlrLayershell.namespace: "notification"
 
     required property var groupService
-    property int exitDuration: 200
+    property int exitDuration: AppearanceTokens.motion.slow.duration
     // Fading in place when a click opens the app is quicker than the slide-out
     // used for expiry, so the card never lingers over the window it raised.
-    property int handoffDuration: 140
+    property int handoffDuration: AppearanceTokens.motion.base.duration
 
     // Global ceiling on popup auto-expire, in ms. Apps may request longer
     // (Fcitx requests 60000 for its "Wayland 诊断" notice), but no popup is
     // allowed to linger past this. Change this single number to retune.
     readonly property int maxAutoExpireMs: 6000
+
+    // Critical alerts get a doubled slot before retiring into history like
+    // everything else (they used to stay until dismissed; the dock badge and
+    // the history list own persistence now, so nothing is lost when the
+    // banner goes). Criticals also ignore DND and queue-jump to the slot --
+    // see NotificationGroupService._applyGroups.
+    readonly property int criticalExpireMs: 12000
 
     color: "transparent"
     exclusionMode: ExclusionMode.Ignore
@@ -87,17 +95,18 @@ PanelWindow {
 
         // Entrance: opacity + x-slide. Surface size is constant, so no resize
         // lands mid-slide -- the slide stays smooth.
+        // motion-exception: retain the existing accelerating entrance; changing its shape is a redesign.
         add: Transition {
             ParallelAnimation {
-                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: 200; easing.type: Easing.InCubic }
-                NumberAnimation { property: "x"; from: 120; to: 0; duration: 200; easing.type: Easing.InCubic }
+                NumberAnimation { property: "opacity"; from: 0; to: 1; duration: AppearanceTokens.motion.slow.duration; easing.type: Easing.InCubic }
+                NumberAnimation { property: "x"; from: 120; to: 0; duration: AppearanceTokens.motion.slow.duration; easing.type: Easing.InCubic }
             }
         }
         displaced: Transition {
-            NumberAnimation { property: "y"; duration: 200; easing.type: Easing.InOutCubic }
+            NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
         }
         removeDisplaced: Transition {
-            NumberAnimation { property: "y"; duration: 200; easing.type: Easing.InOutCubic }
+            NumberAnimation { property: "y"; duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
         }
 
         delegate: Rectangle {
@@ -132,7 +141,7 @@ PanelWindow {
                 property: "x"
                 to: notificationList.width + 44
                 duration: root.exitDuration
-                easing.type: Easing.InCubic
+                easing.type: AppearanceTokens.motion.exitCurve
                 onFinished: card.ListView.delayRemove = false
             }
             // Opening the app fades the card away in place and lifts it a touch,
@@ -147,14 +156,14 @@ PanelWindow {
                     property: "opacity"
                     to: 0
                     duration: root.handoffDuration
-                    easing.type: Easing.OutCubic
+                    easing.type: AppearanceTokens.motion.enterCurve
                 }
                 NumberAnimation {
                     target: card
                     property: "scale"
                     to: 1.04
                     duration: root.handoffDuration
-                    easing.type: Easing.OutCubic
+                    easing.type: AppearanceTokens.motion.enterCurve
                 }
                 onFinished: card.ListView.delayRemove = false
             }
@@ -185,7 +194,8 @@ PanelWindow {
             property string _lastSummary: ""
             property string _lastBody: ""
             property string _lastAppName: ""
-            property string _lastIconSource: ""
+            // Keep raw identity/content, not a resolved old-theme URL.
+            property var _lastIcon: ({image: "", appIcon: "", desktopEntry: ""})
             property int _lastUrgency: 1
             onModelDataChanged: card.removing = false
             onNotificationChanged: {
@@ -194,8 +204,6 @@ PanelWindow {
                     card._lastBody = card.notification.body || ""
                     card._lastAppName = card.notification.appName || ""
                     card._lastUrgency = card.notification.urgency
-                    card._lastIconSource = AppIdentityService._iconPath(
-                        card.notification.image || card.notification.appIcon)
                     card.removing = false
                 }
                 // The delegate is reused when a group's newest notification is
@@ -215,30 +223,43 @@ PanelWindow {
                 ? card.notification.body : card._lastBody
             readonly property string displayAppName: card.notification
                 ? card.notification.appName : card._lastAppName
-            readonly property string displayIconSource: card.notification
-                ? AppIdentityService._iconPath(card.notification.image || card.notification.appIcon)
-                : card._lastIconSource
+            readonly property var displayIcon: card.notification
+                ? ({image: card.notification.image || "", appIcon: card.notification.appIcon || "",
+                    desktopEntry: card.notification.desktopEntry || ""})
+                : card._lastIcon
+            // Also retain in-place replacements of the live notification's
+            // icon fields before that object is dismissed/destroyed.
+            onDisplayIconChanged: {
+                if (card.notification) card._lastIcon = card.displayIcon
+            }
             readonly property bool isCritical: (card.notification
                 ? card.notification.urgency : card._lastUrgency) === NotificationUrgency.Critical
             readonly property bool isLow: (card.notification
                 ? card.notification.urgency : card._lastUrgency) === NotificationUrgency.Low
             readonly property bool expanded: !card.groupCollapsed && card.groupCount > 1
             readonly property color foregroundColor: AppearanceTokens.content.glassInk()
-            readonly property string iconSource: card.displayIconSource
 
             // Hover state for pause-on-hover. A HoverHandler (not a MouseArea)
             // so it never steals clicks from the buttons inside the card.
             property bool hovered: false
             HoverHandler {
-                onHoveredChanged: card.hovered = hovered
+                onHoveredChanged: {
+                    card.hovered = hovered
+                    // The expanded action list is a hover-driven interaction:
+                    // leaving the card collapses it, so the countdown resumes
+                    // instead of waiting for a click nobody promised.
+                    if (!hovered)
+                        actionRow.expanded = false
+                }
             }
 
-            // Auto-expire duration for this card, in ms. Critical notifications
-            // stay until dismissed (matches Plasma: urgency=critical never
-            // auto-expires); everything else is capped by root.maxAutoExpireMs.
+            // Auto-expire duration for this card, in ms. Critical
+            // notifications get a doubled slot and then retire into history
+            // (the dock badge carries the persistence from there); normal
+            // cards are capped by root.maxAutoExpireMs.
             readonly property int expireMs: {
                 if (card.isCritical)
-                    return 0
+                    return root.criticalExpireMs
                 const n = card.notification
                 const requested = (n && n.expireTimeout > 0) ? n.expireTimeout : 7000
                 return Math.min(root.maxAutoExpireMs, Math.max(1000, requested))
@@ -247,7 +268,7 @@ PanelWindow {
             width: notificationList.width
             height: Math.floor(content.implicitHeight + 28)
             Behavior on height {
-                NumberAnimation { duration: 200; easing.type: Easing.InOutCubic }
+                NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.settleCurve }
             }
             radius: 28
             color: "transparent"
@@ -358,7 +379,6 @@ PanelWindow {
                 windowService: WindowService
                 launcher: DockModelService
                 lookupEntry: function(hint) { return AppPresentationService.entryFor(hint) }
-                onBusyChanged: card._lastTickAt = 0
                 onFinished: function(source, success) {
                     if (source !== card.notification || card.removing)
                         return
@@ -375,11 +395,12 @@ PanelWindow {
 
             // ---- countdown bar ----
             // Drawn as the bottom sliver of the card, above the glass panel so
-            // it stays visible. Hidden for critical/persistent notifications
-            // (no countdown to show) and once the group is dying.
+            // it stays visible. Shown whenever the card has a countdown --
+            // criticals included (their doubled drain) -- and hidden once the
+            // group is dying.
             Rectangle {
                 id: countdownTrack
-                visible: card.expireMs > 0 && !card.isCritical
+                visible: card.expireMs > 0
                 anchors {
                     left: parent.left; right: parent.right; bottom: parent.bottom
                     leftMargin: card.radius * 0.5
@@ -432,7 +453,8 @@ PanelWindow {
                 id: expireTicker
                 interval: 50
                 repeat: true
-                running: card.notification !== null && card.expireMs > 0 && !card.hovered && !opener.busy
+                running: card.notification !== null && card.expireMs > 0
+                    && !card.hovered && !opener.busy && !actionRow.expanded
                 onTriggered: {
                     const now = Date.now()
                     if (card._lastTickAt > 0)
@@ -441,13 +463,11 @@ PanelWindow {
                     if (card._remainingMs <= 0)
                         card.close(true)
                 }
-            }
-
-            // Re-seed the baseline whenever the ticker (re)starts, so the time
-            // spent hovered or paused is excluded from the countdown.
-            onHoveredChanged: {
-                if (!card.hovered)
-                    card._lastTickAt = 0
+                // Any stop invalidates the elapsed baseline: a paused gap
+                // (hover, opener, an expanded action list) must never be
+                // retro-counted when the ticker resumes. onTriggered re-seeds
+                // each tick, so this one line covers every stop reason.
+                onRunningChanged: if (!running) card._lastTickAt = 0
             }
 
             // ---- header ----
@@ -471,28 +491,41 @@ PanelWindow {
                     anchors.centerIn: parent
                     width: 30; height: width
                     radius: width * 0.30
-                    visible: card.iconSource.length > 0
+                    visible: !notificationIcon.usesFallback
                     color: "transparent"
                     // Rectangle.clip doesn't round-corner child Images reliably.
-                    // Use layer + OpacityMask to actually crop the icon to the
-                    // rounded rectangle (same pattern as DockWindowPreview).
-                    layer.enabled: true
-                    layer.effect: OpacityMask {
-                        maskSource: Rectangle {
-                            width: iconMask.width
-                            height: iconMask.height
-                            radius: iconMask.radius
-                            color: "black"
-                            visible: false
-                        }
-                    }
-                    AppIcon {
+                    // The MultiEffect below crops the mark to the rounded
+                    // rectangle; its hidden source is only texture input.
+                    NotificationIcon {
+                        id: notificationIcon
+                        objectName: "notification-popup-icon"
                         anchors.fill: parent
-                        source: card.iconSource
-                        // Theme icon: synchronous, see AppIcon.qml.
-                        asynchronous: false
-                        smooth: true
+                        image: card.displayIcon.image
+                        appIcon: card.displayIcon.appIcon
+                        desktopEntry: card.displayIcon.desktopEntry
+                        ink: card.foregroundColor
+                        visible: false
                     }
+                }
+                // Rounded app mark without a per-card Qt5 compat layer: the old
+                // layer + OpacityMask pair made one card cost 70-160 ms, while
+                // MultiEffect shares a single shader. The mask source needs a
+                // texture, so the tiny 30 px rectangle keeps its own layer.
+                Rectangle {
+                    id: iconMaskSource
+                    width: iconMask.width
+                    height: iconMask.height
+                    radius: iconMask.radius
+                    color: "white"
+                    layer.enabled: true
+                    visible: false
+                }
+                MultiEffect {
+                    anchors.fill: iconMask
+                    source: notificationIcon
+                    maskEnabled: true
+                    maskSource: iconMaskSource
+                    visible: iconMask.visible
                 }
             }
 
@@ -607,58 +640,217 @@ PanelWindow {
                     }
                 }
 
-                // Action buttons (collapsed: latest notification).
-                Row {
+                // Action buttons (collapsed: latest notification). One row: as
+                // many buttons as fit beside a "More" chip; the rest expand
+                // as full-width rows inside this card -- the iOS long-press
+                // pattern, never a floating surface and never a wrapped
+                // double-decker row.
+                Item {
+                    id: actionRow
+                    objectName: "notification-actions"
                     width: parent.width
-                    spacing: 8
+                    // Taller while expanded: the overflow rows stack below
+                    // the chip row, and the card's height Behavior grows the
+                    // glass with them. 28 chip row + 6 gap + n rows of 32
+                    // with 6 between = 28 + 38n.
+                    height: 28 + (expanded && split.overflow.length > 0
+                        ? 38 * split.overflow.length : 0)
                     visible: !card.expanded
                         && card.notification && card.notification.actions
                         && card.notification.actions.length > 0
-                    Repeater {
-                        model: (card.notification && card.notification.actions)
-                            ? card.notification.actions
-                            : []
+                    // The expansion freezes only this card (see the ticker
+                    // gate); neighbours keep living their countdowns.
+                    property bool expanded: false
+                    onSplitChanged: expanded = false
+                    onVisibleChanged: if (!visible) expanded = false
+
+                    // Which buttons fit is decided on measured label widths,
+                    // so it does not depend on which delegates happen to be
+                    // instantiated. TextMetrics shares the chip font.
+                    // Recomputed imperatively, never from a binding: setting
+                    // labelMetrics.text while a binding reads its
+                    // advanceWidth is a self-triggering dependency -- the
+                    // binding loop Qt warned about on every banner lifecycle.
+                    property var split: ({ shown: [], overflow: [], more: 0 })
+                    function recomputeSplit() {
+                        const list = card.notification && card.notification.actions
+                            ? card.notification.actions : []
+                        const available = content.width
+                        const next = actionRow._partition(list, available)
+                        // Assign only on a real change: a fresh object per
+                        // call would reset `expanded` via onSplitChanged on
+                        // every recompute.
+                        if (JSON.stringify(next) !== JSON.stringify(split))
+                            split = next
+                    }
+                    function _partition(list, available) {
+                        if (list.length === 0)
+                            return { shown: [], overflow: [], more: 0 }
+                        const spacing = 8
+                        const chipWidth = label => {
+                            labelMetrics.text = label
+                            return Math.min(labelMetrics.advanceWidth + 24, available)
+                        }
+                        const labelOf = a => {
+                            const raw = a.text || a.identifier || ""
+                            // Some apps send lowercase or alternate-case
+                            // action labels; tr() maps the common ones and
+                            // falls back to the raw label otherwise.
+                            return I18n.tr(raw) || raw
+                        }
+                        const widths = list.map(a => chipWidth(labelOf(a)))
+                        // Measure the wider of the two chip labels so the
+                        // chip does not resize when "More" flips to "Collapse".
+                        const more = Math.max(chipWidth(I18n.tr("More")),
+                            chipWidth(I18n.tr("Collapse")))
+                        const natural = widths.reduce((sum, w) => sum + w, 0)
+                            + spacing * Math.max(0, widths.length - 1)
+                        if (natural <= available)
+                            return { shown: list, overflow: [], more: 0 }
+                        let used = more, k = 0
+                        for (; k < list.length; ++k) {
+                            if (used + widths[k] > available)
+                                break
+                            used += widths[k] + spacing
+                        }
+                        k = Math.max(1, k)
+                        return { shown: list.slice(0, k), overflow: list.slice(k), more: more }
+                    }
+                    // width follows content (parent.width), so a width change
+                    // is the available-space change.
+                    onWidthChanged: recomputeSplit()
+                    Connections {
+                        target: card
+                        function onNotificationChanged() { actionRow.recomputeSplit() }
+                    }
+                    Component.onCompleted: recomputeSplit()
+
+                    TextMetrics {
+                        id: labelMetrics
+                        font.pixelSize: 12
+                    }
+
+                    Row {
+                        spacing: 8
+                        anchors { left: parent.left; top: parent.top }
+                        Repeater {
+                            model: actionRow.split.shown
+                            Rectangle {
+                                id: actionBtn
+                                height: 28
+                                // A single label longer than the card elides
+                                // instead of widening its button past the edge.
+                                width: Math.min(actionLabel.implicitWidth + 24, content.width)
+                                radius: 14
+                                color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                    ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
+                                    : (actionMouse.containsMouse
+                                        ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
+                                        : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)))
+
+                                SelectionHighlight {
+                                    objectName: "notification-action-highlight"
+                                    anchors.fill: parent
+                                    cornerRadius: actionBtn.radius
+                                    enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
+                                    hovered: actionMouse.containsMouse
+                                    pressed: actionMouse.pressed
+                                    dark: ThemeService.isDark
+                                    fillStrength: 0.85
+                                }
+                                GlassText {
+                                    id: actionLabel
+                                    anchors.centerIn: parent
+                                    width: Math.min(implicitWidth, actionBtn.width - 24)
+                                    text: {
+                                        const raw = modelData.text || modelData.identifier || ""
+                                        return I18n.tr(raw) || raw
+                                    }
+                                    color: card.foregroundColor
+                                    font.pixelSize: 12
+                                    elide: Text.ElideRight
+                                }
+                                MouseArea {
+                                    id: actionMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: {
+                                        actionRow.expanded = false
+                                        opener.cancel()
+                                        const resident = card.notification?.resident ?? false
+                                        modelData.invoke()
+                                        if (!resident)
+                                            card.close(false)
+                                    }
+                                }
+                            }
+                        }
                         Rectangle {
-                            id: actionBtn
+                            id: moreBtn
+                            visible: actionRow.split.overflow.length > 0
                             height: 28
-                            width: actionLabel.implicitWidth + 24
+                            width: actionRow.split.more
                             radius: 14
                             color: AppearanceTokens.surface.selectionHighlightStyle === "glass"
                                 ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.08) : Qt.rgba(0, 0, 0, 0.04))
-                                : (actionMouse.containsMouse
+                                : (moreMouse.containsMouse
                                     ? (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.20) : Qt.rgba(0, 0, 0, 0.10))
                                     : (ThemeService.isDark ? Qt.rgba(1, 1, 1, 0.10) : Qt.rgba(0, 0, 0, 0.05)))
 
                             SelectionHighlight {
-                                objectName: "notification-action-highlight"
                                 anchors.fill: parent
-                                cornerRadius: actionBtn.radius
+                                cornerRadius: moreBtn.radius
                                 enabled: AppearanceTokens.surface.selectionHighlightStyle === "glass"
-                                hovered: actionMouse.containsMouse
-                                pressed: actionMouse.pressed
+                                hovered: moreMouse.containsMouse
+                                pressed: moreMouse.pressed
                                 dark: ThemeService.isDark
                                 fillStrength: 0.85
                             }
                             GlassText {
-                                id: actionLabel
                                 anchors.centerIn: parent
-                                text: {
-                                    const raw = modelData.text || modelData.identifier || ""
-                                    // Some apps send lowercase or alternate-case
-                                    // action labels; tr() maps the common ones and
-                                    // falls back to the raw label otherwise.
-                                    return I18n.tr(raw) || raw
-                                }
+                                width: Math.min(implicitWidth, moreBtn.width - 24)
+                                text: actionRow.expanded
+                                    ? I18n.tr("Collapse")
+                                    : I18n.tr("More")
                                 color: card.foregroundColor
                                 font.pixelSize: 12
                                 elide: Text.ElideRight
                             }
                             MouseArea {
-                                id: actionMouse
+                                id: moreMouse
                                 anchors.fill: parent
                                 hoverEnabled: true
                                 cursorShape: Qt.PointingHandCursor
-                                onClicked: {
+                                onClicked: actionRow.expanded = !actionRow.expanded
+                            }
+                        }
+                    }
+
+                    // The overflow actions, stacked full-width under the
+                    // chip row while expanded: children of the action row
+                    // item, never of the chip Row positioner, where anchors
+                    // are illegal and the width would never resolve. Rows
+                    // are the shared NotificationActionRow (the same visual
+                    // the history cards use); this card answers activated
+                    // with its own invoke-then-close flow.
+                    Column {
+                        visible: actionRow.expanded
+                        anchors {
+                            left: parent.left; right: parent.right
+                            top: parent.top; topMargin: 34
+                        }
+                        spacing: 6
+                        Repeater {
+                            model: actionRow.split.overflow
+                            NotificationActionRow {
+                                label: {
+                                    const raw = modelData.text || modelData.identifier || ""
+                                    return I18n.tr(raw) || raw
+                                }
+                                textColor: card.foregroundColor
+                                onActivated: {
+                                    actionRow.expanded = false
                                     opener.cancel()
                                     const resident = card.notification?.resident ?? false
                                     modelData.invoke()
@@ -715,15 +907,27 @@ PanelWindow {
                 id: closeButton
                 name: "notification.dismiss"
                 color: card.foregroundColor
-                opacity: 0.55
+                opacity: closeArea.pressed ? 1 : closeArea.containsMouse ? 0.9 : 0.55
                 size: 14
                 width: 22; height: 22
                 anchors { right: parent.right; rightMargin: 12; top: parent.top; topMargin: 9 }
                 MouseArea {
+                    id: closeArea
+                    objectName: "notification-close-area"
                     anchors.fill: parent
                     anchors.margins: -6
+                    hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: card.close(false)
+                    // Released, not clicked: a card that is still sliding in, or
+                    // moving up after the one above it closed, carries the button
+                    // away from a stationary pointer between press and release,
+                    // and clicked would silently drop that dismissal. A release
+                    // anywhere on the card still counts; dragging off cancels.
+                    onReleased: mouse => {
+                        const point = mapToItem(card, mouse.x, mouse.y)
+                        if (card.contains(point))
+                            card.close(false)
+                    }
                 }
             }
         }

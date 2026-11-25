@@ -19,6 +19,7 @@ Item {
     // Consumers that already animate their own material can set this to 0 so
     // there is one deliberate colour transition rather than two retargeting
     // animations chasing one another.
+    // motion-exception: Ambient artwork palette crossfade avoids abrupt background changes.
     property int transitionDuration: 760
 
     Behavior on primary {

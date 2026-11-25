@@ -455,13 +455,19 @@ Item {
     SequentialAnimation {
         id: attentionPulse
         ParallelAnimation {
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionScale"; to: 1.18; duration: 115; easing.type: Easing.OutCubic }
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionLift"; to: -6; duration: 115; easing.type: Easing.OutCubic }
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionGlow"; to: 1.0; duration: 115; easing.type: Easing.OutCubic }
         }
         ParallelAnimation {
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionScale"; to: 1.0; duration: 210; easing.type: Easing.OutBack }
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionLift"; to: 0; duration: 210; easing.type: Easing.OutBounce }
+            // motion-exception: Attention pulse keeps its coupled lift, glow and elastic return.
             NumberAnimation { target: icon; property: "_attentionGlow"; to: 0; duration: 210; easing.type: Easing.OutCubic }
         }
     }
@@ -525,7 +531,6 @@ Item {
     property Component _contextMenuComponent: Component {
         ContextMenu {
             capsuleReveal: true
-            reserveIconSpace: true
             property bool hasBeenVisible: false
             anchorItem: icon
             position: ConfigService.position
@@ -567,6 +572,9 @@ Item {
                     break
                 case "pin":
                     AppActionService.pin(icon.appId)
+                    break
+                case "add_separator":
+                    DockModelService.addSeparatorAfter(icon.appId)
                     break
                 }
             }
@@ -708,11 +716,13 @@ Item {
         loops: Animation.Infinite
         NumberAnimation {
             target: icon; property: "rotation"
+            // motion-exception: Edit-mode wiggle retains its periodic cadence.
             from: -3.4; to: 3.4; duration: 105
             easing.type: Easing.InOutSine
         }
         NumberAnimation {
             target: icon; property: "rotation"
+            // motion-exception: Edit-mode wiggle retains its periodic cadence.
             from: 3.4; to: -3.4; duration: 115
             easing.type: Easing.InOutSine
         }
@@ -748,6 +758,7 @@ Item {
                 && !icon._glassSelectionHighlight) || icon.showUrgentBackground
         z: -1
         Behavior on color {
+            // motion-exception: Sub-tier hover highlight follows the physical pointer response.
             ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
         }
     }
@@ -844,7 +855,7 @@ Item {
         property: "opacity"
         to: 0.0
         duration: DockAnimation.iconPressHighlightDuration
-        easing.type: DockAnimation.elementExitEasing
+        easing.type: Easing.InCubic // motion-exception: 45ms press-highlight release retains its original response.
     }
     function setPressFeedback(pressed) {
         pressFadeIn.stop()
@@ -899,7 +910,7 @@ Item {
         visible: opacity > 0.01
         z: 2
         Behavior on opacity {
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve }
         }
     }
 
@@ -923,13 +934,19 @@ Item {
         transformOrigin: Item.Center
         color: "#ff3b30"
         border.width: 0
+        // Activity badges only describe live tasks. A pinned app with no
+        // windows is a launcher entry; a badge there suggests content that is
+        // already open, while clicking would just start a new window.
         opacity: ConfigService.showNotificationBadges
-            && (hasCount || icon.isUrgent) && !icon.editMode ? 1 : 0
+            && icon.isRunning && (hasCount || icon.isUrgent)
+            && !icon.editMode ? 1 : 0
         scale: opacity > 0 ? 1 : 0
         visible: opacity > 0.01
         z: 3
+        // motion-exception: Badge fade remains coupled to its OutBack inflation.
         Behavior on opacity { NumberAnimation { duration: 140 } }
         Behavior on scale {
+            // motion-exception: Badge fade remains coupled to its OutBack inflation.
             NumberAnimation { duration: 160; easing.type: Easing.OutBack }
         }
 
@@ -977,7 +994,7 @@ Item {
         anchors.bottomMargin: icon.runningIndicatorGap
 
         Behavior on opacity {
-            NumberAnimation { duration: 140; easing.type: Easing.OutCubic }
+            NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve }
         }
 
         Row {
@@ -996,6 +1013,7 @@ Item {
                         ThemeService.foregroundColor.b, 0.95)
                     Behavior on color {
                         enabled: runningIndicator.opacity > 0.01
+                        // motion-exception: Running-indicator color follows the sub-tier hover highlight.
                         ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
                     }
                 }
@@ -1009,6 +1027,7 @@ Item {
             color: ThemeService.accentColor
             Behavior on color {
                 enabled: visible
+                // motion-exception: Running-indicator color follows the sub-tier hover highlight.
                 ColorAnimation { duration: DockAnimation.iconHighlightDuration; easing.type: Easing.OutCubic }
             }
         }
@@ -1095,6 +1114,10 @@ Item {
                     menu.addItem("dock.menu.new_window", I18n.tr("New window"), "new_window")
                     menu.addItem(pinned ? "dock.menu.unpin" : "dock.menu.pin",
                         pinned ? I18n.tr("Unpin") : I18n.tr("Pin this app"), pinned ? "unpin" : "pin")
+                    if (icon.isPinnedItem
+                            && DockModelService.canAddSeparatorAfter(icon.appId))
+                        menu.addItem("dock.menu.separator.add",
+                            I18n.tr("Add separator to the right"), "add_separator")
                     if (icon.isRunning)
                         menu.addItem("dock.menu.close_all", I18n.tr("Close all windows"), "close_all")
                 }

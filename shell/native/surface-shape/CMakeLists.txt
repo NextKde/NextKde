@@ -21,7 +21,7 @@ include(KDEInstallDirs)
 include(GNUInstallDirs)
 find_package(WaylandScanner REQUIRED)
 find_package(Wayland REQUIRED COMPONENTS Client)
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui GuiPrivate Qml Quick WaylandClient)
+find_package(Qt6 6.5 REQUIRED COMPONENTS Core DBus Gui GuiPrivate Qml Quick WaylandClient)
 
 # Deliberately a plain variable, not CACHE: a cache entry outlives source
 # layout changes (a build tree configured before a move keeps the old absolute
@@ -40,6 +40,7 @@ ecm_add_wayland_client_protocol(protocol_sources
 
 add_library(kos_surface_shape MODULE
     cursoroverride.cpp
+    startupinputmonitor.cpp
     surfaceshape.cpp
     windowcontrolslot.cpp
     surfaceshapeplugin.cpp
@@ -47,7 +48,7 @@ add_library(kos_surface_shape MODULE
 )
 target_include_directories(kos_surface_shape PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 target_link_libraries(kos_surface_shape PRIVATE
-    Qt6::Core Qt6::Gui Qt6::GuiPrivate Qt6::Qml Qt6::Quick
+    Qt6::Core Qt6::DBus Qt6::Gui Qt6::GuiPrivate Qt6::Qml Qt6::Quick
     Qt6::WaylandClient Wayland::Client)
 set_target_properties(kos_surface_shape PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/qml/Kos/SurfaceShape")

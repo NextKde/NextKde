@@ -5,15 +5,23 @@ export function stageIcons(directory) {
     mkdirSync(common, {recursive: true});
     symlinkSync(new URL("../../shell/shared", import.meta.url), join(directory, "shared"), "dir");
     copyFileSync(new URL("../../shell/desktop/modules/common/ShellIconMap.mjs", import.meta.url), join(common, "ShellIconMap.mjs"));
-    const declarations = ["singleton AppearanceTokens 1.0 AppearanceTokens.qml"];
+    copyFileSync(new URL("../../shared/qml/foundation/MotionTokens.qml", import.meta.url), join(common, "MotionTokens.qml"));
+    const declarations = ["singleton AppearanceTokens 1.0 AppearanceTokens.qml", "MotionTokens 1.0 MotionTokens.qml"];
     writeFileSync(join(common, "AppearanceTokens.qml"), `pragma Singleton
 import QtQuick
-QtObject { readonly property bool isDarkTheme: true }
+QtObject {
+    readonly property bool isDarkTheme: true
+    readonly property MotionTokens motion: MotionTokens {}
+}
 `);
     for (const name of ["AppIcon", "BundledIcon", "ShellText", "GlassText", "BundledIcons", "AppPresentationService", "SystemIconResolver", "IconThemeReloadService"]) {
         copyFileSync(new URL(`../../shell/desktop/modules/common/${name}.qml`, import.meta.url), join(common, `${name}.qml`));
         declarations.push(`${["AppIcon", "BundledIcon", "ShellText", "GlassText"].includes(name) ? "" : "singleton "}${name} 1.0 ${name}.qml`);
     }
     writeFileSync(join(common, "qmldir"), `module qs.desktop.modules.common\n${declarations.join("\n")}\n`);
+    const notifications = join(directory, "desktop/modules/notifications");
+    mkdirSync(notifications, {recursive: true});
+    copyFileSync(new URL("../../shell/desktop/modules/notifications/NotificationIcon.qml", import.meta.url), join(notifications, "NotificationIcon.qml"));
+    writeFileSync(join(notifications, "qmldir"), "module qs.desktop.modules.notifications\nNotificationIcon 1.0 NotificationIcon.qml\n");
     copyFileSync(new URL("../../shell/desktop/modules/bar/NotificationSourceIcon.qml", import.meta.url), join(directory, "NotificationSourceIcon.qml"));
 }

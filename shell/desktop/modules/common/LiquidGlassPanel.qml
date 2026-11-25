@@ -97,7 +97,7 @@ Item {
 
     property bool compositorRevealEnabled: false
     property bool compositorRevealOpened: false
-    property int compositorRevealDuration: 320
+    property int compositorRevealDuration: AppearanceTokens.motion.page.duration
     readonly property bool compositorRevealSupported: surfaceRegion.revealSupported
     signal compositorRevealFinished(bool opened)
 
@@ -125,6 +125,11 @@ Item {
     // value, so an override that follows the global setting renders identically to
     // no override at all.
     property real blurStrength: AppearanceConfigService.effectiveDockBlur
+    // Protocol v9 pointer mask forwarded to the shape declaration: bit 0 hover
+    // light, bit 1 lens parallax, bit 2 click ripple. Opt-in: hosts pass
+    // AppearanceConfigService.pointerEffectsFor() so only the panels in the
+    // allow list react to the pointer.
+    property int pointerEffects: 0
 
     // The edge is owned by KWin's liquid rim, which adapts its light colour
     // (white over dark, dark gold over bright) per backdrop. No client-side
@@ -148,6 +153,7 @@ Item {
     property color ambientPrimary: "transparent"
     property color ambientSecondary: "transparent"
     property real ambientStrength: 0.0
+    // motion-exception: preserve the ambient pigment clock passed to the surface.
     property int ambientTransitionDuration: 2600
     property string material: "regular" // "clear", "regular", "thick"
     // 0 = dock/base surface, 1 = popup, 2 = contextual foreground menu.
@@ -256,6 +262,7 @@ Item {
         tintOpacity: root.scrimFixed || root.scrimGraphite || root.scrimPearl
             ? root._effectiveScrimCap * root.scrimOpacity : root.tintOpacity
         materialOpacity: root.effectOpacity
+        pointerEffects: root.pointerEffects
         revealEnabled: root.compositorRevealEnabled && root.useKwinEffect && !root.tonal
         revealOpened: root.compositorRevealOpened
         revealDuration: root.compositorRevealDuration

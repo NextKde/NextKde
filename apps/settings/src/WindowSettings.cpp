@@ -8,6 +8,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLockFile>
@@ -20,6 +21,19 @@ namespace {
 QString path(const QString &name) {
     return QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
         + QStringLiteral("/kos/") + name;
+}
+QString dataPath(const QString &name) {
+    return QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation)
+        + QStringLiteral("/kos/") + name;
+}
+QString ruleMatchKey(const QJsonObject &match) {
+    return QString::fromUtf8(QJsonDocument(match).toJson(QJsonDocument::Compact));
+}
+QString normalizedOverlayMode(const QString &mode) {
+    if (mode == QLatin1String("transparent") || mode == QLatin1String("hidden")) {
+        return mode;
+    }
+    return QStringLiteral("cover");
 }
 QJsonObject read(const QString &filename, QString *error = nullptr) {
     QFile file(filename);
@@ -117,6 +131,32 @@ QVariantMap WindowSettings::state() const {
         if (showButtons.isBool() && !showButtons.toBool()) buttonExclusions.append(it.key());
     }
     buttonExclusions.sort(Qt::CaseSensitive);
+    const auto rulesDoc = read(dataPath(QStringLiteral("window-buttons-rules.json")));
+    QVariantList windowButtonRules;
+    const auto rulesArray = rulesDoc.value(QStringLiteral("rules")).toArray();
+    for (const auto &entry : rulesArray) {
+        if (!entry.isObject()) continue;
+        const auto ruleObj = entry.toObject();
+        const auto match = ruleObj.value(QStringLiteral("match")).toObject();
+        if (match.isEmpty()) continue;
+        const QString rawClass = match.value(QStringLiteral("class")).toString();
+        const QString primaryClass = rawClass.section(QLatin1Char(' '), 0, 0).trimmed();
+        const QString title = match.value(QStringLiteral("title")).toString();
+        const QString titleRegex = match.value(QStringLiteral("titleRegex")).toString();
+        const QString role = match.value(QStringLiteral("role")).toString();
+        const QString type = match.value(QStringLiteral("type")).toString();
+        const bool hasWindowScope = !title.isEmpty() || !titleRegex.isEmpty() || !role.isEmpty();
+        windowButtonRules.append(QVariantMap{
+            {QStringLiteral("id"), ruleMatchKey(match)},
+            {QStringLiteral("appClass"), primaryClass.isEmpty() ? rawClass : primaryClass},
+            {QStringLiteral("title"), title.isEmpty() ? titleRegex : title},
+            {QStringLiteral("role"), role},
+            {QStringLiteral("type"), type},
+            {QStringLiteral("scope"), hasWindowScope ? QStringLiteral("window") : QStringLiteral("app")},
+            {QStringLiteral("canBroadenToApp"), hasWindowScope && !rawClass.isEmpty()},
+            {QStringLiteral("overlayMode"), normalizedOverlayMode(ruleObj.value(QStringLiteral("overlayMode")).toString())},
+        });
+    }
     return {{"enabled", doc.value("enabled").toBool(true)},
             {"radius", defaults.value("corners").toObject().value("radius").toInt(20)},
             {"squareMaximized", defaults.value("states").toObject().value("maximized").toString() == QLatin1String("square")},
@@ -127,7 +167,8 @@ QVariantMap WindowSettings::state() const {
             {"decoration", decoration.readEntry("library", QStringLiteral("org.kde.breeze"))},
             {"buttonGlyphMode", buttonGlyphMode},
             {"buttonExclusions", buttonExclusions},
-            {"independentButtonBackground", buttonsDoc.value("independentButtonBackground").toBool(false)}};
+            {"independentButtonBackground", buttonsDoc.value("independentButtonBackground").toBool(false)},
+            {"windowButtonRules", windowButtonRules}};
 }
 
 bool WindowSettings::patchAppearance(const QString &section, const QString &key,
@@ -365,6 +406,122 @@ bool WindowSettings::setIndependentButtonBackground(bool enabled) {
     if (saved) reconfigure(QStringLiteral("kos_bridge"));
     emit changed();
     return saved;
+}
+bool WindowSettings::patchButtonRules(
+    const std::function<bool(QJsonArray &rules, bool &shouldWrite)> &mutator) {
+    m_error.clear();
+    const QString filename = dataPath(QStringLiteral("window-buttons-rules.json"));
+    QDir().mkpath(QFileInfo(filename).absolutePath());
+    QLockFile lock(filename + QStringLiteral(".lock"));
+    if (!lock.tryLock(100)) {
+        m_error = QStringLiteral("The configuration is being updated; please retry");
+        emit changed();
+        return false;
+    }
+    auto doc = read(filename, &m_error);
+    if (!m_error.isEmpty()) { emit changed(); return false; }
+    auto rules = doc.value(QStringLiteral("rules")).toArray();
+    bool shouldWrite = true;
+    if (!mutator(rules, shouldWrite)) {
+        emit changed();
+        return false;
+    }
+    if (!shouldWrite) {
+        emit changed();
+        return true;
+    }
+    doc.insert(QStringLiteral("version"), 1);
+    doc.insert(QStringLiteral("rules"), rules);
+    const bool saved = write(filename, doc, m_error);
+    if (saved) reconfigure(QStringLiteral("kos_bridge"));
+    emit changed();
+    return saved;
+}
+bool WindowSettings::setWindowButtonRuleMode(const QString &ruleId, const QString &mode) {
+    if (mode != QLatin1String("cover")
+        && mode != QLatin1String("transparent")
+        && mode != QLatin1String("hidden")) {
+        m_error = QStringLiteral("Unknown window button overlay mode");
+        emit changed();
+        return false;
+    }
+    return patchButtonRules([&](QJsonArray &rules, bool &) {
+        for (int i = 0; i < rules.size(); ++i) {
+            if (!rules[i].isObject()) continue;
+            auto obj = rules[i].toObject();
+            if (ruleMatchKey(obj.value(QStringLiteral("match")).toObject()) != ruleId) continue;
+            if (mode == QLatin1String("cover")) obj.remove(QStringLiteral("overlayMode"));
+            else obj.insert(QStringLiteral("overlayMode"), mode);
+            rules[i] = obj;
+            return true;
+        }
+        m_error = QStringLiteral("Window button rule no longer exists");
+        return false;
+    });
+}
+bool WindowSettings::setWindowButtonRuleScopeToApp(const QString &ruleId) {
+    return patchButtonRules([&](QJsonArray &rules, bool &) {
+        int sourceIndex = -1;
+        QJsonObject updatedObj;
+        QJsonObject targetMatch;
+        for (int i = 0; i < rules.size(); ++i) {
+            if (!rules[i].isObject()) continue;
+            const auto obj = rules[i].toObject();
+            const auto match = obj.value(QStringLiteral("match")).toObject();
+            if (ruleMatchKey(match) != ruleId) continue;
+            if (match.value(QStringLiteral("class")).toString().isEmpty()) {
+                m_error = QStringLiteral("Rule has no application class");
+                return false;
+            }
+            targetMatch.insert(QStringLiteral("class"), match.value(QStringLiteral("class")).toString());
+            if (match.contains(QStringLiteral("type"))) {
+                targetMatch.insert(QStringLiteral("type"), match.value(QStringLiteral("type")));
+            }
+            updatedObj = obj;
+            updatedObj.insert(QStringLiteral("match"), targetMatch);
+            sourceIndex = i;
+            break;
+        }
+        if (sourceIndex < 0) {
+            m_error = QStringLiteral("Window button rule no longer exists");
+            return false;
+        }
+        const QString targetKey = ruleMatchKey(targetMatch);
+        QJsonArray nextRules;
+        for (int i = 0; i < rules.size(); ++i) {
+            if (i == sourceIndex) {
+                nextRules.append(updatedObj);
+                continue;
+            }
+            if (rules[i].isObject()
+                && ruleMatchKey(rules[i].toObject().value(QStringLiteral("match")).toObject()) == targetKey) {
+                continue;
+            }
+            nextRules.append(rules[i]);
+        }
+        rules = nextRules;
+        return true;
+    });
+}
+bool WindowSettings::removeWindowButtonRule(const QString &ruleId) {
+    return patchButtonRules([&](QJsonArray &rules, bool &shouldWrite) {
+        QJsonArray nextRules;
+        bool removed = false;
+        for (const auto &entry : rules) {
+            if (entry.isObject()
+                && ruleMatchKey(entry.toObject().value(QStringLiteral("match")).toObject()) == ruleId) {
+                removed = true;
+                continue;
+            }
+            nextRules.append(entry);
+        }
+        if (!removed) {
+            shouldWrite = false;
+            return true;
+        }
+        rules = nextRules;
+        return true;
+    });
 }
 bool WindowSettings::installDefaults() {
     if (!KOS::WindowAnimation::migrate(m_error)) return false;

@@ -36,6 +36,8 @@ public:
     void prepare(KWin::EffectWindow *window, bool continuousAvailable = false);
     std::optional<WindowAppearance::ContinuousStyle> continuousStyle(KWin::EffectWindow *window) const;
     void forget(KWin::EffectWindow *window);
+    // Drop only KOS additions on a live window; keep the client's own appearance.
+    void restoreWindow(KWin::EffectWindow *window);
     void focusChanged(KWin::EffectWindow *gained);
     void restoreAll();
 
@@ -71,6 +73,32 @@ private:
         QPointer<KWin::OutlinedBorderItem> frame;
         QPointer<KWin::Item> continuousBounds;
         std::optional<WindowAppearance::ContinuousStyle> continuous;
+        // Everything outside WindowState that prepare() reads. When it is
+        // unchanged (and no dirty flag is raised) the body is a no-op, so the
+        // call is skipped: prepare() runs for every window on every paint pass.
+        struct PrepareInputs
+        {
+            QSizeF size;
+            qreal scale = 0;
+            QPointer<QObject> decoration;
+            QPointer<KWin::ShadowItem> shadowItem;
+            QString windowClass;
+            QString desktopFileName;
+            QString resourceClass;
+            QVector4D borderRadius;
+            int tier = 1;
+            bool maximized = false;
+            bool fullscreen = false;
+            bool continuousAvailable = false;
+            bool decorationSupportsAppearance = false;
+            bool wantsDecorationShadow = false;
+            bool operator==(const PrepareInputs &) const = default;
+        };
+        PrepareInputs prepareInputs;
+        bool prepared = false;
+        // Direct prepare() calls that must run the body even when the inputs
+        // above compare equal (updateTiers() recomputes the tier itself).
+        bool prepareDirty = true;
         QList<QMetaObject::Connection> connections;
         qreal shadowOpacity = 0.0;
         qreal shadowTarget = 0.0;

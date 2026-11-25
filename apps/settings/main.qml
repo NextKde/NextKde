@@ -54,6 +54,20 @@ ApplicationWindow {
     property bool restoringHistory: false
     readonly property bool canGoBack: historyIndex > 0
     readonly property bool canGoForward: historyIndex < pageHistory.length - 1
+    // Start in the persisted language instead of the system locale, applied
+    // while the root is being created so pages built below already translate.
+    // The Shell owns the value and its i18n snapshot still confirms it, but
+    // waiting for that IPC reply flashes the wrong language on every launch —
+    // and leaves it wrong whenever the Shell is restarting, which is exactly
+    // what an update does.
+    readonly property bool _languageApplied: {
+        if (typeof settingsBridge !== "undefined" && settingsBridge) {
+            const saved = String(settingsBridge.savedLanguage || "")
+            if (saved.length > 0)
+                I18n.language = saved === "auto" ? I18n.systemDefault() : saved
+        }
+        return true
+    }
     Component.onCompleted: {
         pageHistory = currentPage === 14 ? [1, 14] : [currentPage]
         historyIndex = pageHistory.length - 1
@@ -1007,6 +1021,7 @@ ApplicationWindow {
                         sourceComponent: Pages.AboutSettingsPage {
                             colors: window.notificationTheme
                             cache: typeof aboutCache !== "undefined" ? aboutCache : null
+                            updateBackend: typeof updateController !== "undefined" ? updateController : null
                         }
                     }
 
@@ -1107,8 +1122,8 @@ ApplicationWindow {
             anchors.right: windowControls.left
             anchors.rightMargin: 22
             anchors.verticalCenter: windowControls.verticalCenter
-            width: 26
-            height: 26
+            width: Demo.LiquidStyle.toolbarButtonHeight
+            height: Demo.LiquidStyle.toolbarButtonHeight
             z: 2
             iconOnly: true
             contentItem: Item {
@@ -1145,15 +1160,15 @@ ApplicationWindow {
             x: contentSurface.x + 20
             y: windowControls.y + (windowControls.height - height) / 2
             width: Math.max(0, kdeSettingsButton.x - x - 12)
-            height: 26
+            height: Demo.LiquidStyle.toolbarButtonHeight
             spacing: 10
             z: 2
 
             Demo.LiquidActionButtonGroup {
                 objectName: "settingsHistoryNavigation"
                 Layout.preferredWidth: implicitWidth
-                Layout.preferredHeight: 26
-                buttonSize: 26
+                Layout.preferredHeight: implicitHeight
+                buttonSize: Demo.LiquidStyle.toolbarButtonHeight
                 icons: ["back", "forward"]
                 labels: [I18n.tr("Previous page"), I18n.tr("Next page")]
                 enabledActions: [window.canGoBack, window.canGoForward]

@@ -9,13 +9,14 @@ NextKde 为桌面环境提供基于 Fcitx5 与 Kimpanel 协议的原生液态玻
 ## 一、核心架构与环境约定
 
 1. **D-Bus 通信链路**：
-   - `kos-platform` (`KimpanelBridge`) 仅为已启用且连接中的前端注册 `org.kde.impanel`，启用 `kimpanel` 并临时禁用 `classicui`。
+   - `kos-platform` (`KimpanelBridge`) 仅为已启用且连接中的前端注册 `org.kde.impanel`。Fcitx 按界面可用性选择 Kimpanel，接管期间暂停 Classic UI。
    - Fcitx5 将候选词列表、预编辑文本（Preedit）与光标位置通过 `org.kde.kimpanel.inputmethod` D-Bus 接口广播给桌面外壳。
+   - 统一面板扩展直接发布输入上下文的候选内容。Fcitx 的 Kimpanel 在 KDE 下会把 Wayland/XWayland 委托给 Classic UI，因此扩展不调用其候选更新入口；选词、翻页直接交给扩展当前显示的输入上下文。
    - `kos-shell` (`InputMethodPopup.qml`) 接管候选词渲染，呈现带弹性物理动效、背景模糊与材质高光的液态玻璃卡片。
 
 2. **按需接管与恢复**：
-   - 功能默认关闭，仅在用户启用且 Shell 前端连接时接管。修改前核对并保存原始扩展状态到 `~/.config/kos/inputmethod-recovery.json`，成功恢复后删除记录。
-   - `ReloadConfig` 无法卸载已加载的 Classic UI。切换时由 KWin 重新创建它管理的 Fcitx 子进程和专用输入法 socket，无需注销或重启 KWin，也不执行 `fcitx5 -r`。设置页显示实际启用状态和错误。
+   - 功能默认关闭，仅在用户启用且 Shell 前端连接时接管。开关不再改写 Fcitx 扩展配置。旧版本留下的 `~/.config/kos/inputmethod-recovery.json` 只向已运行的 Fcitx 恢复一次，成功后删除。
+   - 切换不再重启 Fcitx 或修改 KWin 输入法命令。释放面板租约后，Fcitx 通过界面可用性机制恢复原生面板，保留合成器输入连接。设置页显示实际启用状态和错误。
    - 保留正常工作的 Qt/XCB、GTK、XIM 输入配置。NextKde 不改写全局 `GTK_IM_MODULE` 或 `QT_IM_MODULE`；下方的兼容性调整仅用于尚未接通输入法的应用。
    - Shell 入口通过 Quickshell 仅作用于当前进程的 `Env` 指令，将 `QT_IM_MODULE` 和 `QT_IM_MODULES` 指定为 `wayland`。启动台搜索等 Shell 输入框由此使用合成器输入链路，避免 Fcitx Qt 模块自行绘制候选框；安装版、源码和开发模式均生效，也不改变所启动应用的环境。更新这类启动指令后需要重启 Shell，QML 热重载不能替换已经创建的 Qt 输入上下文。
    - 绝对光标坐标按配置的 XWayland 根坐标缩放换算为逻辑坐标。坐标不落入任何输出时，回退到活动窗口所在屏幕，避免所有候选框同时隐藏。
@@ -30,9 +31,10 @@ NextKde 为桌面环境提供基于 Fcitx5 与 Kimpanel 协议的原生液态玻
 不改变输入方案、词库或快捷键。CMake 系统安装使用标准 `lib/fcitx5` 和
 `share/fcitx5/addon`；NixOS 模块将扩展加入 Fcitx5 addons。
 
-启用/关闭功能仍通过 KWin 重建其管理的 Fcitx5，以正确卸载已加载的 Classic UI。
-租约丢失时，扩展立即恢复各输入上下文原有的候选面板回调；平台恢复流程负责恢复
-原始扩展状态。只有实际接管成功才会报告启用。
+安装或更新扩展后需要注销并重新登录，让 Fcitx 加载新动态库；此后的功能开关只获取或释放
+面板租约。接管要求 Kimpanel 和原生 Classic UI 均可用，扩展确认后才报告启用。
+租约丢失时，扩展立即恢复各输入上下文原有的候选面板回调。旧版扩展配置迁移不自动
+启动 Fcitx；若当前会话启动时 Classic UI 被旧版禁用，需要重新登录才能加载。
 
 ## 候选框呈现偏好
 
@@ -111,7 +113,7 @@ NextKde 为桌面环境提供基于 Fcitx5 与 Kimpanel 协议的原生液态玻
 
 | 现象 | 排查定位 | 推荐处置方案 |
 | :--- | :--- | :--- |
-| **候选框呈现为旧式白色带角方框** | 接管失败，或 Classic UI 仍加载在进程中 | 查看设置页的实际状态和错误，通过开关让 KWin 重载输入法 |
+| **候选框呈现为旧式白色带角方框** | 接管未启用或扩展未更新 | 查看设置页状态；安装扩展后注销并重新登录 |
 | **按键直接英文上屏，无候选框** | 属于自带私有 Qt 的闭源应用（如微信），模块变量为空时未自动协商 Wayland 输入 | 针对该应用单独设置 `QT_IM_MODULE=text-input-unstable-v3`（微信）或排查对应 IME 启动参数 |
 | **Chromium/VSCode 无法打字或弹软键盘** | Chromium 缺失 Wayland IME 命令行特性开关 | 桌面项追加 `--enable-wayland-ime --wayland-text-input-version=3` |
 | **KWin 弹出全屏软键盘遮挡** | `kwinrc` 中误将虚拟键盘设为了鼠标触发模式（Mode 2） | 终端执行 `kwriteconfig6 --file kwinrc --group Wayland --key VirtualKeyboardMode 0` 并刷新 KWin |

@@ -15,7 +15,7 @@ Item {
     }
     QtObject {
         id: backend
-        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false})
+        property var state: ({enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false, windowButtonRules:[]})
         property bool animationBusy: false
         property string error: ""
         property var calls: []
@@ -40,6 +40,23 @@ Item {
             change("buttonExclusions", exclusions)
             return true
         }
+        function setWindowButtonRuleMode(ruleId, mode) {
+            const rules = (state.windowButtonRules || []).map(rule =>
+                rule.id === ruleId ? Object.assign({}, rule, {overlayMode: mode}) : rule)
+            change("windowButtonRules", rules)
+            return true
+        }
+        function setWindowButtonRuleScopeToApp(ruleId) {
+            const rules = (state.windowButtonRules || []).map(rule =>
+                rule.id === ruleId ? Object.assign({}, rule, {title: "", role: "", scope: "app", canBroadenToApp: false}) : rule)
+            change("windowButtonRules", rules)
+            return true
+        }
+        function removeWindowButtonRule(ruleId) {
+            const rules = (state.windowButtonRules || []).filter(rule => rule.id !== ruleId)
+            change("windowButtonRules", rules)
+            return true
+        }
     }
     TestCase {
         name: "WindowSettingsInteractions"
@@ -47,8 +64,8 @@ Item {
         property var app: null
         function init() {
             backend.calls = []
-            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false}
-            bridgeBackend.apps = [{name:"Firefox", appId:"firefox"}, {name:"Obsidian", appId:"md.obsidian.Obsidian"}]
+            backend.state = {enabled:true, radius:20, shadow:true, hideAnimation:"scale", closeAnimation:"scale", buttonGlyphMode:"always", buttonExclusions:[], independentButtonBackground:false, windowButtonRules:[]}
+            bridgeBackend.apps = [{name:"Firefox", appId:"firefox", windowClasses:["firefox"]}, {name:"Obsidian", appId:"md.obsidian.Obsidian", windowClasses:["obsidian"]}]
             bridgeBackend.runningAppsRequests = 0
             const component = Qt.createComponent("../../main.qml")
             compare(component.status, Component.Ready, component.errorString())
@@ -187,9 +204,9 @@ Item {
             picker.activated(1)
             compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
             bridgeBackend.apps = [
-                {name:"Kate", appId:"org.kde.kate"},
-                {name:"Firefox", appId:"firefox"},
-                {name:"Obsidian", appId:"md.obsidian.Obsidian"}
+                {name:"Kate", appId:"org.kde.kate", windowClasses:["kate"]},
+                {name:"Firefox", appId:"firefox", windowClasses:["firefox"]},
+                {name:"Obsidian", appId:"md.obsidian.Obsidian", windowClasses:["obsidian"]}
             ]
             const requests = bridgeBackend.runningAppsRequests
             const refresh = control("refreshWindowButtonRunningApps")
@@ -199,9 +216,9 @@ Item {
             compare(picker.model[picker.currentIndex].appId, "md.obsidian.Obsidian")
             const add = control("addRunningWindowButtonExclusion")
             clickControl(add, add.width / 2, add.height / 2)
-            compare(backend.state.buttonExclusions, ["md.obsidian.Obsidian"])
+            compare(backend.state.buttonExclusions, ["obsidian"], "exclusions use the window class, not the desktop entry ID")
             compare(picker.model[picker.currentIndex].appId, "org.kde.kate")
-            verify(control("windowButtonExclusionIcon_md.obsidian.Obsidian").visible)
+            verify(control("windowButtonExclusionIcon_obsidian").visible)
         }
         function test_independent_cover() {
             const toggle = control("windowIndependentButtonBackground")
@@ -222,6 +239,37 @@ Item {
                 clickControl(picker, picker.width * (i + 0.5) / 2, picker.height / 2)
                 compare(backend.state.buttonGlyphMode, modes[i])
             }
+        }
+        function test_remembered_window_button_rules() {
+            backend.state = Object.assign({}, backend.state, {
+                windowButtonRules: [
+                    {id:"r1", appClass:"wechat", title:"朋友圈", role:"", type:"normal", scope:"window", canBroadenToApp:true, overlayMode:"transparent"},
+                    {id:"r2", appClass:"obsidian", title:"", role:"", type:"normal", scope:"app", canBroadenToApp:false, overlayMode:"auto"}
+                ]
+            })
+            const toggle = control("toggleWindowButtonRules")
+            verify(toggle.visible)
+            clickControl(toggle, toggle.width / 2, toggle.height / 2)
+
+            const modeBox = control("windowButtonRuleMode_0")
+            compare(modeBox.currentIndex, 1)
+            modeBox.activated(0)
+            compare(backend.state.windowButtonRules[0].overlayMode, "cover")
+            const updatedModeBox = control("windowButtonRuleMode_0")
+            compare(updatedModeBox.currentIndex, 0)
+            updatedModeBox.activated(2)
+            compare(backend.state.windowButtonRules[0].overlayMode, "hidden")
+
+            const broaden = control("windowButtonRuleBroaden_0")
+            verify(broaden.visible)
+            clickControl(broaden, broaden.width / 2, broaden.height / 2)
+            compare(backend.state.windowButtonRules[0].scope, "app")
+            compare(backend.state.windowButtonRules[0].canBroadenToApp, false)
+
+            const remove = control("removeWindowButtonRule_0")
+            clickControl(remove, remove.width / 2, remove.height / 2)
+            compare(backend.state.windowButtonRules.length, 1)
+            compare(backend.state.windowButtonRules[0].id, "r2")
         }
     }
 }

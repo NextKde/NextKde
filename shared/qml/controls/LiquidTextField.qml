@@ -5,6 +5,7 @@ import "../foundation" as Foundation
 
 TextField {
     id: root
+    property var motionPolicy: LiquidStyle.motionFor(root.materialForm)
     implicitHeight: 34
     leftPadding: 12
     rightPadding: 12
@@ -55,8 +56,8 @@ TextField {
             color: root._fill
             border.width: 1
             border.color: root._hoverBorder
-            Behavior on color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
-            Behavior on border.color { ColorAnimation { duration: root.reduceMotion ? 0 : 150 } }
+            Behavior on color { ColorAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
+            Behavior on border.color { ColorAnimation { duration: root.reduceMotion ? 0 : root.motionPolicy.base.duration; easing.type: root.motionPolicy.enterCurve } }
         }
         LiquidSurface {
             id: liquidSurface

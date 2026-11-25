@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
     buildRows,
+    defaultHiddenDeskCenterWidgets,
     deskCenterWidgetIds,
     isHidden,
     isKnownDeskCenterWidget,
@@ -15,7 +16,14 @@ import {
 
 assert.equal(isKnownDeskCenterWidget("clock"), true, "clock is a known widget");
 assert.equal(isKnownDeskCenterWidget("music"), true, "music is a known widget");
+assert.equal(isKnownDeskCenterWidget("groups"), true, "groups is a known widget");
 assert.equal(isKnownDeskCenterWidget("nope"), false, "unknown widget rejected");
+assert.deepEqual(defaultHiddenDeskCenterWidgets, ["groups"],
+    "the grouped view starts hidden");
+assert.deepEqual(
+    normalizeHiddenIds(defaultHiddenDeskCenterWidgets, deskCenterWidgetIds),
+    ["groups"],
+    "the default hidden set is valid");
 assert.equal(isKnownStatusCell("battery"), true, "battery is a known cell");
 assert.equal(isKnownStatusCell("inputmethod"), true, "inputmethod is a known cell");
 assert.equal(isKnownStatusCell("clock"), false, "a widget id is not a cell id");

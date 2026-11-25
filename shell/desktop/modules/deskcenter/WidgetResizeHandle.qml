@@ -18,9 +18,14 @@ Item {
     property bool previewAllowed: true
     property int previewColumns: 1
     property int previewRows: 1
-    // Widgets exist only at one or two cells per axis; the magnet never
-    // previews a span the commit would reject.
-    readonly property int maximumSpan: 2
+    // Widgets normally top out at two cells per axis; the grouped view is the
+    // one anchored card allowed to grow to three rows/columns.
+    property int maximumColumns: 2
+    property int maximumRows: 2
+    // The grouped view cannot shrink below 2x2: below that its header, four
+    // type tabs and member grid stop fitting. Ordinary widgets keep one cell.
+    property int minimumColumns: 1
+    property int minimumRows: 1
     // The corner position the drag actually shows: the pointer, bent by the
     // magnetic mapping so the card is held near whole-cell sizes.
     property real previewWidth: 0
@@ -32,17 +37,27 @@ Item {
     property real startHeight: 0
     signal committed(int columns, int rows)
 
+    // Grabbing the corner is a physical hold: the grip acknowledges the press
+    // before the card itself starts changing size. Frame-synchronised, so the
+    // grip follows the display instead of Qt's fixed 16 ms spring step.
+    MotionSpring {
+        id: gripScale
+        target: pointer.pressed ? 1.14 : 1.0
+        enabled: handle.animate
+        angularFrequency: AppearanceTokens.motion.widgetGripAngularFrequency
+        dampingRatio: AppearanceTokens.motion.widgetGripDampingRatio
+        epsilon: AppearanceTokens.motion.widgetGripEpsilon
+    }
+    FrameAnimation {
+        running: gripScale.animating
+        onTriggered: gripScale.advance(frameTime)
+    }
+
     Rectangle {
         anchors.fill: parent
         radius: 12
         color: pointer.pressed ? "#a0000000" : "#66000000"
-        // Grabbing the corner is a physical hold: the grip acknowledges the
-        // press before the card itself starts changing size.
-        scale: pointer.pressed ? 1.14 : 1.0
-        Behavior on scale {
-            enabled: handle.animate
-            SpringAnimation { spring: 5; damping: 0.35; mass: 1; epsilon: 0.005 }
-        }
+        scale: gripScale.value
     }
     BundledIcon {
         anchors.centerIn: parent
@@ -62,7 +77,8 @@ Item {
             handle.startWidth = handle.cardWidth
             handle.startHeight = handle.cardHeight
             const span = WidgetLayout.snappedSpan(handle.startWidth, handle.startHeight,
-                handle.cellSize, handle.gap)
+                handle.cellSize, handle.gap, handle.maximumColumns, handle.maximumRows,
+                handle.minimumColumns, handle.minimumRows)
             handle.previewColumns = span[0]
             handle.previewRows = span[1]
             handle.previewWidth = handle.startWidth
@@ -76,13 +92,17 @@ Item {
             const point = mapToItem(null, mouse.x, mouse.y)
             const width = handle.startWidth + point.x - handle.startPoint.x
             const height = handle.startHeight + point.y - handle.startPoint.y
-            const span = WidgetLayout.snappedSpan(width, height, handle.cellSize, handle.gap)
+            const span = WidgetLayout.snappedSpan(width, height, handle.cellSize,
+                handle.gap, handle.maximumColumns, handle.maximumRows,
+                handle.minimumColumns, handle.minimumRows)
             handle.previewColumns = span[0]
             handle.previewRows = span[1]
             handle.previewWidth = WidgetLayout.magnetizedSize(width,
-                handle.cellSize, handle.gap, handle.maximumSpan)
+                handle.cellSize, handle.gap, handle.maximumColumns,
+                handle.minimumColumns)
             handle.previewHeight = WidgetLayout.magnetizedSize(height,
-                handle.cellSize, handle.gap, handle.maximumSpan)
+                handle.cellSize, handle.gap, handle.maximumRows,
+                handle.minimumRows)
         }
         onReleased: {
             if (handle.previewAllowed)
