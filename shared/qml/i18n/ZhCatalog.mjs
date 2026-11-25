@@ -3,6 +3,12 @@
 // 规则：值必须与改造前界面上的中文逐字一致（含空格、间隔符与省略号），
 // 改动文案时同步更新对应键，不要只改一边。
 export const catalog = {
+    "Launcher animation": "启动台动画",
+    "Slide up and down": "上下滑动",
+    "Slide up from below when opening and slide down when closing": "打开时从下方上移，关闭时向下收回",
+    "Animation speed": "动画速度",
+    "Vertical travel": "上下移动距离",
+    "Invalid launcher animation settings": "启动台动画设置无效",
     "Desktop arrival": "桌面到场",
     "Reduce motion": "减少动效",
     "Show the desktop immediately after login, without the arrival animation": "登录后直接显示桌面，跳过首屏到场动画",

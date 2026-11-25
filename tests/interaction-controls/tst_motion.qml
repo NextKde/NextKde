@@ -67,6 +67,7 @@ Item {
         when: windowShown
 
         function init() {
+            failOnWarning(/Binding loop|ReferenceError|TypeError|Unable to assign|Cannot assign/)
             Foundation.AppTheme.reduceMotion = false
             dialog.close()
             pages.currentIndex = 0
@@ -153,6 +154,90 @@ Item {
             const late = launcherTile(controller, {animateOnCompleted: false})
             compare(tilePose(late), [0, 0, 1, 1])
             compare(controller.pendingIcons, 0)
+        }
+
+        function test_launcher_panel_motion_and_reversal() {
+            const host = createTemporaryObject(launcherControllerFixture, root)
+            const controller = host.controller
+            compare(controller.geometryProgress, 0)
+            controller.open()
+            compare(controller.geometryProgress, 0)
+            wait(60)
+            verify(controller.geometryProgress > 0 && controller.geometryProgress < 1)
+            let progress = controller.geometryProgress
+            controller.close()
+            compare(controller.geometryProgress, progress)
+            wait(30)
+            progress = controller.geometryProgress
+            controller.open()
+            compare(controller.geometryProgress, progress)
+            tryCompare(controller, "geometryProgress", 1)
+            controller.close()
+            tryCompare(controller, "mapped", false)
+            compare(controller.geometryProgress, 0)
+        }
+
+        function test_launcher_panel_reduced_motion() {
+            const host = createTemporaryObject(launcherControllerFixture, root)
+            const controller = host.controller
+            controller.reduceMotion = true
+            controller.open()
+            compare(controller.geometryProgress, 1)
+            controller.close()
+            compare(controller.geometryProgress, 0)
+        }
+
+        function test_launcher_motion_disabled() {
+            const host = createTemporaryObject(launcherControllerFixture, root)
+            const controller = host.controller
+            const tile = launcherTile(controller)
+            controller.animationEnabled = false
+            controller.open()
+            compare(controller.geometryProgress, 1)
+            compare(controller.glassOpacity, 1)
+            compare(tilePose(tile), [0, 0, 1, 1])
+            verify(controller.interactive)
+            controller.close()
+            compare(controller.geometryProgress, 0)
+            compare(controller.glassOpacity, 0)
+            verify(!controller.mapped)
+            compare(controller.pendingIcons, 0)
+        }
+
+        function test_launcher_disable_during_motion() {
+            const host = createTemporaryObject(launcherControllerFixture, root)
+            const controller = host.controller
+            const tile = launcherTile(controller)
+            controller.open()
+            wait(60)
+            controller.animationEnabled = false
+            compare(controller.geometryProgress, 1)
+            compare(tilePose(tile), [0, 0, 1, 1])
+            verify(controller.interactive)
+            controller.close()
+            verify(!controller.mapped)
+        }
+
+        function test_launcher_independent_speed() {
+            const slow = createTemporaryObject(launcherControllerFixture, root).controller
+            const fast = createTemporaryObject(launcherControllerFixture, root).controller
+            slow.speed = 0.5
+            fast.speed = 2
+            const slowTile = launcherTile(slow)
+            const fastTile = launcherTile(fast)
+            slow.open()
+            fast.open()
+            wait(80)
+            verify(fast.geometryProgress > slow.geometryProgress)
+            verify(fastTile.visual.opacity > slowTile.visual.opacity)
+            tryCompare(slow, "settledOpen", true)
+            tryCompare(fast, "settledOpen", true)
+            slow.close()
+            fast.close()
+            wait(80)
+            verify(fast.geometryProgress < slow.geometryProgress)
+            tryCompare(slow, "mapped", false)
+            tryCompare(fast, "mapped", false)
         }
 
         function test_launcher_hidden_page_and_destroyed_delegate() {

@@ -17,6 +17,7 @@ QtObject {
     readonly property string configDir: Quickshell.stateDir + "/applauncher"
     readonly property string configPath: configDir + "/config.json"
     property string displayMode: "bottom"
+    property var motionSettings: ({ enabled: true, speed: 1, distance: 96 })
     // Each presentation has its own intentionally semantic layout profile.
     // Pixels remain an implementation detail so a profile can be tuned per
     // presentation without exposing fragile spacing math in Settings.
@@ -153,6 +154,23 @@ QtObject {
         if (!isValidDisplayMode(mode) || displayMode === mode)
             return false
         displayMode = mode
+        scheduleSave()
+        return true
+    }
+
+    function isValidMotion(enabled, speed, distance) {
+        return typeof enabled === "boolean"
+            && typeof speed === "number" && Number.isFinite(speed) && speed >= 0.5 && speed <= 2
+            && typeof distance === "number" && Number.isInteger(distance) && distance >= 0 && distance <= 240
+    }
+
+    function updateMotion(enabled, speed, distance) {
+        if (!isValidMotion(enabled, speed, distance))
+            return false
+        if (motionSettings.enabled === enabled && motionSettings.speed === speed
+                && motionSettings.distance === distance)
+            return false
+        motionSettings = { enabled: enabled, speed: speed, distance: distance }
         scheduleSave()
         return true
     }
@@ -586,8 +604,9 @@ QtObject {
 
     function _save() {
         const json = JSON.stringify({
-            version: 4,
+            version: 5,
             displayMode: displayMode,
+            motion: motionSettings,
             layoutProfiles: layoutProfiles,
             rootItems: rootItems,
             hiddenAppIds: hiddenAppIds,
@@ -601,6 +620,13 @@ QtObject {
             if (exists && data) {
                 try {
                     const saved = JSON.parse(data)
+                    if (saved.motion !== undefined) {
+                        const motion = saved.motion
+                        if (motion && service.isValidMotion(motion.enabled, motion.speed, motion.distance))
+                            motionSettings = { enabled: motion.enabled, speed: motion.speed, distance: motion.distance }
+                        else
+                            console.warn("[AppLauncherConfig] invalid animation settings; using defaults")
+                    }
                     if (service.isValidDisplayMode(saved.displayMode))
                         displayMode = saved.displayMode
                     if (saved.layoutProfiles) {

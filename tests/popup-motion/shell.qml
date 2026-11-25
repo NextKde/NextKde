@@ -172,21 +172,23 @@ ShellRoot {
         check(launcherFrame.width > 0 && launcherFrame.height > 0
             && launcherFrame.width === stableLayoutWidth
             && launcherFrame.height === stableLayoutHeight,
-            "the glass panel keeps its full dimensions during tile motion")
+            "panel sliding preserves the glass layout dimensions")
         check(launcherLayout.width === stableLayoutWidth
             && launcherLayout.height === stableLayoutHeight,
             "grid layout remains fixed throughout the panel animation")
         const surface = findItem(launcherFrame, "launcher-glass-surface")
         const content = findItem(launcherFrame, "launcher-motion-content")
-        check(launcherFrame.opacity === 1 && content.opacity === 1
+        check(launcherFrame.opacity === 1 && content.opacity === surface.materialOpacity
             && content.y === 0 && content.scale === 1,
-            "tile animations keep the glass and content container stationary")
+            "glass and content share the panel translation and fade")
+        check(launcherFrame.y >= 0 && launcherFrame.y <= AppLauncherConfigService.motionSettings.distance,
+            "launcher travel stays within its configured vertical distance")
         check(Math.abs(surface.blurRegion.scrimCap - surface._effectiveScrimCap) < 0.0001
             && Math.abs(surface.blurRegion.scrimDecay - surface._effectiveScrimDecay) < 0.0001,
             "native glass tint stays constant during tile animations")
         const blur = launcher.BackgroundEffect.blurRegion
         check(blur !== null && blur.item === launcherLayout,
-            "native blur follows the stationary backdrop layout")
+            "native blur follows the sliding backdrop layout")
         const expected = launcherLayout.mapToItem(null,
             Qt.rect(0, 0, launcherLayout.width, launcherLayout.height))
         check(Math.abs(blur.itemRect.x - expected.x) < 0.01
@@ -194,8 +196,21 @@ ShellRoot {
             && Math.abs(blur.itemRect.width - expected.width) < 0.01
             && Math.abs(blur.itemRect.height - expected.height) < 0.01,
             "blur geometry matches the current visible frame")
-        check(launcherFrame.x === 0 && launcherFrame.y === 0,
-            "tile animations do not displace the backdrop")
+        check(launcherFrame.x === 0 && launcherFrame.scale === 1,
+            "launcher motion preserves horizontal position and scale")
+    }
+
+    function checkLauncherMotionSettings() {
+        const service = AppLauncherConfigService
+        check(service.updateMotion(true, 0.5, 240), "launcher accepts supported motion settings")
+        const saved = JSON.stringify(service.motionSettings)
+        for (const values of [[true, 0, 96], [true, 3, 96], [true, NaN, 96],
+                [true, 1, -1], [true, 1, 241], [true, 1, 0.5], ["true", 1, 96]]) {
+            check(!service.updateMotion(values[0], values[1], values[2])
+                && JSON.stringify(service.motionSettings) === saved,
+                "invalid animation input must not modify launcher state")
+        }
+        service.updateMotion(true, 1, 96)
     }
 
     function checkScrimOpacity() {
@@ -239,6 +254,7 @@ ShellRoot {
                 console.log("POPUP_MOTION_STAGE " + test.stage)
                 switch (test.stage++) {
                 case 0:
+                    checkLauncherMotionSettings()
                     checkScrimOpacity()
                     checkGeometry()
                     check(probeChild.parent !== contentProbe
@@ -422,19 +438,28 @@ ShellRoot {
                     stableLayoutWidth = launcherLayout.width
                     stableLayoutHeight = launcherLayout.height
                     checkLauncherFrame()
+                    check(launcherFrame.y > 0 && launcherFrame.y < AppLauncherConfigService.motionSettings.distance,
+                        "opening slides the complete launcher panel up from below")
                     interval = 350
                     break
                 case 20:
                     check(launcherFrame.width === stableLayoutWidth
                         && launcherFrame.height === stableLayoutHeight, "panel settles to full size")
+                    check(launcherFrame.y < 0.5, "open panel settles at its resting position")
+                    savedProgress = launcherFrame.y
                     launcher.open = false
+                    check(launcherFrame.y === savedProgress, "close preserves the current panel position")
                     check(!launcherFrame.enabled, "exit immediately disables card input")
                     check(launcherFrame.width === stableLayoutWidth, "close starts without a geometry jump")
                     interval = 70
                     break
                 case 21:
                     checkLauncherFrame()
+                    check(launcherFrame.y > 0 && launcherFrame.y < AppLauncherConfigService.motionSettings.distance,
+                        "closing slides the complete launcher panel down")
+                    savedProgress = launcherFrame.y
                     launcher.open = true
+                    check(launcherFrame.y === savedProgress, "reopening preserves the current panel position")
                     checkLauncherFrame()
                     interval = 330
                     break

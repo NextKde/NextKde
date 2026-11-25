@@ -29,10 +29,20 @@ ColumnLayout {
     readonly property var fontWeights: ["normal", "medium", "bold"]
     property int fontWeightIndex: 0
     property string errorText: ""
+    property bool animationEnabled: true
+    property real animationSpeed: 1
+    property int animationDistance: 96
+    property real previewSpeed: -1
+    property int previewDistance: -1
 
     function applySnapshot(snapshot) {
         if (!snapshot)
             return;
+        if (snapshot.motion) {
+            animationEnabled = snapshot.motion.enabled;
+            animationSpeed = snapshot.motion.speed;
+            animationDistance = snapshot.motion.distance;
+        }
         if (snapshot.displayMode !== undefined) {
             displayMode = snapshot.displayMode;
             const idx = displayModes.indexOf(displayMode);
@@ -92,17 +102,100 @@ ColumnLayout {
         bridge.resetLauncherLayoutProfile(displayMode);
     }
 
+    function saveMotion(enabled, speed, distance) {
+        if (bridge)
+            bridge.updateLauncherMotion(enabled, speed, distance);
+    }
+
     Connections {
         target: launcherPage.bridge
         enabled: launcherPage.bridge !== null
         function onLauncherSnapshotChanged(snap) {
             launcherPage.applySnapshot(snap);
-            if (launcherPage.bridge.lastError)
-                launcherPage.errorText = I18n.tr(launcherPage.bridge.lastError);
+            launcherPage.errorText = I18n.tr(launcherPage.bridge.lastError || "");
         }
     }
 
     Component.onCompleted: reloadFromBridge()
+
+    Demo.SettingsGroup {
+        title: I18n.tr("Launcher animation")
+        backgroundColor: colors.card
+
+        Demo.SettingsItem {
+            title: I18n.tr("Slide up and down")
+            description: I18n.tr("Slide up from below when opening and slide down when closing")
+
+            Controls.SettingsSwitch {
+                objectName: "launcherAnimationSwitch"
+                enabled: launcherPage.bridge !== null
+                checked: launcherPage.animationEnabled
+                accentColor: colors.accent
+                trackColor: colors.divider
+                onToggled: function (checked) {
+                    launcherPage.saveMotion(checked, launcherPage.animationSpeed, launcherPage.animationDistance);
+                }
+            }
+        }
+
+        Demo.SettingsItem {
+            id: animationSpeedRow
+            title: I18n.tr("Animation speed")
+            enabled: launcherPage.bridge !== null && launcherPage.animationEnabled
+
+            Text {
+                text: Math.round((launcherPage.previewSpeed >= 0 ? launcherPage.previewSpeed : launcherPage.animationSpeed) * 100) + "%"
+                color: colors.secondaryText
+                font.pixelSize: 12
+            }
+            Controls.SettingsSlider {
+                objectName: "launcherAnimationSpeedSlider"
+                enabled: animationSpeedRow.enabled
+                accentColor: colors.accent
+                trackColor: colors.divider
+                wheelStep: 1 / 15
+                value: ((launcherPage.previewSpeed >= 0 ? launcherPage.previewSpeed : launcherPage.animationSpeed) - 0.5) / 1.5
+                onPreviewChanged: function (position) {
+                    launcherPage.previewSpeed = Math.round((0.5 + position * 1.5) * 10) / 10;
+                }
+                onCanceled: launcherPage.previewSpeed = -1
+                onCommitRequested: function (position) {
+                    launcherPage.saveMotion(launcherPage.animationEnabled,
+                        Math.round((0.5 + position * 1.5) * 10) / 10, launcherPage.animationDistance);
+                    launcherPage.previewSpeed = -1;
+                }
+            }
+        }
+
+        Demo.SettingsItem {
+            id: animationDistanceRow
+            title: I18n.tr("Vertical travel")
+            enabled: launcherPage.bridge !== null && launcherPage.animationEnabled
+
+            Text {
+                text: (launcherPage.previewDistance >= 0 ? launcherPage.previewDistance : launcherPage.animationDistance) + " px"
+                color: colors.secondaryText
+                font.pixelSize: 12
+            }
+            Controls.SettingsSlider {
+                objectName: "launcherAnimationDistanceSlider"
+                enabled: animationDistanceRow.enabled
+                accentColor: colors.accent
+                trackColor: colors.divider
+                wheelStep: 1 / 30
+                value: (launcherPage.previewDistance >= 0 ? launcherPage.previewDistance : launcherPage.animationDistance) / 240
+                onPreviewChanged: function (position) {
+                    launcherPage.previewDistance = Math.round(position * 30) * 8;
+                }
+                onCanceled: launcherPage.previewDistance = -1
+                onCommitRequested: function (position) {
+                    launcherPage.saveMotion(launcherPage.animationEnabled,
+                        launcherPage.animationSpeed, Math.round(position * 30) * 8);
+                    launcherPage.previewDistance = -1;
+                }
+            }
+        }
+    }
 
     Demo.SettingsGroup {
         title: I18n.tr("Display shape")

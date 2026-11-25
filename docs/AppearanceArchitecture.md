@@ -78,7 +78,27 @@ hover magnification must not move a minimize target. Keep desktop file spacing i
 [DesktopIcons](DesktopIcons.md). Material surfaces and continuous compositor corners have different
 rendering owners; a visual style change must not duplicate clipping or shadows.
 
-## Launcher folder focus
+## Launcher motion and folder focus
+
+`AppLauncherConfigService.qml` owns launcher-only animation settings in its version-5
+configuration: `motion.enabled`, `motion.speed` (0.5–2, default 1), and
+`motion.distance` (0–240 logical pixels, default 96). Missing settings preserve
+these defaults for older files; invalid persisted values emit a warning and retain
+the defaults. Invalid IPC updates return an error without changing state.
+Settings reads and updates this object through `applauncher-settings.snapshot`
+and `updateMotion(enabled, speed, distance)`, via `SettingsBridge`.
+
+`LauncherMotion.qml` drives the whole card upward from a positive Y offset when
+opening and downward when closing. The grid layout and panel scale stay fixed;
+the native glass follows the translated layout. The launcher speed scales the
+panel spring, glass fade and icon spread together without changing other popups.
+Close/reopen preserves the current spring position and velocity. The window stays
+mapped through exit, and input waits for the entrance geometry, fade and icon jobs;
+disabling animation or global
+Reduce motion snaps all three channels to their targets. Each option is exposed
+on the Launcher settings page. Geometry/reversal and config validation are covered
+by the popup-motion fixture, channel lifetime/speed by interaction-controls, and
+Settings preview/cancel/commit/refresh by the settings page contract fixture.
 
 `modules/applauncher/AppLauncherWindow.qml` blurs the root application page while a
 folder is open, rather than painting a black dimming overlay. The folder page is

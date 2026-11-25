@@ -34,7 +34,7 @@ Item {
     function animate() {
         // Neighbor pages stay preloaded for paging, but their hidden tiles
         // must not run animations or hold up the open controller.
-        if (!target.visible) {
+        if (!target.visible || !controller.animate) {
             snap();
             return;
         }
@@ -42,10 +42,10 @@ Item {
         const destination = opened ? 1 : 0;
         poseJob.from = progress;
         poseJob.to = destination;
-        poseJob.duration = Math.max(1, Math.round(motionPolicy.page.duration * Math.abs(destination - progress)));
+        poseJob.duration = Math.max(1, Math.round(motionPolicy.page.duration / controller.speed * Math.abs(destination - progress)));
         opacityJob.from = fadeProgress;
         opacityJob.to = destination;
-        opacityJob.duration = Math.max(1, Math.round(motionPolicy.slow.duration * Math.abs(destination - fadeProgress)));
+        opacityJob.duration = Math.max(1, Math.round(motionPolicy.slow.duration / controller.speed * Math.abs(destination - fadeProgress)));
         if (!counted) {
             counted = true;
             controller.iconStarted();
@@ -53,6 +53,13 @@ Item {
         animation.start();
     }
     onOpenedChanged: if (ready) animate()
+    Connections {
+        target: motion.controller
+        function onAnimateChanged() {
+            if (motion.ready && !motion.controller.animate)
+                motion.snap();
+        }
+    }
     Connections {
         target: motion.target
         function onVisibleChanged() {

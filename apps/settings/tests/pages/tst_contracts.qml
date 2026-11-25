@@ -196,6 +196,50 @@ Item {
                 {tag:"icon-presets", name:"IconAppearanceSection", objectName:"iconTintPresetSelect", count:4}
             ]
         }
+        function test_launcher_animation_commit_cancel_and_refresh() {
+            const page = makePage("LauncherSettingsPage")
+            const bridge = Qt.createQmlObject('import QtQuick; QtObject {'
+                + 'property string lastError: ""; property var writes: []; '
+                + 'signal launcherSnapshotChanged(var state); '
+                + 'function launcherSnapshot() {} '
+                + 'function updateLauncherMotion(enabled, speed, distance) {'
+                + 'writes = writes.concat([{enabled: enabled, speed: speed, distance: distance}]); }'
+                + '}', page)
+            page.bridge = bridge
+            bridge.launcherSnapshotChanged({motion: {enabled: true, speed: 1, distance: 96}})
+            const toggle = findChild(page, "launcherAnimationSwitch")
+            const speed = findChild(page, "launcherAnimationSpeedSlider")
+            const distance = findChild(page, "launcherAnimationDistanceSlider")
+            verify(toggle !== null && speed !== null && distance !== null)
+            speed.previewChanged(1)
+            speed.canceled()
+            compare(bridge.writes.length, 0)
+            compare(speed.value, 1 / 3)
+            speed.commitRequested(1)
+            compare(bridge.writes[0], {enabled: true, speed: 2, distance: 96})
+            distance.previewChanged(0.5)
+            distance.canceled()
+            compare(distance.value, 0.4)
+            distance.commitRequested(0.5)
+            compare(bridge.writes[1], {enabled: true, speed: 1, distance: 120})
+            toggle.toggled(false)
+            compare(bridge.writes[2], {enabled: false, speed: 1, distance: 96})
+            bridge.launcherSnapshotChanged({motion: {enabled: false, speed: 0.5, distance: 240}})
+            compare(toggle.checked, false)
+            compare(speed.enabled, false)
+            compare(distance.enabled, false)
+            compare(page.animationSpeed, 0.5)
+            compare(page.animationDistance, 240)
+            bridge.lastError = "Invalid launcher animation settings"
+            bridge.launcherSnapshotChanged({})
+            verify(page.errorText.length > 0)
+            bridge.lastError = ""
+            bridge.launcherSnapshotChanged({motion: {enabled: true, speed: 2, distance: 0}})
+            compare(page.errorText, "")
+            verify(speed.enabled && distance.enabled)
+            compare(speed.value, 1)
+            compare(distance.value, 0)
+        }
         function test_settingsDropdowns(data) {
             const page = makePage(data.name)
             if (data.name === "IconAppearanceSection") page.modeIndex = 2
