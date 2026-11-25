@@ -34,6 +34,7 @@ QtObject {
 
     property Instantiator watchers: Instantiator {
         model: root.sources
+        onObjectAdded: root.update()
         delegate: Connections {
             required property var modelData
             target: modelData
