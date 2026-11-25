@@ -296,8 +296,7 @@ ApplicationWindow {
         { subtitle: I18n.tr("Notifications") },
         { subtitle: I18n.tr("Power") },
         { subtitle: I18n.tr("Fonts") },
-        { subtitle: I18n.tr("About") },
-        { subtitle: I18n.tr("Plugin Center") }
+        { subtitle: I18n.tr("About") }
     ]
 
     // Shown only while a development session drives this window. Every value on
@@ -739,15 +738,6 @@ ApplicationWindow {
 
                                 SidebarEntry {
                                     Layout.fillWidth: true
-                                    pageIndex: 16
-                                    label: I18n.tr("Plugin Center")
-                                    navIcon: "general"
-                                    navSymbol: "◇"
-                                    navTint: "#a775cf"
-                                }
-
-                                SidebarEntry {
-                                    Layout.fillWidth: true
                                     pageIndex: 7
                                     label: I18n.tr("Glass debugging")
                                     navIcon: "appearance"
@@ -958,21 +948,6 @@ ApplicationWindow {
                             onDesktopPreviewFinished: {
                                 window.showNormal()
                                 window.requestActivate()
-                            }
-                        }
-                    }
-
-                    Loader {
-                        objectName: "PluginSettingsPageLoader"
-                        Layout.fillWidth: true
-                        active: window.displayedPage === 16
-                        visible: active
-                        sourceComponent: Pages.PluginSettingsPage {
-                            colors: window.notificationTheme
-                            store: typeof pluginStore !== "undefined" ? pluginStore : null
-                            onManageSourcesRequested: {
-                                window.requestedSources = true
-                                window.currentPage = 9
                             }
                         }
                     }

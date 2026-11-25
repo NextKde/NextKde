@@ -15,11 +15,11 @@ singleton ActivityUsageService 1.0 ActivityUsageService.qml
 singleton DesktopFilesService 1.0 DesktopFilesService.qml
 singleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml
 singleton PimWidgetService 1.0 PimWidgetService.qml
+singleton WidgetGalleryService 1.0 WidgetGalleryService.qml
 
 WidgetResizeHandle 1.0 WidgetResizeHandle.qml
 WidgetGallery 1.0 WidgetGallery.qml
+WidgetGalleryWindow 1.0 WidgetGalleryWindow.qml
 WidgetConfiguration 1.0 WidgetConfiguration.qml
-PluginWidgetView 1.0 PluginWidgetView.qml
-PluginViewNode 1.0 PluginViewNode.qml
+ClockWidgetDataService 1.0 ClockWidgetDataService.qml
 singleton WidgetRegistry 1.0 WidgetRegistry.qml
-singleton PluginWidgetService 1.0 PluginWidgetService.qml

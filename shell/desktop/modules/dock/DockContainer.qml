@@ -5,6 +5,7 @@ import "./AdaptiveMath.mjs" as AdaptiveMath
 import qs.desktop
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.common
+import qs.desktop.modules.deskcenter
 import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "DockMagnification.mjs" as Magnification
@@ -1314,7 +1315,10 @@ Item {
             cardOrder: ConfigService.infoCardOrder
             expanded: container.infoExpanded
             autoRotate: ConfigService.infoCardAutoRotate
-            onEditRequested: componentEditor.openFor(horizontalInfoCarousel)
+            onEditRequested: {
+                container.editMode = true
+                WidgetGalleryService.show(container.targetScreen, "dock")
+            }
             visible: container.hasInfo && !container.vertical
         }
 
@@ -1332,7 +1336,10 @@ Item {
             cardOrder: ConfigService.infoCardOrder
             expanded: container.infoExpanded
             autoRotate: ConfigService.infoCardAutoRotate
-            onEditRequested: componentEditor.openFor(verticalInfoCarousel)
+            onEditRequested: {
+                container.editMode = true
+                WidgetGalleryService.show(container.targetScreen, "dock")
+            }
             visible: container.hasInfo && container.vertical
         }
 
@@ -1386,15 +1393,7 @@ Item {
         }
 
         TapHandler {
-            onTapped: componentEditor.openFor(componentEditButton)
-        }
-    }
-
-    DockComponentEditor {
-        id: componentEditor
-        onVisibleChanged: {
-            if (visible)
-                container.editMode = true
+            onTapped: WidgetGalleryService.show(container.targetScreen, "dock")
         }
     }
 }

@@ -8,13 +8,12 @@ import qs.desktop.modules.wallpaper
 // ScreenLifecycle temporarily hides it while KWin has no real output.
 Scope {
     id: root
-    signal widgetEditingRequested(bool library, bool finish)
+    signal widgetEditingRequested(bool finish)
 
     IpcHandler {
         target: "deskWidgets"
-        function openGallery(): void { root.widgetEditingRequested(true, false) }
-        function edit(): void { root.widgetEditingRequested(false, false) }
-        function done(): void { root.widgetEditingRequested(false, true) }
+        function edit(): void { root.widgetEditingRequested(false) }
+        function done(): void { root.widgetEditingRequested(true) }
     }
 
     // Desktop files and context menus exist independently on every usable
@@ -48,12 +47,23 @@ Scope {
                     spatialWallpaperActive: wallpaperWindow.active
                 }
 
+                // Only the active screen ever opens its gallery (DeskCenterWindow
+                // itself restricts edit mode the same way, see its own
+                // screen.name === ScreenLifecycle.activeScreen checks), so a
+                // single Overlay-layer instance per output is enough.
+                WidgetGalleryWindow {
+                    screen: outputScope.modelData
+                    shouldShow: ScreenLifecycle.outputAvailable
+                        && WidgetGalleryService.open
+                        && outputScope.modelData === ScreenLifecycle.activeScreen
+                }
+
                 Connections {
                     target: root
-                    function onWidgetEditingRequested(library, finish) {
+                    function onWidgetEditingRequested(finish) {
                         if (finish) widgetWindow.leaveWidgetEditMode()
                         else if (outputScope.modelData === ScreenLifecycle.activeScreen)
-                            widgetWindow.enterWidgetEditMode(library)
+                            widgetWindow.enterWidgetEditMode()
                     }
                 }
 

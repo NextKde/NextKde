@@ -1,26 +1,22 @@
 import QtQuick
 import QtQuick.Window
 import QtQuick.Controls as Controls
-import QtQuick.Effects
 import QtQml.Models
-import QtCore
-import Qt.labs.platform as Platform
 import Quickshell
 import Quickshell.Wayland
 import Quickshell.Widgets
-import Qt5Compat.GraphicalEffects
 import "../../../shared/qml/i18n"
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.bar
 import qs.desktop.modules.common
+import qs.desktop.modules.platform
 import qs.desktop.modules.wallpaper
 import qs.desktop.modules.dock
-import qs.desktop.modules.platform
 import qs.desktop.modules.stage
-import qs.desktop.modules.weather
 import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
 import "DesktopGridMetrics.mjs" as DesktopGridMetrics
+import "bundled-clock" as Clock
 
 // iPadOS-inspired desktop widgets. Stays on the Bottom layer: Plasma's desktop
 // surface shares the Desktop/Background layer and would cover it if moved down.
@@ -148,85 +144,78 @@ PanelWindow {
             - layoutBaseGap * (columns - 1)) / columns)
     readonly property int usableRows: Math.max(0, Math.floor(
         (height - topInset - bottomInset + gap) / (cellSize + gap)))
-    property int timerSeconds: 0
-    property int timerDuration: 0
-    property bool timerRunning: false
-    property bool timerHasStarted: false
-    property bool timerView: false
-    property string systemTimeZone: ""
     property bool editMode: false
-    property bool widgetLibraryOpen: false
+    // The gallery panel lives in its own Overlay-layer window
+    // (WidgetGalleryWindow) so it can float above the Dock instead of
+    // sharing this window's Bottom-layer stacking plane; this window only
+    // ever hosts the desktop grid, placement logic and drop-preview, and
+    // mirrors/drives the panel's state through WidgetGalleryService.
+    // Only the active screen's instance drives the gallery (matches
+    // DeskCenter.qml's own screen.name === ScreenLifecycle.activeScreen
+    // gate on entering edit mode), so geometry/catalog publishing and drag
+    // signal consumption both need to be restricted to it -- otherwise every
+    // monitor's DeskCenterWindow would fight over the one shared singleton.
+    readonly property bool isGalleryHost:
+        root.screen?.name === ScreenLifecycle.activeScreen?.name
+    // Same bottom-center-floating geometry the panel used while embedded
+    // here, now published for WidgetGalleryWindow to consume instead of
+    // being read directly off a child item.
+    readonly property real galleryWidth: Math.max(1, Math.min(940, root.width - root.leftInset - root.rightInset))
+    readonly property real galleryHeight: Math.max(180, Math.min(510, root.height - root.topInset - 44))
+    readonly property real galleryX: root.leftInset + (root.width - root.leftInset - root.rightInset - galleryWidth) / 2
+    readonly property real galleryY: Math.max(root.topInset + 44, root.height - galleryHeight)
     property var activeDragCard: null
+    // Self-clearing: without this, a one-off "added"/"no room" message from
+    // addGalleryWidget()/resizeNamedWidget() would sit in the gallery footer
+    // forever, since nothing else routinely overwrites it back to "".
     property string widgetFeedback: ""
-    property string contextWidgetId: ""
-
-    function gallerySpan(entry, size) { return WidgetRegistry.sizeSpan(size) }
-    function moveGalleryDrag(entry, size, point) {
-        const span = gallerySpan(entry, size)
-        galleryDrag.displayColumns = span[0]
-        galleryDrag.displayRows = span[1]
-        galleryDrag.dropPosition = WidgetLayout.snappedPosition(point.x - leftInset - spanSize(span[0]) / 2,
-            point.y - topInset - spanSize(span[1]) / 2, span[0], span[1], cellSize, gap, maximumWidgetColumns, usableRows)
-        const inGallery = point.x >= widgetLibrary.x && point.x <= widgetLibrary.x + widgetLibrary.width
-            && point.y >= widgetLibrary.y && point.y <= widgetLibrary.y + widgetLibrary.height
-        const position = galleryDrag.dropPosition
-        galleryDrag.dropAllowed = !inGallery && point.x >= leftInset && point.y >= topInset
-            && point.x < leftInset + maximumWidgetColumns * (cellSize + gap)
-            && point.y < topInset + usableRows * (cellSize + gap)
-            && WidgetLayout.canPlace(placements, entry.pluginId ? "" : entry.id,
-                position.column, position.row, span[0], span[1], maximumWidgetColumns, usableRows)
-        activeDragCard = galleryDrag
+    onWidgetFeedbackChanged: if (widgetFeedback) widgetFeedbackTimer.restart()
+    Timer {
+        id: widgetFeedbackTimer
+        interval: 3000
+        onTriggered: root.widgetFeedback = ""
     }
+    property string contextWidgetId: ""
+    readonly property var contextWidget:
+        widgetDefinitions.find(widget => widget.id === contextWidgetId) ?? null
+
+    // Every call creates a brand-new placed instance, even for a package ID
+    // that is already on the desktop (e.g. an icon-aggregation widget added
+    // twice with two different groupings, or the same clock added at two
+    // sizes). The instance ID is the per-placement key threaded through
+    // placements/positions/sizes/content resolution; entry.id (the package
+    // ID) stays a separate field (widget.packageId below) only used to
+    // resolve which package a given instance renders.
+    property int _nextInstanceSeq: 1
     function addGalleryWidget(entry, size, requestedPosition) {
-        if (entry.pluginId && entry.present && !entry.multiInstance) {
-            widgetFeedback = I18n.tr("This widget is already on the desktop.")
-            return
-        }
-        const span = gallerySpan(entry, size)
-        const excludedId = entry.pluginId ? "" : entry.id
+        const span = WidgetLayout.namedGallerySpan(size)
+        const instanceId = entry.id + "#" + (root._nextInstanceSeq++)
         let position = requestedPosition
         if (!position) {
-            const existing = placementFor(excludedId)
-            if (existing && WidgetLayout.canPlace(placements, excludedId, existing.column, existing.row,
-                span[0], span[1], maximumWidgetColumns, usableRows)) position = {column: existing.column, row: existing.row}
             for (let row = 0; row <= usableRows - span[1] && !position; ++row)
                 for (let column = 0; column <= maximumWidgetColumns - span[0] && !position; ++column)
-                    if (WidgetLayout.canPlace(placements, excludedId, column, row, span[0], span[1], maximumWidgetColumns, usableRows))
+                    if (WidgetLayout.canPlace(placements, instanceId, column, row, span[0], span[1], maximumWidgetColumns, usableRows))
                         position = {column, row}
         }
-        if (!position || !WidgetLayout.canPlace(placements, excludedId, position.column, position.row,
+        if (!position || !WidgetLayout.canPlace(placements, instanceId, position.column, position.row,
             span[0], span[1], maximumWidgetColumns, usableRows)) {
             widgetFeedback = I18n.tr("There is no room for this size. Move or remove another widget first.")
             return
         }
-        const before = placements
-        const output = desktopOutput
-        const geometry = widgetGeometry
-        widgetFeedback = ""
-        if (entry.pluginId) {
-            PluginWidgetService.add(entry.pluginId, entry.widgetId, size, function(ok, result) {
-                if (ok && result?.instanceId) {
-                    DeskCenterConfigService.savePosition(output, before, result.instanceId, position.column, position.row, geometry)
-                    root.widgetFeedback = I18n.tr("Widget added to the desktop.")
-                }
-            })
-        } else {
-            DeskCenterConfigService.setSpan(entry.id, span[0], span[1])
-            DeskCenterConfigService.savePosition(output, before, entry.id, position.column, position.row, geometry)
-            AppearanceConfigService.setDeskCenterWidgetVisible(entry.id, true)
-            widgetFeedback = I18n.tr("Widget added to the desktop.")
-        }
+        if (!DeskCenterConfigService.savePosition(desktopOutput, placements,
+                instanceId, position.column, position.row, widgetGeometry))
+            return
+        DeskCenterConfigService.setSpan(instanceId, span[0], span[1])
+        widgetInstances = widgetInstances.concat([Object.assign({}, entry, { id: instanceId, packageId: entry.id })])
+        widgetFeedback = I18n.tr("Widget added to the desktop.")
     }
     function resizeNamedWidget(id, size) {
-        const span = WidgetRegistry.sizeSpan(size)
-        const current = placementFor(id)
-        if (!current || !WidgetLayout.canPlace(placements, id, current.column, current.row,
-            span[0], span[1], maximumWidgetColumns, usableRows)) {
+        const span = WidgetLayout.namedGallerySpan(size)
+        if (!resizeWidget(id, span[0], span[1]))
             widgetFeedback = I18n.tr("There is no room for this size. Move or remove another widget first.")
-            return
-        }
-        if (WidgetRegistry.isPlugin(id)) PluginWidgetService.configure(id, {size})
-        else resizeWidget(id, span[0], span[1])
+    }
+    function removeWidget(id) {
+        widgetInstances = widgetInstances.filter(widget => widget.id !== id)
     }
     function showWidgetMenu(id, point) {
         contextWidgetId = id
@@ -234,39 +223,29 @@ PanelWindow {
         widgetContextMenu.y = Math.max(8, Math.min(point.y, root.height - widgetContextMenu.height - 8))
         widgetContextMenu.open()
     }
-    function configureWidget(id) {
-        widgetConfiguration.openFor(id)
-    }
-    // The loaded grouped content, if the card is on screen. Its own editor is
-    // the only visible rename surface while the normal icon field is hidden.
-    property var groupsContentItem: null
-
-    function beginGroupsRename(entry) {
-        const path = entry?.path ?? ""
-        if (!path || !groupsContentItem)
-            return
-        // The context menu owns focus while closing; defer the editor's grab
-        // by one turn, like beginInlineRename does for the normal icon field.
-        Qt.callLater(function() {
-            if (root.groupsContentItem)
-                root.groupsContentItem.beginRename(path)
-        })
-    }
-
-    function enterWidgetEditMode(openLibrary) {
+    // Edit mode and the gallery are one state now: there is no toolbar step
+    // in between, and no way to be "in edit mode" with the gallery closed.
+    function enterWidgetEditMode() {
         desktopFileGrid.clearDesktopSelection()
         desktopFileGrid.activateKeyboard()
         root.widgetFeedback = ""
-        root.widgetLibraryOpen = openLibrary
+        WidgetGalleryService.show(root.screen)
         root.editMode = true
-        if (openLibrary) Qt.callLater(function() { widgetLibrary.begin() })
     }
 
     function leaveWidgetEditMode() {
         root.activeDragCard = null
-        root.widgetLibraryOpen = false
+        WidgetGalleryService.hide()
         root.editMode = false
         desktopFileGrid.activateKeyboard()
+    }
+
+    // Mirrors WidgetGallery.qml's own sizeName(): that panel now lives in a
+    // separate window (WidgetGalleryWindow), so the context menu here needs
+    // its own copy rather than reaching across windows for it.
+    function sizeName(size) {
+        if (Array.isArray(size)) return size[0] + "×" + size[1]
+        return I18n.tr(size === "small" ? "Small" : size === "large" ? "Large" : "Medium")
     }
 
     // Widget editing is modal: the gesture that entered it also leaves it.
@@ -277,17 +256,8 @@ PanelWindow {
         if (root.editMode)
             root.leaveWidgetEditMode()
         else
-            root.enterWidgetEditMode(false)
+            root.enterWidgetEditMode()
     }
-    readonly property var widgetLabels: ({
-        clock: I18n.tr("Clock"), weather: I18n.tr("Weather"),
-        calendar: I18n.tr("Calendar"), todo: I18n.tr("To-Do"),
-        system: I18n.tr("System"), activity: I18n.tr("Activity"),
-        music: I18n.tr("Music"), groups: I18n.tr("Grouped View")
-    })
-    // Referencing the singleton starts the shared activity recorder once the
-    // desktop surface is available.
-    readonly property var activityUsage: ActivityUsageService
     // File metadata is supplied by kos-data-service; this surface only
     // lays it out as a right-aligned desktop grid.
     readonly property var desktopFiles: DesktopFilesService
@@ -308,197 +278,97 @@ PanelWindow {
             root.depthPointerY = 0
         }
     }
-    Component.onCompleted: PlatformClient.request("system.timezone", {}, function(response) {
-        if (response?.ok)
-            root.systemTimeZone = String(response.result?.timeZone || "")
-    })
-
-    function toggleClockStyle() {
-        DeskCenterConfigService.setClockStyle(
-            DeskCenterConfigService.clockStyle === "analog" ? "digital" : "analog")
-    }
-
-    function formattedTimer() {
-        const hours = Math.floor(timerSeconds / 3600)
-        const minutes = Math.floor((timerSeconds % 3600) / 60)
-        const seconds = timerSeconds % 60
-        return (hours < 10 ? "0" : "") + hours + ":"
-            + (minutes < 10 ? "0" : "") + minutes + ":"
-            + (seconds < 10 ? "0" : "") + seconds
-    }
-
-    function formattedTimerEndTime() {
-        const end = new Date(Date.now() + timerSeconds * 1000)
-        return Qt.formatTime(end, "h:mm")
-    }
-
-    function lunarDate(date) {
-        try {
-            // 农历数字部分两种语言都读得懂，但月份名要跟语言走。
-            return new Intl.DateTimeFormat(I18n.language === "en" ? "en-US-u-ca-chinese"
-                : I18n.language === "pt-BR" ? "pt-BR-u-ca-chinese" : "zh-CN-u-ca-chinese", {
-                month: "long",
-                day: "numeric"
-            }).format(date)
-        } catch (error) {
-            return I18n.tr("Lunar date")
-        }
-    }
-
-    function formatMetricBytes(bytes) {
-        if (!Number.isFinite(bytes) || bytes <= 0)
-            return "--"
-        if (bytes >= 1073741824)
-            return (bytes / 1073741824).toFixed(1) + " GB"
-        return Math.round(bytes / 1048576) + " MB"
-    }
-
-    function formatDuration(seconds) {
-        const total = Math.max(0, Math.round(seconds || 0))
-        const hours = Math.floor(total / 3600)
-        const minutes = Math.floor((total % 3600) / 60)
-        if (hours > 0)
-            return I18n.tr("%1 h %2").arg(hours)
-                .arg(minutes > 0 ? I18n.tr("%1 min").arg(minutes) : "")
-        return I18n.tr("%1 min").arg(minutes)
-    }
-
-    function addTimerMinute() {
-        addTimerMinutes(1)
-    }
-
-    function addTimerMinutes(minutes) {
-        timerSeconds += minutes * 60
-        timerDuration += minutes * 60
-    }
-
-    function toggleTimer() {
-        if (timerRunning) {
-            timerRunning = false
-            return
-        }
-        if (timerSeconds === 0) {
-            timerSeconds = 60
-            timerDuration = 60
-        } else if (timerDuration < timerSeconds) {
-            timerDuration = timerSeconds
-        }
-        timerRunning = true
-        timerHasStarted = true
-        sendTimerNotification(I18n.tr("Timer started"),
-            I18n.tr("%1 remaining").arg(formattedTimer()))
-    }
-
-    Timer {
-        interval: 1000
-        running: root.timerRunning
-        repeat: true
-        onTriggered: {
-            if (root.timerSeconds > 1) {
-                root.timerSeconds--
-                return
-            }
-            root.timerSeconds = 0
-            root.timerRunning = false
-            root.timerHasStarted = false
-            root.sendTimerNotification(I18n.tr("Timer finished"), I18n.tr("Time is up"))
-        }
-    }
-
-    function sendTimerNotification(summary, body) {
-        PlatformClient.request("notify", {
-            summary: summary,
-            body: body,
-            icon: "",
-            appName: "DeskCenter",
-            urgency: "normal"
-        }, function(response) {
-            if (!response?.ok)
-                console.warn("[DeskCenter] timer notify failed: "
-                    + (response?.error?.message || "platform unavailable"))
+    // Package metadata feeds the gallery. Runtime instances remain separately
+    // owned and empty until package loading and placement persistence are wired.
+    property var widgetCatalog: WidgetPackageService.packages
+    property var widgetInstances: []
+    readonly property var widgetDefinitions: {
+        const revision = DeskCenterConfigService.revision
+        const sizes = DeskCenterConfigService.parsedSizes()
+        const positions = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)
+        return widgetInstances.map(widget => {
+            const position = positions[widget.id]
+            const span = sizes[widget.id] === undefined
+                ? [widget.columns ?? 1, widget.rows ?? 1]
+                : DeskCenterConfigService.spanFor(widget.id)
+            return Object.assign({}, widget, {
+                columns: span[0], rows: span[1],
+                column: position?.column ?? widget.column,
+                row: position?.row ?? widget.row
+            })
         })
     }
 
-    // Saved grid positions are per output; unpositioned cards fill free cells.
-    function configuredWidget(id, priority, startColor, endColor) {
-        const span = DeskCenterConfigService.spanFor(id)
-        const position = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)[id]
-        return { id: id, title: "", columns: span[0], rows: span[1],
-            column: position?.column, row: position?.row,
-            priority: priority, startColor: startColor, endColor: endColor,
-            surface: false }
+    // Resolves which content view a placed widget instance renders. Catalog
+    // entries (root.widgetCatalog, sourced from the platform daemon's JSON
+    // package index) never carry a QML Component themselves, so this is the
+    // one seam that maps a package ID to the actual view -- today that is
+    // only the bundled SDK example; see docs/plugins/WidgetGalleryPreviewPlan
+    // .zh-CN.md R10 for the rest of the real third-party host wiring this
+    // still needs (per-package data authorization, isolation, etc.).
+    function resolveContentComponent(def) {
+        if (def.packageId === "org.nextkde.example.clock") return clockWidgetContent
+        return null
     }
-    readonly property bool groupsWidgetVisible:
-        !AppearanceConfigService.isDeskCenterWidgetHidden("groups")
-    // Widgets are authored on the active output only; the grouped view follows
-    // that rule, and only its own output hides the normal file icons.
-    readonly property bool groupsWidgetShown:
-        groupsWidgetVisible
-        && !!groupsPlacement
-        && root.screen?.name === ScreenLifecycle.activeScreen?.name
-
-    readonly property var flowWidgetDefinitions: {
-        // Make the binding depend on persisted configuration changes.
-        const revision = DeskCenterConfigService.revision
-        // Reading the visibility list here is what makes the switch in the
-        // Settings page take effect without a reload: assigning the array
-        // re-evaluates this property, and `placements` packs whatever is left.
-        const hidden = AppearanceConfigService.hiddenDeskCenterWidgets
-        const definitions = [
-            configuredWidget("clock", 100,
-                DeskCenterConfigService.clockStyle === "digital"
-                    ? AppearanceTokens.widget.digitalClock.artworkStart : "#536783",
-                DeskCenterConfigService.clockStyle === "digital"
-                    ? AppearanceTokens.widget.digitalClock.artworkEnd : "#35465f"),
-            configuredWidget("weather", 90, "#536b94", "#394b70"),
-            configuredWidget("calendar", 80, "#fff8fa", "#f3e8ed"),
-            configuredWidget("todo", 75, "#f2faf7", "#e2f1eb"),
-            configuredWidget("system", 70, "#f5f8fc", "#e6edf6"),
-            configuredWidget("activity", 60, "#40506a", "#29364e"),
-            configuredWidget("music", 50, "#51415d", "#332a3d")
-        ]
-        const byId = ({})
-        for (const widget of definitions)
-            byId[widget.id] = widget
-        const ordered = []
-        for (const id of DeskCenterConfigService.orderedIds()) {
-            // The grouped view is anchored to the top-right below; it must not
-            // join the left flow or shift the file area.
-            if (id === "groups")
-                continue
-            if (byId[id] && hidden.indexOf(id) < 0)
-                ordered.push(byId[id])
+    Component {
+        id: clockWidgetContent
+        Item {
+            id: clockHost
+            anchors.fill: parent
+            // Exposed so the settings affordance below can edit the exact
+            // running instance's config instead of creating a second,
+            // out-of-sync ClockWidgetDataService.
+            readonly property var dataService: clockData
+            // Forwarded up so the card delegate (widgetCardComponent below)
+            // can feed the component's own backgroundSpec into the card's
+            // startColor/endColor instead of the legacy static gradient --
+            // see WidgetSDK.zh-CN.md section 4.
+            readonly property var backgroundSpec: clockWidget.backgroundSpec
+            ClockWidgetDataService { id: clockData }
+            Clock.Widget {
+                id: clockWidget
+                anchors.fill: parent
+                data: clockData.data
+                widgetSize: DeskCenterConfigService.spanFor(clockData.instanceId)
+                appearance: ({
+                    isDark: AppearanceTokens.isDarkTheme,
+                    foreground: AppearanceTokens.surface.widgetForeground,
+                    // "Transparent mode" in this Shell is the glass card
+                    // finish: the host already suppresses backgroundSpec for
+                    // it (usesColorArtwork below gates on the same flag), but
+                    // the component itself gets told too, so content that
+                    // wants to adapt beyond just losing its background (e.g.
+                    // dialing back its own internal fills) can.
+                    transparent: AppearanceConfigService.widgetStyle === "glass"
+                })
+            }
         }
-        for (const instance of PluginWidgetService.instances) {
-            const span = WidgetRegistry.sizeSpan(instance.size)
-            const position = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)[instance.id]
-            ordered.push({id: instance.id, title: "", columns: span[0], rows: span[1],
-                column: position?.column, row: position?.row, priority: 40,
-                startColor: "#536783", endColor: "#35465f", surface: false})
-        }
-        return ordered
     }
-    readonly property var groupsWidgetDefinition: {
-        const revision = DeskCenterConfigService.revision
-        if (!groupsWidgetVisible)
-            return null
-        const widget = configuredWidget("groups", 110, "#51415d", "#332a3d")
-        // Compact only this output's projection on a short screen; the saved
-        // medium (2x3) span remains untouched. Below two rows the grouped
-        // content cannot draw its tabs and member grid, so a screen that
-        // short keeps the normal icon view instead of a broken card.
-        const rows = Math.min(widget.rows, usableRows)
-        if (rows < 2)
-            return null
-        return Object.assign({}, widget, { rows: rows })
-    }
-    readonly property var widgetDefinitions: groupsWidgetDefinition
-        ? flowWidgetDefinitions.concat([groupsWidgetDefinition])
-        : flowWidgetDefinitions
-    readonly property var weatherTheme: WeatherTheme.theme(WeatherService.weatherCode, WeatherService.isDay)
 
-    function packWidgets(definitions, columnCount, rowCount) {
-        return WidgetLayout.packWidgets(definitions, columnCount, rowCount)
+    // A package's optional Settings.qml (SDK draft, WidgetSDK.zh-CN.md
+    // section 6) -- same per-package seam as resolveContentComponent above,
+    // wired only for the bundled example. Returns null when the package has
+    // no settings surface, which hides the gear affordance entirely.
+    function resolveSettingsComponent(def) {
+        if (def.packageId === "org.nextkde.example.clock") return clockSettingsContent
+        return null
+    }
+    Component {
+        id: clockSettingsContent
+        Controls.Popup {
+            id: settingsPopup
+            // Set by the Loader right after creation (see widgetCardComponent
+            // below); this Component is declared at window scope so it has no
+            // compile-time visibility into any one card's ids.
+            property var dataService: null
+            modal: false
+            focus: true
+            closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutsideParent
+            contentItem: Clock.Settings {
+                data: ({ format24h: settingsPopup.dataService?.format24h ?? true })
+                onApply: next => settingsPopup.dataService?.setFormat24h(next.format24h)
+            }
+        }
     }
 
     FontMetrics { id: desktopFileFontMetrics }
@@ -513,33 +383,30 @@ PanelWindow {
             / (reservedFileMetrics.cellHeight + reservedFileMetrics.gap)))
     readonly property string widgetGeometry: maximumWidgetColumns + ":" + usableRows
 
-    readonly property var flowWidgetLayout: WidgetLayout.fitWidgets(
-        flowWidgetDefinitions, 4, maximumWidgetColumns, usableRows)
-    readonly property var flowPlacements: flowWidgetLayout.placements
-    readonly property var groupsPlacement: groupsWidgetDefinition
-        ? WidgetLayout.placeAnchoredWidget(groupsWidgetDefinition,
-            flowPlacements, columns, usableRows)
-        : null
-    readonly property var placements: groupsPlacement
-        ? flowPlacements.concat([groupsPlacement])
-        : flowPlacements
-    // The file area starts after the left flow only; the anchored grouped view
-    // does not consume a file column.
-    readonly property int widgetColumns: flowWidgetLayout.columns
+    readonly property var widgetLayout: WidgetLayout.fitWidgets(
+        widgetDefinitions, 4, maximumWidgetColumns, usableRows)
+    readonly property var placements: widgetLayout.placements
+    readonly property int widgetColumns: widgetLayout.columns
 
     function resizeWidget(widgetId, columns, rows) {
         const placement = placementFor(widgetId)
-        const limit = WidgetLayout.maxSpanFor(widgetId)
-        const minimum = WidgetLayout.minSpanFor(widgetId)
-        const maxColumns = widgetId === "groups"
-            ? root.columns : maximumWidgetColumns
-        if (columns < minimum[0] || rows < minimum[1] || columns > limit[0]
+        // A package instance's own declared sizes (metadata.json's `sizes`,
+        // threaded through widgetDefinitions as `sizes`) set its real
+        // ceiling/floor -- e.g. the example clock's [[2,2],[3,2]] means a
+        // 3-wide drag/menu choice must not be clamped to the legacy 2x2
+        // default below.
+        const definition = widgetDefinitions.find(widget => widget.id === widgetId)
+        const limit = WidgetLayout.declaredSizeCeiling(definition?.sizes) ?? WidgetLayout.maxSpanFor(widgetId)
+        const minimum = WidgetLayout.declaredSizeFloor(definition?.sizes) ?? WidgetLayout.minSpanFor(widgetId)
+        if (!WidgetLayout.isValidSize(widgetId, columns + "x" + rows)
+                || columns < minimum[0] || rows < minimum[1] || columns > limit[0]
                 || rows > limit[1] || !placement
                 || !WidgetLayout.canPlace(placements, widgetId,
                 placement.column, placement.row, columns, rows,
-                maxColumns, usableRows)) return false
-        DeskCenterConfigService.savePosition(desktopOutput, placements,
-            widgetId, placement.column, placement.row, widgetGeometry)
+                maximumWidgetColumns, usableRows)) return false
+        if (!DeskCenterConfigService.savePosition(desktopOutput, placements,
+                widgetId, placement.column, placement.row, widgetGeometry))
+            return false
         DeskCenterConfigService.setSpan(widgetId, columns, rows)
         return true
     }
@@ -552,26 +419,7 @@ PanelWindow {
     }
     function spanSize(span) { return span * cellSize + (span - 1) * gap }
 
-    function materialWidgetSurface(id) {
-        // Peer widgets form one collection, so they share one neutral tonal
-        // surface. Primary/secondary/tertiary are reserved for small semantic
-        // accents inside the cards instead of competing full-card fields.
-        return AppearanceTokens.colors.layer1
-    }
-
-    // Per-card compositor frost. A card publishes a blur region only when it
-    // wants frost -- today that is the flower-shaped clock and nothing else --
-    // and this window joins those regions into one union, so KWin frosts exactly
-    // the card outlines and not the grid gaps. Each region follows its own
-    // card's geometry, so the union only needs to re-resolve when the card set
-    // itself changes (Repeater count).
-    //
-    // Cards that publish nothing are deliberate: a surface with no SurfaceShape
-    // declaration has its *material* drawn from this union, so any card that
-    // joined it would come back as glass. Material cards paint themselves and
-    // stay out of it.
-    // 2026-10-18 用户改判：台前调度开启时桌面组件照常显示（两者共存，
-    // 台前调度在组件之上）；不再随 StageModeService.enabled 隐藏。
+    // Combine the visible cards' compositor blur regions in window coordinates.
     BackgroundEffect.blurRegion: (AppearanceTokens.surface.usesKwinBlur
         && root.visible) ? widgetBlurHolder : null
 
@@ -579,25 +427,13 @@ PanelWindow {
         id: widgetBlurHolder
         regions: {
             const arr = []
-            if (widgetLibrary.visible && widgetLibrary.blurRegion)
-                arr.push(widgetLibrary.blurRegion)
             for (let i = 0; i < widgetRepeater.count; ++i) {
                 const card = widgetRepeater.itemAt(i)
-                if (card && card.blurRegion)
+                if (card && card.visible && card.blurRegion)
                     arr.push(card.blurRegion)
             }
             return arr
         }
-    }
-
-    SystemClock {
-        id: clock
-        precision: SystemClock.Seconds
-    }
-
-    DateProjection {
-        id: calendarClock
-        sourceDate: clock.date
     }
 
     MouseArea {
@@ -616,9 +452,9 @@ PanelWindow {
             holdEnteredEditing = false
             if (mouse.button === Qt.RightButton) {
                 // While editing, bare desktop dismisses the session instead of
-                // opening the menu. That menu is the way *into* editing (Add
-                // Widgets / Edit Widgets), so it belongs to the non-editing
-                // desktop; outside editing the next right click opens it.
+                // opening the menu. That menu is the way *into* editing (Edit
+                // Widgets), so it belongs to the non-editing desktop; outside
+                // editing the next right click opens it.
                 if (root.editMode) {
                     root.leaveWidgetEditMode()
                     return
@@ -659,169 +495,88 @@ PanelWindow {
         onPressAndHold: function(mouse) {
             if (mouse.button === Qt.LeftButton && mouse.modifiers === Qt.NoModifier) {
                 holdEnteredEditing = true
-                root.enterWidgetEditMode(false)
+                root.enterWidgetEditMode()
             }
         }
     }
 
-    Row {
-        id: widgetEditToolbar
-        objectName: "widget-edit-toolbar"
-        z: 200
-        opacity: root.editMode ? 1 : 0
-        visible: root.editMode || opacity > 0
-        enabled: root.editMode
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fastDuration; easing.type: AppearanceTokens.motion.enterCurve } }
-        // Editing chrome lives on the free bottom edge. The top corners belong
-        // to the widget layout (left flow, top-right grouped card), so a
-        // corner-anchored toolbar moved whenever a card was shown or resized.
-        x: (parent.width - width) / 2
-        y: parent.height - root.bottomInset - height
-        width: implicitWidth
-        height: implicitHeight
-        spacing: 8
-
-        Repeater {
-            model: [
-                { id: "add", label: I18n.tr("+ Widgets") },
-                { id: "done", label: I18n.tr("Done") }
-            ]
-            delegate: Rectangle {
-                required property var modelData
-                width: toolbarText.implicitWidth + 24
-                height: 32
-                radius: AppearanceTokens.isMaterial ? 16 : 11
-                color: AppearanceTokens.surface.pick(
-                    modelData.id === "done"
-                        ? AppearanceTokens.colors.primaryContainer
-                        : AppearanceTokens.colors.surfaceContainerHigh,
-                    ThemeService.isDark ? Qt.rgba(0.10, 0.10, 0.12, 0.90)
-                        : Qt.rgba(1, 1, 1, 0.92))
-                border.width: 1
-                border.color: AppearanceTokens.surface.pick(
-                    AppearanceTokens.colors.outlineVariant,
-                    Qt.rgba(ThemeService.foregroundColor.r,
-                        ThemeService.foregroundColor.g,
-                        ThemeService.foregroundColor.b, 0.16))
-                Text {
-                    id: toolbarText
-                    anchors.centerIn: parent
-                    text: modelData.label
-                    color: ThemeService.foregroundColor
-                    font { pixelSize: 11; weight: Font.DemiBold }
-                }
-                TapHandler {
-                    onTapped: {
-                        if (modelData.id === "add")
-                            root.widgetLibraryOpen = !root.widgetLibraryOpen
-                        else
-                            root.leaveWidgetEditMode()
-                    }
-                }
-            }
-        }
+    // Publishes geometry/catalog/feedback into the singleton the gallery's
+    // own Overlay-layer window reads from, and consumes its drag/placement
+    // signals back. Both directions are gated on isGalleryHost so the
+    // background screen in a multi-monitor setup never fights the active
+    // one over the shared WidgetGalleryService state.
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "galleryX"; value: root.galleryX
     }
-
-    Rectangle {
-        z: 201
-        visible: !root.widgetLibraryOpen && (root.widgetFeedback.length > 0 || (root.editMode && PluginWidgetService.error.length > 0))
-        anchors { top: widgetEditToolbar.bottom; right: parent.right; margins: 16 }
-        width: Math.min(360, root.width - 32)
-        height: widgetStatus.implicitHeight + 24
-        radius: 12
-        color: ThemeService.backgroundColor
-        border { width: 1; color: AppearanceTokens.colors.outlineVariant }
-        Text {
-            id: widgetStatus
-            anchors { left: parent.left; right: parent.right; top: parent.top; margins: 12 }
-            text: root.widgetFeedback || PluginWidgetService.error
-            textFormat: Text.PlainText
-            color: ThemeService.foregroundColor
-            font.pixelSize: 12
-            wrapMode: Text.WordWrap
-        }
-        TapHandler { onTapped: { root.widgetFeedback = ""; PluginWidgetService.error = "" } }
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "galleryY"; value: root.galleryY
     }
-
-    WidgetGallery {
-        id: widgetLibrary
-        z: 190
-        visible: root.editMode && root.widgetLibraryOpen
-        x: Math.min(48, root.leftInset)
-        y: Math.max(root.topInset + 44, root.height - root.bottomInset - height)
-        width: Math.max(1, Math.min(940, root.width - x - root.rightInset))
-        height: Math.max(180, Math.min(510, root.height - root.topInset - root.bottomInset - 44))
-        builtinPreview: widgetCardComponent
-        desktopCellSize: root.cellSize
-        desktopGap: root.gap
-        feedback: root.widgetFeedback || PluginWidgetService.error
-        onVisibleChanged: if (visible) begin()
-        onDone: root.leaveWidgetEditMode()
-        onCenterRequested: PluginWidgetService.openCenter()
-        onAddRequested: (entry, size) => root.addGalleryWidget(entry, size, null)
-        onDragMoved: (entry, size, x, y) => root.moveGalleryDrag(entry, size, mapToItem(desktopCoordinates, x, y))
-        onDragReleased: (entry, size, x, y) => {
-            root.moveGalleryDrag(entry, size, mapToItem(desktopCoordinates, x, y))
-            if (galleryDrag.dropAllowed) root.addGalleryWidget(entry, size, galleryDrag.dropPosition)
-            else root.widgetFeedback = I18n.tr("Choose an empty desktop area outside the gallery.")
-            root.activeDragCard = null
-        }
-        onDragCancelled: root.activeDragCard = null
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "galleryWidth"; value: root.galleryWidth
+    }
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "galleryHeight"; value: root.galleryHeight
+    }
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "catalog"; value: root.widgetCatalog
+    }
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "loading"; value: WidgetPackageService.loading
+    }
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "feedback"; value: root.widgetFeedback || WidgetPackageService.error
+    }
+    Connections {
+        target: WidgetGalleryService
+        enabled: root.isGalleryHost
+        function onDone() { root.leaveWidgetEditMode() }
+        function onAddRequested(entry, size) { root.addGalleryWidget(entry, size, null) }
     }
 
     Controls.Menu {
         id: widgetContextMenu
         width: 220
         Controls.MenuItem {
-            text: WidgetRegistry.title(root.contextWidgetId)
+            text: root.contextWidget?.name ?? I18n.tr("Widget")
             enabled: false
         }
         Controls.MenuSeparator {}
         Instantiator {
-            model: WidgetRegistry.sizes(root.contextWidgetId)
+            model: root.contextWidget?.sizes ?? []
             onObjectAdded: (index, object) => widgetContextMenu.insertItem(index + 2, object)
             onObjectRemoved: (index, object) => widgetContextMenu.removeItem(object)
             delegate: Controls.MenuItem {
-                required property string modelData
-                text: widgetLibrary.sizeName(modelData)
+                // Package sizes arrive as [cols, rows] pairs, not the legacy
+                // named strings ("small"/"2x2"/...) this menu was written
+                // for. A `string`-typed required property force-coerces an
+                // array value to e.g. "2,2", which namedGallerySpan() below
+                // cannot parse, so every package widget silently resized to
+                // 1x1. Both sizeName() and namedGallerySpan() already accept
+                // either shape -- only the property's declared type was wrong.
+                required property var modelData
+                text: root.sizeName(modelData)
                 checkable: true
                 checked: {
-                    const span = WidgetRegistry.span(root.contextWidgetId)
-                    const target = WidgetRegistry.sizeSpan(modelData)
-                    return span[0] === target[0] && span[1] === target[1]
+                    const target = WidgetLayout.namedGallerySpan(modelData)
+                    return root.contextWidget?.columns === target[0] && root.contextWidget?.rows === target[1]
                 }
                 onTriggered: root.resizeNamedWidget(root.contextWidgetId, modelData)
             }
         }
-        Controls.MenuSeparator {}
-        Controls.MenuItem {
-            text: I18n.tr("Edit Widget…")
-            enabled: WidgetRegistry.canConfigure(root.contextWidgetId)
-            onTriggered: root.configureWidget(root.contextWidgetId)
-        }
-        Controls.MenuItem {
-            text: I18n.tr("Edit Widgets")
-            onTriggered: root.enterWidgetEditMode(true)
-        }
-        Controls.MenuItem {
-            text: I18n.tr("Remove Widget")
-            onTriggered: WidgetRegistry.remove(root.contextWidgetId)
-        }
-    }
-
-    WidgetConfiguration {
-        id: widgetConfiguration
-        parent: Controls.Overlay.overlay
-        timerSelected: root.timerView
-        onClockModeChanged: timer => root.timerView = timer
-    }
-
-    QtObject {
-        id: galleryDrag
-        property int displayColumns: 1
-        property int displayRows: 1
-        property var dropPosition: ({column: 0, row: 0})
-        property bool dropAllowed: false
     }
 
     Rectangle {
@@ -871,8 +626,7 @@ PanelWindow {
     }
 
     // Position/size saves replace widgetDefinitions. Keep delegate identity
-    // separate from those snapshots so an unrelated move cannot recreate the
-    // clock face, reset content state or replay every card's size animation.
+    // Keep delegates keyed by instance ID across placement and size changes.
     readonly property var visibleWidgetIds:
         root.screen?.name === ScreenLifecycle.activeScreen?.name
             ? root.widgetDefinitions.map(widget => widget.id) : []
@@ -917,44 +671,37 @@ PanelWindow {
         id: widgetCardComponent
         DeskWidgetCard {
             id: card
-            objectName: (preview ? "widget-preview-" : "desktop-widget-") + modelData.id
-            preview: parent?.previewWidgetId !== undefined
-            property string widgetId: preview ? parent.previewWidgetId : model.widgetId
-            readonly property int previewColumns: preview ? parent.previewColumns : 1
-            readonly property int previewRows: preview ? parent.previewRows : 1
-            readonly property var modelData: {
-                if (preview) return root.configuredWidget(widgetId, 0, "#536783", "#35465f")
-                for (const widget of root.widgetDefinitions) {
-                    if (widget.id === widgetId) return widget
-                }
-                // A visibility change can invalidate the definition before
-                // the keyed model removes its delegate in the same update.
-                return { id: widgetId, title: "", startColor: "transparent",
-                    endColor: "transparent", surface: false }
+            property string widgetId: model.widgetId
+            objectName: "desktop-widget-" + widgetId
+            readonly property var modelData:
+                root.widgetDefinitions.find(widget => widget.id === widgetId) ?? {id: widgetId}
+            // Each placed instance of a package (e.g. two clocks at
+            // different sizes) shares the same Clock.Widget Component but
+            // needs its own settings/size key -- resolveContentComponent is
+            // keyed by packageId, not this card's instance id, so poke the
+            // instance id onto the loaded content's data service once it
+            // exists. See ClockWidgetDataService's instanceId property.
+            onLoadedContentChanged: {
+                if (card.loadedContent && card.loadedContent.dataService)
+                    card.loadedContent.dataService.instanceId = card.widgetId
             }
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
             // 2026-10-18 用户改判：台前调度与桌面组件共存（台前调度在
             // 组件之上），组件不再随台前调度开启而隐藏
-            readonly property bool moving: widgetDrag.active
-            // A Behavior gated on `moving` cannot see the end of the drag: the
-            // DragHandler's release handler runs before the binding to active is
-            // invalidated, so the release writes (offset reset, committed cell)
-            // would go straight through a disabled Behavior and the card would
-            // jump. This flag is assigned by that handler itself, so it is
-            // already exact when the writes happen.
+            // Release clears this before committing the position so the spring
+            // carries the pointer's momentum into the destination cell.
             property bool pointerHeld: false
-            // Per-card resize limits. The grouped view and the weather card
-            // are the two widgets whose declared spans exceed the ordinary
-            // two-cell ceiling, so the handle reads both the ceiling and the
-            // floor from WidgetLayout instead of hard-coding "groups ? 3 : 2".
-            readonly property var sizeLimit: WidgetLayout.maxSpanFor(modelData.id)
-            readonly property var sizeFloor: WidgetLayout.minSpanFor(modelData.id)
-            // The anchored grouped view may move across the whole grid; every
-            // other card stays inside the left widget field.
-            readonly property int maxDropColumns: modelData.id === "groups"
-                ? root.columns : root.maximumWidgetColumns
+            // A package's own declared sizes (e.g. the example clock's
+            // [[2,2],[3,2]]) set the real resize ceiling/floor; only widgets
+            // with no such declaration (the legacy named ids) fall back to
+            // WidgetLayout's generic bounds.
+            readonly property var sizeLimit:
+                WidgetLayout.declaredSizeCeiling(modelData.sizes) ?? WidgetLayout.maxSpanFor(widgetId)
+            readonly property var sizeFloor:
+                WidgetLayout.declaredSizeFloor(modelData.sizes) ?? WidgetLayout.minSpanFor(widgetId)
+            readonly property int maxDropColumns: root.maximumWidgetColumns
             readonly property var dropPosition: WidgetLayout.snappedPosition(
                 x - root.leftInset, y - root.topInset,
                 displayColumns, displayRows, root.cellSize, root.gap,
@@ -962,24 +709,24 @@ PanelWindow {
             readonly property bool dropAllowed: WidgetLayout.canPlace(root.placements,
                 modelData.id, dropPosition.column, dropPosition.row,
                 displayColumns, displayRows, maxDropColumns, root.usableRows)
-            visible: preview || placement !== null
+            visible: placement !== null
             // Desktop widgets are part of the login arrival, not a static
             // layer that appears before the wallpaper, bar and dock.
             opacity: StartupReveal.widgetProgress
             enabled: StartupReveal.widgetProgress > 0
             z: widgetDrag.active || resizeHandle.resizing ? 120 : (root.editMode ? 20 : 1)
-            // The analog clock uses MaterialFlower's petal outline; the digital
-            // clock uses the regular rounded widget surface.
-            flowerShapedSurface: modelData.id === "clock"
-                && DeskCenterConfigService.clockStyle === "analog"
-            materialSurfaceColor: root.materialWidgetSurface(modelData.id)
-            // The grouped view keeps the compositor material even when the
-            // colour-artwork widget style is active.
-            allowColorArtwork: modelData.id !== "groups"
-            title: modelData.title
-            startColor: modelData.id === "weather" ? root.weatherTheme.primary : modelData.startColor
-            endColor: modelData.id === "weather" ? root.weatherTheme.secondary : modelData.endColor
-            showSurface: modelData.surface
+            title: modelData.title ?? ""
+            // A resolved content instance's own backgroundSpec (SDK draft,
+            // WidgetSDK.zh-CN.md section 4) takes over from the legacy
+            // per-id static gradient the moment one is published. Glass mode
+            // still wins: usesColorArtwork below already gates on
+            // AppearanceConfigService.widgetStyle === "color", so a
+            // component's backgroundSpec never fights the user's
+            // transparent-card setting.
+            startColor: loadedContent?.backgroundSpec?.startColor ?? modelData.startColor ?? "#536783"
+            endColor: loadedContent?.backgroundSpec?.endColor ?? modelData.endColor ?? "#35465f"
+            showSurface: loadedContent?.backgroundSpec ? true : (modelData.surface ?? false)
+            materialSurfaceColor: AppearanceTokens.colors.layer1
             // SurfaceShape listens to Item geometry and scale changes, not
             // Translate.x/y. Move the anchor itself so the native glass and
             // the QML content publish the same position on every drag frame.
@@ -990,30 +737,26 @@ PanelWindow {
             // ~60 Hz quanta while the compositor kept presenting every frame.
             // The grid is laid out from the left inset but still sized with the
             // original 8 px layout margins, so its rightmost column overflows
-            // the right inset. Cap the committed cell here: the top-right
-            // anchored grouped view then keeps the same visible margin as every
-            // other card. The committed span (not the resize preview) decides
-            // the cap so a resize drag never drags the card's left edge along.
-            readonly property real targetX: preview ? 0 : WidgetLayout.insetRightEdge(
+            // the right inset. Cap the committed cell here so the resize
+            // preview does not move the card's left edge.
+            readonly property real targetX: WidgetLayout.insetRightEdge(
                 root.leftInset + (placement?.column ?? 0) * (root.cellSize + root.gap),
                 root.spanSize(displayColumns), root.width, root.rightInset) + dragOffsetX
-            readonly property real targetY: preview ? 0 : root.topInset
+            readonly property real targetY: root.topInset
                 + (placement?.row ?? 0) * (root.cellSize + root.gap) + dragOffsetY
             // The card and every widget inside it lay themselves out for the
             // cell size they have committed to, never for the mid-drag preview:
             // switching a widget to its other layout at the halfway point made
             // the contents jump while the corner was still moving. The preview
             // span only drives the resize readout and the corner itself.
-            readonly property int displayColumns: preview ? previewColumns : placement?.columns ?? 1
-            readonly property int displayRows: preview ? previewRows : placement?.rows ?? 1
+            readonly property int displayColumns: placement?.columns ?? 1
+            readonly property int displayRows: placement?.rows ?? 1
             // While the corner is held, the card follows the magnetised
             // pointer position; the moment it is released the size switches to
             // the committed cell and the spring takes it there.
-            readonly property real targetWidth: preview ? parent.naturalWidth
-                : resizeHandle.resizing
+            readonly property real targetWidth: resizeHandle.resizing
                 ? resizeHandle.previewWidth : root.spanSize(displayColumns)
-            readonly property real targetHeight: preview ? parent.naturalHeight
-                : resizeHandle.resizing
+            readonly property real targetHeight: resizeHandle.resizing
                 ? resizeHandle.previewHeight : root.spanSize(displayRows)
             // The lift belongs to the same motion family as the drop, so the
             // card does not land while it is still shrinking on another curve.
@@ -1113,7 +856,6 @@ PanelWindow {
             }
 
             TapHandler {
-                enabled: !card.preview
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.ReleaseWithinBounds
                 onTapped: eventPoint => root.showWidgetMenu(card.widgetId,
@@ -1123,7 +865,7 @@ PanelWindow {
             DragHandler {
                 id: widgetDrag
                 target: null
-                enabled: !card.preview && root.editMode && !resizeHandle.resizing
+                enabled: root.editMode && !resizeHandle.resizing
                 acceptedButtons: Qt.LeftButton
                 onActiveTranslationChanged: {
                     if (!active)
@@ -1155,7 +897,7 @@ PanelWindow {
 
             Rectangle {
                 z: 50
-                visible: !card.preview && widgetHover.hovered && !root.editMode
+                visible: widgetHover.hovered && !root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 8 }
                 width: Math.min(sizeLabelMetrics.advanceWidth + 14, parent.width - 16)
                 height: Math.max(24, sizeLabel.implicitHeight + 10)
@@ -1183,8 +925,13 @@ PanelWindow {
 
             Rectangle {
                 z: 80
-                visible: !card.preview && root.editMode
-                anchors { top: parent.top; left: parent.left; margins: 8 }
+                visible: root.editMode
+                // Overlaps the card's own top-left corner by the same 4px
+                // the gallery's add badge (WidgetGallery.qml's addBadge)
+                // hangs off its preview box's corner, so both badges read
+                // as the same affordance instead of one flush/inset and
+                // one floating.
+                anchors { top: parent.top; left: parent.left; margins: -4 }
                 width: 26; height: 26; radius: 13
                 color: "#ff453a"
                 BundledIcon {
@@ -1194,45 +941,51 @@ PanelWindow {
                     size: 18
                 }
                 TapHandler {
-                    onTapped: WidgetRegistry.remove(card.modelData.id)
+                    onTapped: root.removeWidget(card.widgetId)
                 }
             }
 
             Rectangle {
-                objectName: card.modelData.id === "clock" ? "widget-clock-style" : ""
+                id: settingsAffordance
                 z: 80
-                visible: root.editMode && card.modelData.id === "clock"
-                activeFocusOnTab: visible
-                Accessible.role: Accessible.Button
-                Accessible.name: clockStyleLabel.text
-                Accessible.description: I18n.tr("Clock")
-                Accessible.onPressAction: root.toggleClockStyle()
-                anchors { left: parent.left; top: parent.top; leftMargin: 8; topMargin: 40 }
-                width: clockStyleLabel.implicitWidth + 16
-                height: 26
-                radius: 9
-                color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceContainerHigh, Qt.rgba(0, 0, 0, 0.56))
-                border.width: activeFocus ? 2 : 0
-                border.color: AppearanceTokens.surface.pick(AppearanceTokens.colors.primary, "white")
-                Keys.onSpacePressed: root.toggleClockStyle()
-                Keys.onReturnPressed: root.toggleClockStyle()
-                Keys.onEnterPressed: root.toggleClockStyle()
-                Text {
-                    id: clockStyleLabel
-                    objectName: "widget-clock-style-label"
+                visible: root.editMode && root.resolveSettingsComponent(card.modelData) !== null
+                anchors { top: parent.top; right: parent.right; margins: 8 }
+                width: 26; height: 26; radius: 13
+                color: AppearanceTokens.surface.pick(Qt.rgba(0, 0, 0, 0.4), Qt.rgba(1, 1, 1, 0.25))
+                BundledIcon {
                     anchors.centerIn: parent
-                    text: DeskCenterConfigService.clockStyle === "analog"
-                        ? I18n.tr("Digital") : I18n.tr("Analog")
-                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
-                    font { family: AppearanceTokens.typography.textFamily; pixelSize: 10; weight: Font.DemiBold }
+                    name: "desktop.widget.settings"
+                    color: "white"
+                    size: 16
                 }
-                TapHandler { onTapped: root.toggleClockStyle() }
+                TapHandler {
+                    onTapped: {
+                        settingsPopupLoader.active = false
+                        settingsPopupLoader.active = true
+                    }
+                }
+            }
+
+            Loader {
+                id: settingsPopupLoader
+                active: false
+                sourceComponent: root.resolveSettingsComponent(card.modelData)
+                onLoaded: {
+                    item.dataService = card.loadedContent?.dataService ?? null
+                    item.parent = Controls.Overlay.overlay
+                    const target = card.mapToItem(Controls.Overlay.overlay,
+                        card.width - item.implicitWidth - 8, 36)
+                    item.x = target.x
+                    item.y = target.y
+                    item.closed.connect(() => settingsPopupLoader.active = false)
+                    item.open()
+                }
             }
 
             WidgetResizeHandle {
                 id: resizeHandle
                 z: 80
-                visible: !card.preview && root.editMode && !WidgetRegistry.isPlugin(card.widgetId)
+                visible: root.editMode
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
@@ -1240,6 +993,12 @@ PanelWindow {
                 maximumRows: card.sizeLimit[1]
                 minimumColumns: card.sizeFloor[0]
                 minimumRows: card.sizeFloor[1]
+                // card.modelData.sizes has crossed this Repeater's model:
+                // boundary, which boxes a plain JS array field into a Qt
+                // sequence wrapper -- still indexable, but Array.isArray()
+                // on it is false. Duck-type on `.length` instead.
+                declaredSizes: (card.modelData.sizes && card.modelData.sizes.length > 0)
+                    ? card.modelData.sizes : null
                 animate: !AppTheme.reduceMotion
                 previewAllowed: card.placement !== null && WidgetLayout.canPlace(
                     root.placements, card.modelData.id, card.placement.column, card.placement.row,
@@ -1263,1891 +1022,14 @@ PanelWindow {
                 scale: springReadoutScale.value
                 Text {
                     id: resizePreview
-                    anchors.centerIn: parent
                     text: resizeHandle.previewColumns + " × " + resizeHandle.previewRows
                     color: "white"
                     font { pixelSize: 13; weight: Font.DemiBold }
                 }
             }
 
-            // Instantiate only this card's content. `visible: false` keeps a
-            // QML tree alive, so the old delegate built every widget for every
-            // card even though only one could be shown.
-            Item {
-                id: widgetContentLayer
-                objectName: "widget-content-layer"
-                anchors.fill: parent
-                // Editing is spatial: while widgets are being arranged their
-                // contents must not answer clicks. A live content layer turned a
-                // drag or a stray click on the music card into a launch of the
-                // app it was showing, and a second copy of a running player is
-                // what crashed QQ Music (two instances share one profile).
-                enabled: !card.preview && !root.editMode
-                // The clock resolves monochrome ink in its face. Keep its text
-                // out of the extra saturation texture so it renders at the
-                // window's resolution. Other glass artwork is desaturated; the
-                // grouped view carries full-colour app icons, so it stays out.
-                layer.enabled: AppearanceConfigService.widgetStyle === "glass"
-                    && card.modelData.id !== "clock"
-                    && card.modelData.id !== "groups"
-	                layer.effect: MultiEffect {
-	                    saturation: -1.0
-	                    colorization: 0.0
-                }
-
-            Loader {
-                id: groupsContentLoader
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "groups"
-                onLoaded: root.groupsContentItem = item
-                onActiveChanged: {
-                    if (!active)
-                        root.groupsContentItem = null
-                }
-                sourceComponent: Component {
-                    DesktopGroupsContent {
-                        objectName: "desktop-groups-content"
-                        entries: desktopFileGrid.orderedEntries
-                        initialCategory: root.desktopFiles.layout.groupSelectedCategory
-                        editing: root.editMode
-                        // Keep the member labels and folder artwork in sync
-                        // with the desktop's own display settings.
-                        showExtensions: desktopFileGrid.desktopLayout.showExtensions
-                        folderCustomizations: desktopFileGrid._folderCustomCache
-                        iconSize: desktopFileGrid.desktopLayout.iconSize
-                        renameCallback: function(entry, name) {
-                            return desktopFileGrid.commitRename(entry, name)
-                        }
-                        onCategorySelected: function(category) {
-                            root.desktopFiles.setGroupSelectedCategory(category)
-                        }
-                        onOpenEntryRequested: function(entry) {
-                            root.desktopFiles.openEntry(entry)
-                        }
-                        onContextMenuRequested: function(entry, x, y) {
-                            // The shared menu reads the desktop selection, so
-                            // make the right-clicked member the only selection
-                            // before building its items.
-                            desktopFileGrid.setSelectedPaths(
-                                entry?.path ? [entry.path] : [])
-                            desktopFileGrid.showMenu(entry,
-                                Qt.point(x - desktopFileGrid.x,
-                                    y - desktopFileGrid.y))
-                        }
-                    }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: !card.preview && card.visible && WidgetRegistry.isPlugin(card.widgetId)
-                sourceComponent: Component {
-                    PluginWidgetView { instanceId: card.widgetId; interactive: !root.editMode }
-                }
-            }
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "clock"
-                sourceComponent: Component {
-	                    Item {
-	                id: clockPages
-	                objectName: "desktop-clock-pages"
-	                anchors.fill: parent
-                clip: true
-                // Animate the selected page, not its pixel position. Geometry
-                // changes must keep the hidden timer exactly below the face,
-                // including while a newly loaded card grows from zero height.
-                property real pageProgress: root.timerView ? 1 : 0
-                Behavior on pageProgress {
-                    enabled: !AppearanceConfigService.reduceMotion
-                    NumberAnimation { duration: AppearanceTokens.motion.slow.duration; easing.type: AppearanceTokens.motion.enterCurve }
-                }
-
-                Item {
-                    id: clockPage
-                    width: parent.width
-                    height: parent.height
-                    y: -height * clockPages.pageProgress
-
-                // Neither face paints its card surface: DeskWidgetCard owns the
-                // analog flower outline and the digital rounded outline.
-
-                DeskClockFace {
-                    id: analogClock
-                    objectName: "desktop-clock-face"
-                    visible: DeskCenterConfigService.clockStyle === "analog"
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    date: clock.date
-                    monochrome: AppearanceConfigService.widgetStyle === "glass"
-                    faceColor: AppearanceTokens.content.onBackdrop ? "transparent" : "#fafafa"
-                    rimColor: AppearanceTokens.isMaterial ? "transparent"
-                        : AppearanceTokens.content.ink("#dedede", 0.42)
-                    numeralColor: AppearanceTokens.content.ink("#242126")
-                    markColor: AppearanceTokens.content.ink("#171717")
-                    hourColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.primary : markColor
-                    minuteColor: AppearanceTokens.isMaterial ? AppearanceTokens.colors.tertiary : markColor
-                    secondColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#ee7659")
-                    hubColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ee7659")
-                }
-
-                Loader {
-                    anchors.fill: parent
-                    anchors.margins: 14
-                    active: DeskCenterConfigService.clockStyle === "digital"
-                    sourceComponent: Component {
-                        DeskDigitalClockFace {
-                            anchors.fill: parent
-                            date: clock.date
-                            systemTimeZone: root.systemTimeZone
-                            monochrome: AppearanceConfigService.widgetStyle === "glass"
-                            cornerRadius: Math.max(0, AppearanceTokens.widget.radius - 14)
-                            cityColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
-                            timeColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
-                            offsetColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
-                            ringColor: AppearanceTokens.content.ink(AppearanceTokens.widget.digitalClock.ink)
-                        }
-                    }
-                }
-
-	                Rectangle {
-                    id: timerButton
-                    objectName: "clock-timer-button"
-                    width: 21
-                    height: 21
-                    radius: width / 2
-                    anchors { right: parent.right; bottom: parent.bottom; rightMargin: 12; bottomMargin: 12 }
-	                    color: "transparent"
-                    border.width: 0
-                    BundledIcon {
-                        anchors.centerIn: parent
-                        anchors.verticalCenterOffset: -1
-                        width: 17
-                        height: 17
-                        name: "desktop.timer"
-
-                    }
-                    MouseArea {
-                        id: timerPointer
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: root.timerView = true
-                    }
-                }
-                }
-
-                Item {
-                    id: timerPage
-                    objectName: "desktop-clock-timer-page"
-                    width: parent.width
-                    height: parent.height
-                    y: height * (1 - clockPages.pageProgress)
-                    Item {
-                        id: timerDial
-                        width: Math.min(parent.width - 28, parent.height - 45)
-                        height: width
-                        anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 5 }
-                        Canvas {
-                            id: timerProgress
-                            anchors.fill: parent
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                const center = width / 2
-                                const radius = Math.max(0, center - 7)
-                                if (radius <= 0)
-                                    return
-                                const amount = root.timerDuration > 0
-                                    ? Math.max(0, Math.min(1, root.timerSeconds / root.timerDuration)) : 1
-                                ctx.reset()
-                                ctx.lineWidth = Math.max(8, width * 0.08)
-                                ctx.lineCap = "round"
-                                ctx.strokeStyle = "rgba(255, 255, 255, 0.10)"
-                                ctx.beginPath(); ctx.arc(center, center, radius, -Math.PI / 2, Math.PI * 1.5); ctx.stroke()
-                                if (amount > 0) {
-	                                ctx.strokeStyle = AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffa515"
-                                    ctx.beginPath(); ctx.arc(center, center, radius, -Math.PI / 2,
-                                        -Math.PI / 2 + Math.PI * 2 * amount); ctx.stroke()
-                                }
-                            }
-	                            Connections {
-	                                target: root
-                                function onTimerSecondsChanged() { timerProgress.requestPaint() }
-                                function onTimerDurationChanged() { timerProgress.requestPaint() }
-	                            }
-	                            Connections {
-	                                target: AppearanceTokens.content
-	                                function onOnBackdropChanged() { timerProgress.requestPaint() }
-	                            }
-                            Component.onCompleted: requestPaint()
-                        }
-                        Text {
-                            id: timerTimeText
-                            anchors.centerIn: parent
-                            text: root.formattedTimer()
-                            color: "white"
-                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.min(16, timerDial.width * 0.15); weight: Font.Medium }
-                        }
-                    }
-                    Row {
-                        visible: root.timerSeconds > 0
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        y: timerDial.y + timerTimeText.y - height - 2
-                        spacing: 5
-                        BundledIcon {
-                            id: timerBell
-                            objectName: "timer-end-bell"
-                            width: 14; height: 16
-                            name: "desktop.timer.notification"
-                            color: AppearanceTokens.content.onBackdrop ? "#ffffff" : "#ffb028"
-                        }
-                        Text {
-                            text: I18n.tr("Ends at %1").arg(root.formattedTimerEndTime())
-                            color: Qt.rgba(1, 1, 1, 0.72)
-                            font { pixelSize: 10; weight: Font.DemiBold }
-                        }
-                    }
-                    Row {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        y: timerDial.y + timerTimeText.y + timerTimeText.height + 2
-                        spacing: 5
-                        Repeater {
-                            model: [1, 5, 15]
-                            delegate: Rectangle {
-                                required property int modelData
-                                width: modelData === 15 ? 30 : 25
-                                height: 17
-                                radius: height / 2
-	                                color: AppearanceTokens.content.onBackdrop
-	                                    ? Qt.rgba(1, 1, 1, 0.16) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.16)
-                                border.width: 1
-	                                border.color: AppearanceTokens.content.onBackdrop
-	                                    ? Qt.rgba(1, 1, 1, 0.72) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.72)
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("%1 min").arg(modelData)
-	                                    color: AppearanceTokens.content.onBackdrop ? "white" : "#ffb028"
-                                    font { pixelSize: 8; weight: Font.DemiBold }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: root.addTimerMinutes(modelData)
-                                }
-                            }
-                        }
-                    }
-                    Row {
-                        anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 5 }
-                        spacing: 22
-                        Repeater {
-                            model: [
-                                { id: "cancel", label: I18n.tr("Cancel") },
-                                { id: root.timerRunning ? "pause"
-                                        : (root.timerHasStarted ? "resume" : "start"),
-                                    label: root.timerRunning ? I18n.tr("Pause")
-                                        : (root.timerHasStarted ? I18n.tr("Resume") : I18n.tr("Start")) }
-                            ]
-                            delegate: Rectangle {
-                                required property var modelData
-                                width: 38
-                                height: 21
-                                radius: height / 2
-	                                color: modelData.id !== "cancel"
-	                                    ? (AppearanceTokens.content.onBackdrop ? Qt.rgba(1, 1, 1, 0.24) : Qt.rgba(255 / 255, 165 / 255, 21 / 255, 0.24))
-                                    : Qt.rgba(1, 1, 1, 0.13)
-                                border.width: 1
-	                                border.color: modelData.id !== "cancel"
-	                                    ? (AppearanceTokens.content.onBackdrop ? "white" : "#ffa515") : Qt.rgba(1, 1, 1, 0.22)
-                                Text {
-                                    anchors.centerIn: parent
-                                    text: modelData.label
-	                                    color: modelData.id !== "cancel"
-	                                        ? (AppearanceTokens.content.onBackdrop ? "white" : "#ffb028") : "white"
-                                    font { pixelSize: 9; weight: Font.DemiBold }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: {
-                                        if (modelData.id === "cancel") {
-                                            root.timerRunning = false
-                                            root.timerSeconds = 0
-                                            root.timerDuration = 0
-                                            root.timerHasStarted = false
-                                        } else {
-                                            root.toggleTimer()
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    BundledIcon {
-                        anchors { left: parent.left; top: parent.top; leftMargin: 10; topMargin: 7 }
-                        name: "desktop.timer.close"
-                        color: Qt.rgba(1, 1, 1, 0.74)
-                        size: 18
-                        MouseArea {
-                            anchors.fill: parent
-                            anchors.margins: -6
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: root.timerView = false
-                        }
-                    }
-                }
-            }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-	                active: card.visible && card.modelData.id === "date"
-	                sourceComponent: Component {
-	                    Item {
-	                anchors.fill: parent
-                Rectangle {
-                    anchors { left: parent.left; right: parent.right; top: parent.top }
-                    height: 27
-                    color: "#ff626a"
-                }
-                Text {
-                    anchors { horizontalCenter: parent.horizontalCenter; top: parent.top; topMargin: 5 }
-                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("yyyy/MM"))
-                    color: "white"
-                    font { pixelSize: 11; weight: Font.Bold }
-                }
-                Text { anchors.centerIn: parent; anchors.verticalCenterOffset: 10; text: I18n.fmt(calendarClock.dayDate, I18n.tr("d dddd")); color: "#111118"; font { pixelSize: 24; weight: Font.Bold } }
-                Text {
-                    anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 10 }
-                    text: I18n.fmt(calendarClock.dayDate, "dddd")
-                    color: "#3c3c43"
-                    font.pixelSize: 9
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-	                active: card.visible && card.modelData.id === "weather"
-	                sourceComponent: Component {
-	                    Item {
-	                anchors.fill: parent
-
-                // The card-level gradient establishes the theme, while this
-                // explicit content-layer wash keeps that transition visible
-                // beneath the weather artwork on every compositor.
-                Rectangle {
-                    anchors.fill: parent
-                    radius: 26
-	                    color: "transparent"
-	                    visible: !AppearanceTokens.content.onBackdrop
-	                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0; color: root.weatherTheme.primary }
-                        GradientStop { position: 0.58; color: root.weatherTheme.secondary }
-                        GradientStop { position: 1; color: Qt.darker(root.weatherTheme.secondary, 1.16) }
-                    }
-                }
-
-                // Keep the weather artwork static. Continuous transforms on
-                // this always-visible background card force redraws even when
-                // the desktop is otherwise idle.
-                Item {
-                    id: deskWeatherMotion
-                    anchors.fill: parent
-                    clip: true
-                    opacity: 0.34
-
-                    Item {
-                        id: deskSunLayer
-                        visible: WeatherTheme.category(WeatherService.weatherCode) === "clear" && WeatherService.isDay
-                        width: 70
-                        height: 70
-                        anchors { right: parent.right; top: parent.top; rightMargin: 20; topMargin: 5 }
-                        Repeater {
-                            model: 8
-                            delegate: Rectangle {
-                                required property int index
-                                width: 2
-                                height: 12
-                                radius: 1
-	                                color: AppearanceTokens.content.ink("#ffe36a")
-                                x: deskSunLayer.width / 2 - width / 2
-                                y: 2
-                                transform: Rotation { origin.x: 1; origin.y: 33; angle: index * 45 }
-                            }
-                        }
-	                        Rectangle { anchors.centerIn: parent; width: 28; height: 28; radius: 14; color: AppearanceTokens.content.ink("#ffe36a")}
-                    }
-
-                    Item {
-                        id: deskCloudLayer
-                        anchors.fill: parent
-                        visible: WeatherTheme.category(WeatherService.weatherCode) === "partlyCloudy"
-                            || WeatherTheme.category(WeatherService.weatherCode) === "overcast"
-                        BundledIcon {
-                            id: deskCloudBack
-                            width: parent.width * 0.34
-                            height: parent.height * 0.36
-                            y: 2
-                            x: -width
-                            name: "weather.cloud"
-
-
-                        }
-                        BundledIcon {
-                            id: deskCloudFront
-                            width: parent.width * 0.30
-                            height: parent.height * 0.29
-                            y: parent.height * 0.18
-                            x: parent.width
-                            name: "weather.cloudWide"
-
-
-                        }
-                    }
-
-                    Item {
-                        id: deskRainLayer
-                        anchors.fill: parent
-                        visible: WeatherTheme.isRain(WeatherService.weatherCode)
-                            || WeatherTheme.isStorm(WeatherService.weatherCode)
-                        Repeater {
-                            model: 9
-                            delegate: Rectangle {
-                                required property int index
-                                width: 1
-                                height: 12
-                                radius: 1
-	                                color: AppearanceTokens.content.ink("#d9f1ff")
-                                x: deskRainLayer.width * (index + 0.4) / 9
-                                rotation: -13
-                            }
-                        }
-                    }
-
-                    Item {
-                        id: deskFogLayer
-                        anchors.fill: parent
-                        visible: WeatherTheme.isFog(WeatherService.weatherCode)
-                        Repeater {
-                            model: 3
-                            delegate: Rectangle {
-                                required property int index
-                                width: deskFogLayer.width * (0.54 + index * 0.09)
-                                height: 10
-                                radius: height / 2
-                                x: -width * 0.15 + index * 24
-                                y: 16 + index * 26
-                                color: Qt.rgba(1, 1, 1, 0.20 - index * 0.035)
-                            }
-                        }
-                    }
-
-                    Item {
-                        id: deskSnowLayer
-                        anchors.fill: parent
-                        visible: WeatherTheme.isSnow(WeatherService.weatherCode)
-                        Repeater {
-                            model: 14
-                            delegate: Rectangle {
-                                required property int index
-                                width: index % 3 === 0 ? 4 : 2
-                                height: width
-                                radius: width / 2
-                                x: deskSnowLayer.width * ((index * 37) % 100) / 100
-                                y: 8 + (index * 19) % Math.max(1, deskSnowLayer.height - 12)
-                                color: Qt.rgba(1, 1, 1, 0.62)
-                            }
-                        }
-                    }
-
-                    BundledIcon {
-                        anchors { right: parent.right; top: parent.top; rightMargin: 26; topMargin: 8 }
-                        visible: WeatherTheme.isStorm(WeatherService.weatherCode)
-                        name: "weather.lightning"
-	                        color: AppearanceTokens.content.ink("#e0ccff", 0.68)
-                        opacity: 0.68
-                        size: 42
-                    }
-                }
-                Text {
-                    anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: 12 }
-                    text: WeatherService.cityName
-	                    color: AppearanceTokens.content.ink("white")
-                    font { pixelSize: 15; weight: Font.DemiBold }
-                }
-                Text {
-                    anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: 29 }
-                    text: WeatherService.temperature
-	                    color: AppearanceTokens.content.ink("white")
-                    // Shrink with the available band above the weekly forecast so
-                    // short cards never push the glyph box into the forecast row
-                    // (issue #205). Tall cards keep the authored 42 px.
-                    font {
-                        family: AppearanceTokens.typography.displayFamily
-                        pixelSize: Math.min(42, parent.height * 0.32,
-                            Math.max(16, (parent.height - weeklyForecast.height - 38) / 1.5))
-                        weight: Font.Normal
-                    }
-                }
-                Text {
-                    id: weatherConditionSymbol
-                    anchors { right: parent.right; top: parent.top; rightMargin: 18; topMargin: 14 }
-                    text: WeatherService.conditionSymbol(WeatherService.weatherCode, WeatherService.isDay)
-	                    color: AppearanceTokens.content.ink(root.weatherTheme.accent)
-                    font.pixelSize: Math.min(34, parent.height * 0.26,
-                        Math.max(16, (parent.height - weeklyForecast.height - 72) * 0.75))
-                }
-                Text {
-                    anchors {
-                        right: parent.right; rightMargin: 16
-                        top: weatherConditionSymbol.bottom; topMargin: 2
-                    }
-                    text: WeatherService.conditionText(WeatherService.weatherCode)
-	                    color: AppearanceTokens.content.ink("white")
-                    font { pixelSize: 15; weight: Font.DemiBold }
-                }
-                Text {
-                    anchors { right: parent.right; bottom: weeklyForecast.top; rightMargin: 16; bottomMargin: 3 }
-                    text: WeatherService.forecastDays.length > 0
-                        ? I18n.tr("High %1°  Low %2°").arg(WeatherService.forecastDays[0].high)
-                            .arg(WeatherService.forecastDays[0].low)
-                        : (WeatherService.loading ? I18n.tr("Updating forecast") : "")
-	                    color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.74), 0.74)
-                    font.pixelSize: 11
-                }
-                Item {
-                    id: weeklyForecast
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 10; rightMargin: 10; bottomMargin: 8 }
-                    height: Math.min(62, parent.height * 0.46)
-                    readonly property int dayCount: card.displayColumns === 1 ? 3 : 7
-                    Repeater {
-                        model: WeatherService.forecastDays.slice(0, weeklyForecast.dayCount)
-                        delegate: Item {
-                            required property var modelData
-                            required property int index
-                            x: index * weeklyForecast.width / weeklyForecast.dayCount
-                            width: weeklyForecast.width / weeklyForecast.dayCount
-                            height: weeklyForecast.height
-                            Text {
-                                anchors { horizontalCenter: parent.horizontalCenter; top: parent.top }
-                                text: WeatherService.forecastLabel(modelData.date, index)
-	                                color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.72), 0.72)
-                                font { pixelSize: 10; weight: Font.DemiBold }
-                            }
-                            Text {
-                                anchors { horizontalCenter: parent.horizontalCenter; verticalCenter: parent.verticalCenter }
-                                text: WeatherService.conditionSymbol(modelData.code, true)
-	                                color: AppearanceTokens.content.ink(root.weatherTheme.accent)
-                                font.pixelSize: 22
-                            }
-                            Text {
-                                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom }
-                                text: modelData.high + "°/" + modelData.low + "°"
-	                                color: AppearanceTokens.content.ink("white")
-                                font { pixelSize: 10; weight: Font.DemiBold }
-                            }
-                        }
-                    }
-                    Text {
-                        anchors.centerIn: parent
-                        visible: WeatherService.forecastDays.length === 0
-                        width: Math.max(0, parent.width - 12)
-                        horizontalAlignment: Text.AlignHCenter
-                        wrapMode: Text.Wrap
-                        maximumLineCount: 3
-                        elide: Text.ElideRight
-                        text: (!WeatherService.coreMode ? WeatherService.sourceMessage : "") || WeatherService.errorMessage
-                            || (WeatherService.loading ? I18n.tr("Loading 7-day forecast…") : I18n.tr("No 7-day forecast"))
-	                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.65), 0.65)
-                        font.pixelSize: 11
-                    }
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        const locationId = String(WeatherService.location?.id ?? "")
-                        IndependentAppWidgetService.open("weather",
-                            locationId ? { location: locationId } : {})
-                    }
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "status"
-                sourceComponent: Component {
-                    Item {
-                anchors.fill: parent
-                Row {
-                    anchors.centerIn: parent
-                    spacing: 18
-                    Repeater {
-                        model: [
-                            { label: I18n.tr("Volume"), value: Math.round(ControlCenterService.volumePercent) + "%", amount: ControlCenterService.volumePercent / 100 },
-                            { label: I18n.tr("Humidity"), value: WeatherService.humidity, amount: Math.min(1, Number(WeatherService.humidity.replace("%", "")) / 100) },
-                            { label: I18n.tr("Weather"), value: WeatherService.temperature, amount: 0.72 }
-                        ]
-                        delegate: Item {
-                            required property var modelData
-                            width: 54; height: 74
-                            Canvas {
-                                id: ring
-                                width: 48; height: 48
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                onPaint: {
-                                    const ctx = getContext("2d")
-                                    ctx.reset(); ctx.lineWidth = 6; ctx.lineCap = "round"
-                                    ctx.strokeStyle = "#f7f4f7"; ctx.beginPath(); ctx.arc(24, 24, 18, -Math.PI / 2, Math.PI * 1.5); ctx.stroke()
-                                    ctx.strokeStyle = "#08be72"; ctx.beginPath(); ctx.arc(24, 24, 18, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * modelData.amount); ctx.stroke()
-                                }
-                                Component.onCompleted: requestPaint()
-                            }
-                            Text {
-                                anchors { horizontalCenter: parent.horizontalCenter; top: ring.bottom; topMargin: 2 }
-                                text: modelData.value
-                                color: "#36313a"
-                                font { pixelSize: 10; weight: Font.Bold }
-                            }
-                            Text {
-                                anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom }
-                                text: modelData.label
-                                color: "#5e5660"
-                                font.pixelSize: 9
-                            }
-                        }
-                    }
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "photo"
-                sourceComponent: Component {
-                    Item {
-                anchors.fill: parent
-                Image { anchors.fill: parent; source: BundledIcons.source("media.coverFallback"); fillMode: Image.PreserveAspectCrop; asynchronous: true }
-                Rectangle {
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-                    height: 28
-                    color: Qt.rgba(0, 0, 0, 0.34)
-                }
-                Text {
-                    anchors { left: parent.left; bottom: parent.bottom; leftMargin: 12; bottomMargin: 8 }
-                    text: I18n.tr("Featured")
-                    color: "white"
-                    font { pixelSize: 11; weight: Font.DemiBold }
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "system"
-                sourceComponent: Component {
-                    Item {
-	                id: systemContent
-	                anchors.fill: parent
-                // The kos-data-service snapshot drives this card through
-                // the shared MetricsService, so the rings and trends read the
-                // exact values the Bar's thermal indicator shows.
-                readonly property var metrics: MetricsService
-                function historyValues(name) {
-                    const live = name === "memory" ? MetricsService.memoryHistoryValues
-                        : name === "cpu" ? MetricsService.cpuHistoryValues
-                        : MetricsService.frequencyHistoryValues
-                    return live
-                }
-                // The system card is a 4:6 split: the Activity rings use the
-                // left 40%, while hover details have a calm 60% reading area.
-                Item {
-                    id: activityRings
-                    anchors { left: parent.left; leftMargin: parent.width * 0.02; top: parent.top; topMargin: parent.height * 0.035 }
-                    width: Math.min(parent.width * 0.36, parent.height * 0.7)
-                    height: width
-                    property int hoveredMetric: -1
-                    readonly property real cpuValue: systemContent.metrics.cpuUsage ?? 0
-                    readonly property real memoryValue: systemContent.metrics.memoryTotalBytes > 0
-                        ? systemContent.metrics.memoryUsedBytes / systemContent.metrics.memoryTotalBytes : 0
-                    readonly property real storageValue: systemContent.metrics.diskTotalBytes > 0
-                        ? systemContent.metrics.diskUsedBytes / systemContent.metrics.diskTotalBytes : 0
-                    readonly property var labels: ["CPU", I18n.tr("Memory"), I18n.tr("Storage")]
-                    readonly property var icons: ["system.cpu", "system.memory", "system.disk"]
-                    readonly property var values: [cpuValue, memoryValue, storageValue]
-                    readonly property var colors: AppearanceTokens.content.onBackdrop
-                        ? [IconAppearanceService.glassContentColor().toString(),
-                           IconAppearanceService.glassContentColor().toString(),
-                           IconAppearanceService.glassContentColor().toString()]
-                        : ["#ff375f", "#30d158", "#64d2ff"]
-
-                    function detailFor(metric) {
-                        if (metric === 0)
-                            return I18n.tr("Live usage")
-                        if (metric === 1)
-                            return root.formatMetricBytes(systemContent.metrics.memoryUsedBytes)
-                                + " / " + root.formatMetricBytes(systemContent.metrics.memoryTotalBytes)
-                        return root.formatMetricBytes(systemContent.metrics.diskUsedBytes)
-                            + " / " + root.formatMetricBytes(systemContent.metrics.diskTotalBytes)
-                    }
-
-                    Canvas {
-                        id: activityCanvas
-                        anchors.fill: parent
-
-                        function drawRing(ctx, radius, value, color) {
-                            const center = width / 2
-                            const amount = Math.max(0, Math.min(1, value))
-                            const start = -Math.PI / 2
-                            // Material's data rings are heavier than the glass
-                            // form's hairlines; both keep the round cap.
-                            ctx.lineWidth = AppearanceTokens.surface.pick(
-                                Math.max(6, width * 0.085), Math.max(5, width * 0.065))
-                            ctx.lineCap = "round"
-                            ctx.strokeStyle = AppearanceTokens.content.onBackdrop
-                                ? IconAppearanceService.glassContentColor(0.25).toString()
-                                : Qt.rgba(0.19, 0.17, 0.2, 0.12)
-                            ctx.beginPath()
-                            ctx.arc(center, center, radius, 0, Math.PI * 2)
-                            ctx.stroke()
-                            ctx.strokeStyle = color
-                            ctx.beginPath()
-                            ctx.arc(center, center, radius, start, start + Math.PI * 2 * amount)
-                            ctx.stroke()
-                        }
-
-                        onPaint: {
-                            const ctx = getContext("2d")
-                            ctx.reset()
-                            drawRing(ctx, width * 0.39, activityRings.cpuValue, activityRings.colors[0])
-                            drawRing(ctx, width * 0.285, activityRings.memoryValue, activityRings.colors[1])
-                            drawRing(ctx, width * 0.18, activityRings.storageValue, activityRings.colors[2])
-                        }
-                        Component.onCompleted: requestPaint()
-	                        // A Canvas reads the scheme only when it paints, so a
-	                        // shell-style or colour-source switch has to ask for a
-	                        // repaint explicitly — same reason as the clock's.
-	                        Connections {
-	                            target: AppearanceTokens
-	                            function onColorRevisionChanged() { activityCanvas.requestPaint() }
-	                            function onIsMaterialChanged() { activityCanvas.requestPaint() }
-	                        }
-	                        Connections {
-	                            target: activityRings
-                            function onCpuValueChanged() { activityCanvas.requestPaint() }
-                            function onMemoryValueChanged() { activityCanvas.requestPaint() }
-                            function onStorageValueChanged() { activityCanvas.requestPaint() }
-	                        }
-	                        Connections {
-	                            target: AppearanceTokens.content
-	                            function onOnBackdropChanged() { activityCanvas.requestPaint() }
-	                        }
-                    }
-
-                    Column {
-                        anchors.centerIn: parent
-                        visible: activityRings.hoveredMetric >= 0
-                        spacing: -2
-                        BundledIcon {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            name: activityRings.hoveredMetric >= 0
-                                ? (activityRings.icons[activityRings.hoveredMetric] ?? "")
-                                : ""
-                            color: AppearanceTokens.content.ink("#7d7782")
-                            size: Math.max(10, activityRings.width * 0.1)
-                        }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: activityRings.labels[activityRings.hoveredMetric] + " "
-                                + Math.round(activityRings.values[activityRings.hoveredMetric] * 100) + "%"
-	                            color: AppearanceTokens.content.ink("#7d7782")
-                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(8, activityRings.width * 0.075); weight: Font.DemiBold }
-                        }
-                    }
-
-                    MouseArea {
-                        anchors.fill: parent
-                        hoverEnabled: true
-                        onEntered: activityRings.hoveredMetric = 0
-                        onPositionChanged: function(mouse) {
-                            const dx = mouse.x - width / 2
-                            const dy = mouse.y - height / 2
-                            const distance = Math.sqrt(dx * dx + dy * dy) / width
-                            if (distance >= 0.335)
-                                activityRings.hoveredMetric = 0
-                            else if (distance >= 0.23)
-                                activityRings.hoveredMetric = 1
-                            else
-                                activityRings.hoveredMetric = 2
-                        }
-                        onExited: activityRings.hoveredMetric = -1
-                    }
-                }
-
-                // The lower two tenths of the left 4/10 column reuse the
-                // service snapshot's temperatures; no second sensor poll.
-                Item {
-                    id: temperatureSummary
-                    anchors { left: parent.left; leftMargin: parent.width * 0.02; bottom: parent.bottom; bottomMargin: parent.height * 0.045 }
-                    width: parent.width * 0.36
-                    height: parent.height * 0.17
-                    readonly property real currentC: Number(
-                        systemContent.metrics.currentMilliC ?? -1) / 1000
-                    readonly property real maximum5MinuteC: Number(
-                        systemContent.metrics.maximum5MinuteMilliC ?? -1) / 1000
-                    readonly property bool available: currentC >= 0
-                        && maximum5MinuteC >= 0
-
-                    Row {
-                        anchors.centerIn: parent
-                        spacing: Math.max(4, temperatureSummary.width * 0.04)
-                        BundledIcon {
-                            name: "system.temperature"
-                            color: AppearanceTokens.content.ink("#7d7782")
-                            size: Math.max(12, temperatureSummary.height * 0.54)
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Column {
-                            spacing: -1
-                            Text {
-                                text: temperatureSummary.available
-                                    ? Math.round(temperatureSummary.currentC) + "°" : "--"
-	                                color: AppearanceTokens.content.ink("#7d7782")
-                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
-                            }
-                            Text {
-                                text: I18n.tr("Now")
-	                                color: AppearanceTokens.content.ink(Qt.rgba(0.49, 0.47, 0.51, 0.76), 0.72)
-                                font.pixelSize: Math.max(8, temperatureSummary.height * 0.25)
-                            }
-                        }
-                        Rectangle {
-                            width: 1
-                            height: temperatureSummary.height * 0.56
-	                            color: AppearanceTokens.content.onBackdrop ? Qt.rgba(1, 1, 1, 0.28) : Qt.rgba(0.19, 0.17, 0.2, 0.12)
-                            anchors.verticalCenter: parent.verticalCenter
-                        }
-                        Column {
-                            spacing: -1
-                            Text {
-                                text: temperatureSummary.available
-                                    ? Math.round(temperatureSummary.maximum5MinuteC) + "°" : "--"
-	                                color: AppearanceTokens.content.ink("#7d7782")
-                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: Math.max(10, temperatureSummary.height * 0.42); weight: Font.DemiBold }
-                            }
-                            Text {
-                                text: I18n.tr("High")
-	                                color: AppearanceTokens.content.ink(Qt.rgba(0.49, 0.47, 0.51, 0.76), 0.72)
-                                font.pixelSize: Math.max(8, temperatureSummary.height * 0.25)
-                            }
-                        }
-                    }
-                }
-
-                Column {
-                    anchors { left: parent.left; right: parent.right; leftMargin: parent.width * 0.47; rightMargin: parent.width * 0.07; verticalCenter: parent.verticalCenter }
-                    height: parent.height * 0.76
-                    spacing: Math.max(2, height * 0.035)
-
-                    Item {
-                        width: parent.width
-                        height: (parent.height - parent.spacing * 2) / 3
-                        Text {
-                            id: memoryTrendLabel
-                            anchors { left: parent.left; top: parent.top }
-                            text: I18n.tr("Memory  %1%").arg(Math.round(activityRings.memoryValue * 100))
-	                            color: activityRings.hoveredMetric === 1
-                                ? AppearanceTokens.content.ink(Qt.rgba(0.12, 0.50, 0.31, 0.84))
-                                : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
-                            font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
-                        }
-                        UsageSparkline {
-                            anchors { left: parent.left; right: parent.right; top: memoryTrendLabel.bottom; topMargin: 1; bottom: parent.bottom }
-                            values: systemContent.historyValues("memory")
-	                            lineColor: AppearanceTokens.content.accent(AppearanceTokens.colors.tertiary, "#30d158")
-                            adaptiveRange: true
-                            maxPoints: 36
-                            smoothingWindow: 5
-                        }
-                    }
-
-                    Item {
-                        width: parent.width
-                        height: (parent.height - parent.spacing * 2) / 3
-                        Text {
-                            id: cpuTrendLabel
-                            anchors { left: parent.left; top: parent.top }
-                            text: I18n.tr("CPU  %1%").arg(Math.round(activityRings.cpuValue * 100))
-	                            color: activityRings.hoveredMetric === 0
-                                ? AppearanceTokens.content.ink(Qt.rgba(0.76, 0.14, 0.23, 0.84))
-                                : AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
-                            font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
-                        }
-                        UsageSparkline {
-                            anchors { left: parent.left; right: parent.right; top: cpuTrendLabel.bottom; topMargin: 1; bottom: parent.bottom }
-                            values: systemContent.historyValues("cpu")
-	                            lineColor: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ff375f")
-                            maxPoints: 36
-                            smoothingWindow: 5
-                        }
-                    }
-
-                    Item {
-                        width: parent.width
-                        height: (parent.height - parent.spacing * 2) / 3
-                        Text {
-                            id: frequencyTrendLabel
-                            anchors { left: parent.left; top: parent.top }
-                            text: I18n.tr("Avg frequency  %1 MHz").arg(Math.round(systemContent.metrics.cpuFrequencyMhz ?? 0))
-	                            color: AppearanceTokens.content.ink(Qt.rgba(0.30, 0.29, 0.33, 0.78))
-                            font { pixelSize: Math.max(8, systemContent.height * 0.06); weight: Font.DemiBold }
-                        }
-                        UsageSparkline {
-                            anchors { left: parent.left; right: parent.right; top: frequencyTrendLabel.bottom; topMargin: 1; bottom: parent.bottom }
-                            values: systemContent.historyValues("frequency")
-	                            lineColor: AppearanceTokens.content.accent(AppearanceTokens.colors.secondary, "#64d2ff")
-                            adaptiveRange: true
-                            maxPoints: 36
-                            smoothingWindow: 5
-                        }
-                    }
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "activity"
-                sourceComponent: Component {
-                    Item {
-                id: activityContent
-                anchors.fill: parent
-
-                Item {
-                    id: activityBody
-                    anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 15; rightMargin: 15; topMargin: 15; bottomMargin: 15 }
-                    clip: true
-                    readonly property real paneGap: 20
-
-                    Item {
-                        id: activityLeftPane
-                        x: 0
-                        y: 0
-                        width: (activityBody.width - activityBody.paneGap) / 2
-                        height: activityBody.height
-
-                        Item {
-                            id: activityUptimeHeader
-                            x: 0
-                            y: 0
-                            width: activityLeftPane.width
-                            height: activityLeftPane.height * 0.3
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                text: uptimeHeatmap.hoveredDay
-                                    ? I18n.tr("%1 · Uptime: %2").arg(uptimeHeatmap.hoveredDay.key)
-                                        .arg(root.formatDuration(uptimeHeatmap.hoveredDay.seconds))
-                                    : I18n.tr("Uptime: %1").arg(root.formatDuration(
-                                        root.activityUsage.uptimeByDay[root.activityUsage.dayKey(Date.now())] ?? 0))
-	                                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
-                                font { family: AppearanceTokens.typography.displayFamily; pixelSize: 14; weight: Font.DemiBold }
-                            }
-                        }
-                        Item {
-                            id: uptimeHeatmap
-                            x: 0
-                            y: activityUptimeHeader.height
-                            width: activityLeftPane.width
-                            height: activityLeftPane.height - y
-                            property var hoveredDay: null
-                            Grid {
-                                x: 0
-                                y: 0
-                                width: uptimeHeatmap.width
-                                columns: 10
-                                rowSpacing: 3
-                                columnSpacing: 3
-                                Repeater {
-                                    model: root.activityUsage.recentUptimeDays(60)
-                                    delegate: Rectangle {
-                                        required property var modelData
-                                        width: Math.max(4, (uptimeHeatmap.width - 27) / 10)
-                                        height: width
-                                        radius: 2
-                                        readonly property real level: Math.min(1, modelData.seconds / (8 * 3600))
-	                                        color: level <= 0 ? Qt.rgba(1, 1, 1, 0.08)
-	                                            : (AppearanceTokens.content.onBackdrop
-	                                                ? Qt.rgba(1, 1, 1, 0.22 + level * 0.72)
-	                                                : Qt.rgba(0.33, 0.84, 0.58, 0.22 + level * 0.72))
-                                        MouseArea {
-                                            anchors.fill: parent
-                                            hoverEnabled: true
-                                            onEntered: uptimeHeatmap.hoveredDay = modelData
-                                            onExited: uptimeHeatmap.hoveredDay = null
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    Item {
-                        id: activityRightPane
-                        x: activityLeftPane.width + activityBody.paneGap
-                        y: 0
-                        width: activityLeftPane.width
-                        height: activityBody.height
-                        readonly property var entries: root.activityUsage.todayApps().slice(0, 8)
-
-                        Column {
-                            id: appUsageList
-                            width: activityRightPane.width
-                            anchors.verticalCenter: activityRightPane.verticalCenter
-                            spacing: 2
-                            Repeater {
-                                model: activityRightPane.entries
-                                delegate: Item {
-                                    id: appUsageRow
-                                    required property var modelData
-                                    width: activityRightPane.width
-                                    height: 16
-                                    AppIcon {
-                                        id: appUsageIcon
-                                        width: 12
-                                        height: 12
-                                        source: modelData.icon || ""
-                                        smooth: true
-                                        // Theme icon: synchronous, see AppIcon.qml.
-                                        asynchronous: false
-	                                        anchors { left: appUsageRow.left; verticalCenter: appUsageRow.verticalCenter }
-	                                        layer.enabled: AppearanceConfigService.widgetStyle === "glass"
-	                                        layer.effect: MultiEffect {
-	                                            saturation: 0
-	                                            colorization: 1
-	                                            colorizationColor: IconAppearanceService.glassContentColor()
-	                                        }
-                                    }
-                                    Text {
-                                        id: appDurationText
-                                        anchors { right: appUsageRow.right; verticalCenter: appUsageRow.verticalCenter }
-                                        text: root.formatDuration(modelData.seconds)
-	                                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.46), 0.46)
-                                        font { family: AppearanceTokens.typography.displayFamily; pixelSize: 9 }
-                                    }
-                                    Text {
-                                        anchors { left: appUsageIcon.right; right: appDurationText.left; verticalCenter: appUsageRow.verticalCenter; leftMargin: 6; rightMargin: 6 }
-                                        text: modelData.name || modelData.id
-                                        elide: Text.ElideRight
-	                                        color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.78), 0.78)
-                                        font.pixelSize: 10
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "notes"
-                sourceComponent: Component {
-                    Item {
-                anchors.fill: parent
-                Rectangle {
-                    anchors { left: parent.left; right: parent.right; top: parent.top }
-                    height: 27
-                    color: "#f5c400"
-                }
-                Text {
-                    anchors { left: parent.left; top: parent.top; leftMargin: 12; topMargin: 7 }
-                    text: I18n.tr("Notes")
-                    color: "white"
-                    font { pixelSize: 11; weight: Font.Bold }
-                }
-                Text {
-                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 12; rightMargin: 12; topMargin: 42 }
-                    text: I18n.tr("No more notes for now")
-                    color: "#333238"
-                    font.pixelSize: 11
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "overview"
-                sourceComponent: Component {
-                    Item {
-                anchors.fill: parent
-                Text {
-                    text: I18n.tr("Desktop Workspace")
-                    color: "white"
-                    anchors { left: parent.left; top: parent.top; leftMargin: 18; topMargin: 42 }
-                    font { pixelSize: 24; weight: Font.DemiBold }
-                }
-                GlassText {
-                    text: I18n.tr("Calendar, weather and media stay at a glance here")
-                    wrapMode: Text.Wrap
-                    color: Qt.rgba(1, 1, 1, 0.74)
-                    anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 18; rightMargin: 18; bottomMargin: 20 }
-                    font.pixelSize: 14
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "music"
-                sourceComponent: Component {
-                    Item {
-                id: musicContent
-                anchors.fill: parent
-                readonly property var player: MediaService.activePlayer
-                readonly property bool hasPlayer: player !== null
-                readonly property url artworkSource: {
-                    const revision = MediaService.metadataRevision
-                    return player?.trackArtUrl
-                        ? player.trackArtUrl : BundledIcons.source("media.coverFallback")
-                }
-                readonly property real safeLength: player?.lengthSupported && player.length > 0
-                    ? player.length : 0
-                readonly property real progress: safeLength > 0
-                    ? Math.max(0, Math.min(1, (player?.position ?? 0) / safeLength)) : 0
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: {
-                        // Raise the displayed player; ListenFree owns the
-                        // music entry when no MPRIS session is available.
-                        const player = MediaService.activePlayer
-                        if (!player) {
-                            AppActionService.launchById("listenfree", [])
-                            return
-                        }
-                        if (player.canRaise) {
-                            player.raise()
-                            return
-                        }
-                        // Not every player offers Raise (the QQ Music bridge
-                        // reports CanRaise=false), so bring up the window that
-                        // already exists. Launching from here started a second
-                        // copy of a running app, and two QQ Music instances
-                        // share one profile and crash each other.
-                        const windows = player.desktopEntry
-                            ? WindowService.windowsForApp(player.desktopEntry) : []
-                        if (windows.length > 0) {
-                            WindowService.activateWindow(windows[0].windowId)
-                            return
-                        }
-                        if (player.desktopEntry
-                                && AppActionService.launchById(player.desktopEntry, []))
-                            return
-                        // Do not start a different app for the displayed track.
-                    }
-                }
-
-                function artworkTint(color, alpha) {
-                    return Qt.rgba(color.r, color.g, color.b, alpha)
-                }
-                function formatPlaybackTime(seconds) {
-                    const value = Math.max(0, Math.floor(seconds || 0))
-                    return Math.floor(value / 60) + ":" + String(value % 60).padStart(2, "0")
-                }
-
-                Timer {
-                    interval: 250
-                    repeat: true
-                    running: !card.preview && musicContent.visible && card.visible
-                        && !!musicContent.player?.isPlaying
-                    onTriggered: {
-                        if (musicContent.player)
-                            musicContent.player.positionChanged()
-                    }
-                }
-                ArtworkColorSource {
-                    id: musicArtworkColors
-                    source: musicContent.artworkSource
-                }
-                Rectangle {
-                    anchors.fill: parent
-	                    visible: musicContent.hasPlayer && !AppearanceTokens.content.onBackdrop
-                    radius: 26
-                    clip: true
-                    color: "transparent"
-                    gradient: Gradient {
-                        orientation: Gradient.Horizontal
-                        GradientStop { position: 0; color: musicContent.artworkTint(musicArtworkColors.primary, 0.82) }
-                        GradientStop { position: 0.52; color: musicContent.artworkTint(musicArtworkColors.secondary, 0.64) }
-                        GradientStop { position: 1; color: musicContent.artworkTint(musicArtworkColors.primary, 0.38) }
-                    }
-                    z: 0
-                }
-                Item {
-                    id: musicNotes
-                    anchors { right: parent.right; top: parent.top; rightMargin: 24; topMargin: 17 }
-                    width: 72
-                    height: 62
-                    clip: true
-                    z: 2
-                    readonly property bool running: (musicContent.player?.isPlaying ?? false)
-                        && card.visible
-                    visible: running
-                    Repeater {
-                        model: ["♪", "♫", "♪"]
-                        delegate: Text {
-                            required property var modelData
-                            required property int index
-                            readonly property var offsets: [4, 34, 54]
-                            x: offsets[index]
-                            text: modelData
-                            color: AppearanceTokens.surface.pick(AppearanceTokens.colors.tertiary, Qt.rgba(1, 1, 1, 0.60))
-                            font { family: AppearanceTokens.typography.displayFamily; pixelSize: index === 1 ? 18 : 14; weight: Font.DemiBold }
-                            SequentialAnimation on y {
-                                running: musicNotes.running
-                                loops: Animation.Infinite
-                                // motion-exception: Music-note loops keep their phase, lifetime and fade envelope.
-                                PauseAnimation { duration: index * 620 }
-                                NumberAnimation { from: musicNotes.height - 14; to: -20; duration: 2200 + index * 180; easing.type: Easing.OutSine }
-                            }
-                            SequentialAnimation on opacity {
-                                running: musicNotes.running
-                                loops: Animation.Infinite
-                                PauseAnimation { duration: index * 620 }
-                                NumberAnimation { from: 0; to: 0.64; duration: 360 }
-                                NumberAnimation { from: 0.64; to: 0; duration: 1840 + index * 180; easing.type: Easing.InSine }
-                            }
-                        }
-                    }
-                }
-
-                Item {
-                    id: musicBody
-                    anchors { fill: parent; margins: 16 }
-                    readonly property bool narrow: card.displayColumns === 1
-                    readonly property bool compact: narrow && card.displayRows === 1
-                    readonly property real splitGap: 20
-                    z: 1
-
-                    Item {
-                        id: musicCoverPane
-                        x: 0
-                        y: 0
-                        width: musicBody.narrow ? musicBody.width
-                            : (musicBody.width - musicBody.splitGap) * 0.3
-                        height: musicBody.narrow ? Math.min(musicBody.width * 0.72,
-                            musicBody.height * 0.4) : musicBody.height
-                        Rectangle {
-                            id: musicArtwork
-                            anchors.centerIn: parent
-                            width: Math.min(musicCoverPane.width, musicCoverPane.height)
-                            height: width
-                            radius: width * 0.1
-                            color: Qt.rgba(1, 1, 1, 0.10)
-                            // Follow the Dock player's proven path: the
-                            // visible Image owns both the mask and grayscale
-                            // effect. Applying an effect to an OpacityMask
-                            // leaves its hidden source artwork in colour on
-                            // some scene-graph backends.
-                            Image {
-                                id: musicArtworkSource
-                                anchors.fill: parent
-	                                visible: musicContent.hasPlayer
-                                source: musicContent.artworkSource
-                                fillMode: Image.PreserveAspectCrop
-                                // Decode once at a size the layout can never
-                                // exceed. Binding sourceSize to the animated
-                                // width re-decoded the cover on every frame of a
-                                // resize and left it not-Ready for most of them
-                                // (measured: 29 of 31 frames), which reads as the
-                                // cover flickering while the card grows.
-                                readonly property int decodeSize: Math.max(1,
-                                    Math.ceil(root.cellSize * 2))
-                                sourceSize.width: decodeSize
-                                sourceSize.height: decodeSize
-                                asynchronous: true
-                                cache: false
-                                smooth: true
-                                layer.enabled: true
-                                layer.effect: MultiEffect {
-                                    maskEnabled: true
-                                    maskSource: musicArtworkMask
-                                    saturation: AppearanceConfigService.widgetStyle === "color" ? 0.0 : -1.0
-                                }
-                            }
-                            Rectangle {
-                                id: musicArtworkMask
-                                anchors.fill: parent
-                                radius: musicArtwork.width * 0.1
-                                visible: false
-                                layer.enabled: true
-                            }
-                            BundledIcon {
-                                anchors.centerIn: parent
-	                                visible: !musicContent.hasPlayer
-                                name: "media.fallback"
-                                color: Qt.rgba(1, 1, 1, 0.46)
-                                size: musicArtwork.width * 0.42
-                            }
-                        }
-                    }
-
-                    Item {
-                        id: musicDetailsPane
-                        x: musicBody.narrow ? 0 : musicCoverPane.width + musicBody.splitGap
-                        y: musicBody.narrow ? musicCoverPane.height + 8 : 0
-                        width: musicBody.width - x
-                        height: musicBody.height - y
-                        Text {
-                            id: musicTitle
-                            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; verticalCenterOffset: -22 }
-                            text: musicContent.player?.trackTitle || I18n.tr("Nothing playing")
-                            elide: Text.ElideRight
-                            horizontalAlignment: Text.AlignHCenter
-	                            color: AppearanceTokens.content.ink("white")
-                            font { pixelSize: 14; weight: Font.DemiBold }
-                        }
-                        Text {
-                            id: musicArtist
-                            visible: !musicBody.compact
-                            anchors { left: parent.left; right: parent.right; top: musicTitle.bottom; topMargin: 3 }
-                            text: musicContent.player?.trackArtist || ""
-                            elide: Text.ElideRight
-                            horizontalAlignment: Text.AlignHCenter
-	                            color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.68), 0.68)
-                            font.pixelSize: 10
-                        }
-                        KosLyricLine {
-                            id: musicLyric
-                            anchors { left: parent.left; right: parent.right; top: musicArtist.bottom; topMargin: 5 }
-                            text: MediaService.loading ? MediaService.playbackStatus : MediaService.currentLyric
-                            visible: !musicBody.compact && text.length > 0
-                            elide: Text.ElideRight
-                            horizontalAlignment: Text.AlignHCenter
-                            color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.86), 0.86)
-                            font { pixelSize: 10; weight: Font.Medium }
-                        }
-                        Item {
-                            id: musicProgressTrack
-                            anchors {
-                                left: parent.left
-                                right: parent.right
-                                top: musicLyric.visible ? musicLyric.bottom : musicArtist.bottom
-                                topMargin: musicLyric.visible ? 7 : 12
-                            }
-                            height: 5
-                            visible: !musicBody.compact && musicContent.safeLength > 0
-                            WavyProgress {
-                                anchors.fill: parent
-                                anchors.topMargin: -3
-                                anchors.bottomMargin: -3
-                                visible: AppearanceTokens.isMaterial
-                                value: musicContent.progress
-                                animated: musicContent.player?.isPlaying ?? false
-                                activeColor: AppearanceTokens.colors.primary
-                                trackColor: AppearanceTokens.colors.outlineVariant
-                                amplitude: 2.4
-                                wavelength: 11
-                                lineWidth: 2.5
-                            }
-                            Rectangle {
-                                anchors.fill: parent
-                                visible: !AppearanceTokens.isMaterial
-                                radius: height / 2
-                                color: Qt.rgba(1, 1, 1, 0.20)
-                            }
-                            Rectangle {
-                                width: parent.width * musicContent.progress
-                                height: parent.height
-                                visible: !AppearanceTokens.isMaterial
-                                radius: height / 2
-                                color: Qt.rgba(1, 1, 1, 0.82)
-                            }
-                        }
-                        Item {
-                            id: musicProgressTimes
-                            anchors { left: parent.left; right: parent.right; top: musicProgressTrack.bottom; topMargin: 4 }
-                            height: 11
-                            visible: musicProgressTrack.visible
-                            Text {
-                                anchors.left: parent.left
-                                text: musicContent.formatPlaybackTime(musicContent.player?.position ?? 0)
-	                                color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.60), 0.60)
-                                font.pixelSize: 8
-                            }
-                            Text {
-                                anchors.right: parent.right
-                                text: musicContent.formatPlaybackTime(musicContent.safeLength)
-	                                color: AppearanceTokens.content.ink(Qt.rgba(1, 1, 1, 0.60), 0.60)
-                                font.pixelSize: 8
-                            }
-                        }
-                        Row {
-                            id: musicControls
-                            anchors {
-                                horizontalCenter: parent.horizontalCenter
-                                bottom: parent.bottom
-                                bottomMargin: 2
-                            }
-                            height: 36
-                            spacing: musicBody.narrow ? 4 : 10
-                            Repeater {
-                                // Keep delegates alive when play/pause changes.
-                                model: 4
-                                delegate: DeskMediaButton {
-                                    required property int index
-                                    visible: index !== 3 || MediaService.lyricsAvailable
-                                    primary: index === 1
-                                    busy: index === 1 && MediaService.loading
-                                    checkable: index === 3
-                                    checked: index === 3
-                                        && DeskCenterConfigService.desktopLyricsEnabled
-                                        && MediaService.desktopLyricsAllowed
-                                    iconName: index === 0 ? "media.previous"
-                                        : index === 2 ? "media.next"
-                                        : index === 3 ? "media.lyrics"
-                                        : musicContent.player?.isPlaying ? "media.pause" : "media.play"
-                                    text: index === 0 ? I18n.tr("Previous")
-                                        : index === 2 ? I18n.tr("Next")
-                                        : index === 3 ? (MediaService.desktopLyricsAllowed
-                                            ? I18n.tr("Desktop Lyrics") : I18n.tr("Player has desktop lyrics off"))
-                                        : musicContent.player?.isPlaying ? I18n.tr("Pause") : I18n.tr("Play")
-                                    enabled: index === 3 ? MediaService.desktopLyricsAllowed : (musicContent.hasPlayer
-                                        && (index === 0 ? (musicContent.player?.canGoPrevious ?? false)
-                                            : index === 2 ? (musicContent.player?.canGoNext ?? false)
-                                            : (musicContent.player?.canTogglePlaying ?? false)))
-                                    Controls.ToolTip.visible: hovered && (enabled || index === 3)
-                                    glassInk: AppearanceTokens.content.onBackdrop
-                                        ? IconAppearanceService.glassContentColor(0.88)
-                                        : Qt.rgba(1, 1, 1, 0.88)
-                                    onClicked: {
-                                        if (index === 0) MediaService.previous()
-                                        else if (index === 1) MediaService.togglePlayPause()
-                                        else if (index === 2) MediaService.next()
-                                        else DeskCenterConfigService.updateDesktopLyricsEnabled(
-                                            !DeskCenterConfigService.desktopLyricsEnabled)
-                                    }
-                        }
-                    }
-                        }
-                    }
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "shortcuts"
-                sourceComponent: Component {
-                    Item {
-                anchors.fill: parent
-                Row {
-                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 18; rightMargin: 18; topMargin: 44 }
-                    spacing: 10
-                    Repeater {
-                        model: [
-                            { id: "library", label: I18n.tr("App Library") },
-                            { id: "refresh", label: I18n.tr("Refresh Weather") },
-                            { id: "media", label: I18n.tr("Media") }
-                        ]
-                        delegate: Rectangle {
-                            required property var modelData
-                            width: (parent.width - parent.spacing * 2) / 3
-                            height: 58
-                            radius: 15
-                            color: Qt.rgba(1, 1, 1, 0.14)
-                            border.width: 1
-                            border.color: Qt.rgba(1, 1, 1, 0.15)
-                            GlassText { anchors.centerIn: parent; text: modelData.label; color: "white"; font { pixelSize: 12; weight: Font.DemiBold } }
-                            MouseArea {
-                                anchors.fill: parent
-                                cursorShape: Qt.PointingHandCursor
-                                onClicked: {
-                                    if (modelData.id === "library")
-                                        AppLauncherService.show()
-                                    else if (modelData.id === "refresh")
-                                        WeatherService.refresh()
-                                    else
-                                        MediaService.togglePlayPause()
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "todo"
-                sourceComponent: Component {
-                    Item {
-                        id: todoContent
-                        anchors.fill: parent
-                        readonly property string widgetSize: card.displayRows > 1 ? "large"
-                            : card.displayColumns > 1 ? "medium" : "small"
-                        readonly property int itemLimit: widgetSize === "large" ? 6
-                            : widgetSize === "medium" ? (PimWidgetService.errorMessage ? 2 : 3) : 0
-                        readonly property var tasks:
-                            PimWidgetService.pendingTodos(itemLimit)
-                        // In the shared glass modes the card material is the
-                        // face: skip the opaque reminder-red band and pick
-                        // content colours from the appearance service, the
-                        // same way the clock and calendar widgets do.
-
-                        MouseArea {
-                            anchors.fill: parent
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: IndependentAppWidgetService.open("calendar", { view: "today" })
-                        }
-
-                        // A parent Item's `clip` is rectangular, not rounded.
-                        // Draw the red band with its own top corners instead of
-                        // letting a rectangular child cover the card silhouette.
-                        Canvas {
-                            id: todoHeader
-                            anchors { left: parent.left; right: parent.right; top: parent.top }
-                            height: Math.min(42, parent.height * 0.28)
-                            visible: !AppearanceTokens.content.onBackdrop
-                            onPaint: {
-                                const ctx = getContext("2d")
-                                const corner = Math.min(card.radius, height)
-                                ctx.reset()
-                                if (!visible)
-                                    return
-                                ctx.fillStyle = "#ff5d66"
-                                ctx.beginPath()
-                                ctx.moveTo(0, height)
-                                ctx.lineTo(0, corner)
-                                ctx.quadraticCurveTo(0, 0, corner, 0)
-                                ctx.lineTo(width - corner, 0)
-                                ctx.quadraticCurveTo(width, 0, width, corner)
-                                ctx.lineTo(width, height)
-                                ctx.closePath()
-                                ctx.fill()
-                            }
-                            onVisibleChanged: requestPaint()
-                            Connections {
-                                target: AppearanceTokens.content
-                                function onOnBackdropChanged() { todoHeader.requestPaint() }
-                            }
-                        }
-                        Text {
-                            anchors { left: parent.left; top: parent.top; margins: 14 }
-                            text: I18n.tr("Reminders")
-                            color: AppearanceTokens.content.ink("white")
-                            font { pixelSize: 13; weight: Font.Bold }
-                        }
-                        Text {
-                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
-                            anchors.centerIn: parent
-                            anchors.verticalCenterOffset: 12
-                            text: String(PimWidgetService.pendingTodos(99).length)
-                            color: AppearanceTokens.content.ink("#33333a")
-                            font { pixelSize: 38; weight: Font.DemiBold }
-                        }
-                        Text {
-                            visible: todoContent.widgetSize === "small" && PimWidgetService.available
-                            anchors { horizontalCenter: parent.horizontalCenter; bottom: parent.bottom; bottomMargin: 14 }
-                            text: PimWidgetService.cached ? I18n.tr("Cached data") : I18n.tr("todos")
-                            color: AppearanceTokens.content.ink("#686873", 0.6)
-                            font.pixelSize: 10
-                        }
-                        Column {
-                            visible: todoContent.widgetSize !== "small"
-                            anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; topMargin: 50; bottomMargin: todoStatus.visible ? todoStatus.height + 14 : 10 }
-                            spacing: 4
-                            Repeater {
-                                model: todoContent.tasks
-                                delegate: Item {
-                                    required property var modelData
-                                    width: parent.width
-                                    height: Math.max(24,
-                                        (parent.height - Math.max(0, todoContent.tasks.length - 1) * parent.spacing)
-                                        / Math.max(1, todoContent.tasks.length))
-                                    Rectangle {
-                                        width: 13; height: 13; radius: 7
-                                        anchors { left: parent.left; verticalCenter: parent.verticalCenter }
-                                        color: "transparent"
-                                        border.width: 1.5
-                                        border.color: AppearanceTokens.content.accent(AppearanceTokens.colors.primary, "#ff5d66", 0.7)
-                                    }
-                                    Text {
-                                        anchors { left: parent.left; right: dueText.left; verticalCenter: parent.verticalCenter; leftMargin: 22; rightMargin: 8 }
-                                        text: String(PimWidgetService.value(parent.modelData, "title",
-                                            I18n.tr("Untitled task")))
-                                        color: AppearanceTokens.content.ink("#303038")
-                                        elide: Text.ElideRight
-                                        font { pixelSize: 11; weight: Font.Medium }
-                                    }
-                                    Text {
-                                        id: dueText
-                                        anchors { right: parent.right; verticalCenter: parent.verticalCenter }
-                                        text: String(PimWidgetService.value(parent.modelData, "due", "")).slice(0, 10)
-                                        color: AppearanceTokens.content.onBackdrop
-                                            ? (text && text < PimWidgetService.today
-                                                ? IconAppearanceService.glassContentColor()
-                                                : IconAppearanceService.glassContentColor(0.6))
-                                            : (text && text < PimWidgetService.today ? "#e23d52" : "#7b7b84")
-                                        font.pixelSize: 9
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent
-                                        cursorShape: Qt.PointingHandCursor
-                                        onClicked: IndependentAppWidgetService.open("calendar", {
-                                            view: "reminders", item: String(PimWidgetService.value(parent.modelData,
-                                                "id", PimWidgetService.value(parent.modelData, "seriesId", "")))
-                                        })
-                                    }
-                                }
-                            }
-                            Text {
-                                visible: todoContent.tasks.length === 0
-                                    && (PimWidgetService.ready || PimWidgetService.showFeedback)
-                                anchors.horizontalCenter: parent.horizontalCenter
-                                // Only a ready snapshot can mean all tasks are done.
-                                // App installation is handled when the card is opened.
-                                text: PimWidgetService.ready && !PimWidgetService.errorMessage
-                                    ? I18n.tr("All done for today")
-                                    : (PimWidgetService.errorMessage || I18n.tr("Todo service not connected"))
-                                width: Math.max(0, parent.width - 16)
-                                horizontalAlignment: Text.AlignHCenter
-                                wrapMode: Text.Wrap
-                                maximumLineCount: 3
-                                elide: Text.ElideRight
-                                color: AppearanceTokens.content.ink("#6c6c75", 0.6)
-                                font.pixelSize: 11
-                            }
-                        }
-                        Text {
-                            id: todoStatus
-                            visible: todoContent.widgetSize === "small" ? !PimWidgetService.available
-                                : todoContent.tasks.length > 0 && !!PimWidgetService.errorMessage
-                            anchors { left: parent.left; right: parent.right; bottom: parent.bottom; leftMargin: 14; rightMargin: 14; bottomMargin: 10 }
-                            text: PimWidgetService.errorMessage || I18n.tr("Todo service not connected")
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.Wrap
-                            maximumLineCount: todoContent.widgetSize === "small" ? 3 : 2
-                            elide: Text.ElideRight
-                            color: AppearanceTokens.content.ink("#6c6c75", 0.6)
-                            font.pixelSize: todoContent.widgetSize === "small" ? 11 : 9
-                        }
-                    }
-                }
-            }
-
-            Loader {
-                anchors.fill: parent
-                active: card.visible && card.modelData.id === "calendar"
-                sourceComponent: Component {
-                    Item {
-	                id: calendarContent
-	                anchors.fill: parent
-                readonly property int year: calendarClock.dayDate.getFullYear()
-                readonly property int month: calendarClock.dayDate.getMonth()
-                // Monday-first month layout: 星期一 is the first column and
-                // 星期日 is the final column, matching the requested reading order.
-                readonly property int firstWeekday: (new Date(year, month, 1).getDay() + 6) % 7
-                readonly property int daysInMonth: new Date(year, month + 1, 0).getDate()
-                // Do not reserve a sixth, empty week: five-week months use
-                // the whole panel height instead of ending with a blank band.
-                readonly property int weekCount: Math.ceil((firstWeekday + daysInMonth) / 7)
-                readonly property int headerHeight: 38
-                readonly property bool narrow: card.displayColumns === 1
-                readonly property string widgetSize: card.displayRows > 1 ? "large"
-                    : card.displayColumns > 1 ? "medium" : "small"
-                readonly property var todayEvents: PimWidgetService.eventsForToday(
-                    widgetSize === "large" ? 3 : 1)
-
-                MouseArea {
-                    anchors.fill: parent
-                    cursorShape: Qt.PointingHandCursor
-                    onClicked: IndependentAppWidgetService.open("calendar", {
-                        date: Qt.formatDate(clock.date, "yyyy-MM-dd")
-                    })
-                }
-
-                Rectangle {
-                    // Draw the pale right pane before the header. Its own
-                    // rounded lower corner keeps it from covering the card
-                    // outline even though QML clipping is rectangular.
-                    anchors { top: parent.top; bottom: parent.bottom; right: parent.right; left: parent.left; leftMargin: parent.width * 0.42 }
-	                    radius: card.radius
-	                    color: "#fafafa"
-	                    visible: !AppearanceTokens.content.onBackdrop
-                }
-                Canvas {
-                    id: calendarHeader
-                    anchors { left: parent.left; right: parent.right; top: parent.top }
-                    height: calendarContent.headerHeight
-                    onPaint: {
-                        const ctx = getContext("2d")
-                        const corner = Math.min(card.radius, height)
-	                        ctx.reset()
-	                        if (AppearanceTokens.content.onBackdrop)
-	                            return
-                        ctx.fillStyle = "#ff5d66"
-                        ctx.beginPath()
-                        ctx.moveTo(0, height)
-                        ctx.lineTo(0, corner)
-                        ctx.quadraticCurveTo(0, 0, corner, 0)
-                        ctx.lineTo(width - corner, 0)
-                        ctx.quadraticCurveTo(width, 0, width, corner)
-                        ctx.lineTo(width, height)
-                        ctx.closePath()
-                        ctx.fill()
-	                }
-	                Connections {
-	                    target: AppearanceTokens.content
-	                    function onOnBackdropChanged() { calendarHeader.requestPaint() }
-	                }
-                }
-                Rectangle {
-                    anchors { left: parent.left; top: parent.top; bottom: parent.bottom; leftMargin: parent.width * 0.42; topMargin: calendarContent.headerHeight; bottomMargin: 8 }
-                    visible: !calendarContent.narrow
-                    width: 1
-	                    color: AppearanceTokens.content.accent(AppearanceTokens.colors.outlineVariant, Qt.rgba(0, 0, 0, 0.10), 0.28)
-                }
-
-                Text {
-                    anchors.centerIn: calendarHeader
-                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("yyyy/MM"))
-                    horizontalAlignment: Text.AlignHCenter
-                    color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceForeground, "white")
-                    font { pixelSize: 15; weight: Font.Bold }
-                }
-                Text {
-                    anchors { left: parent.left; top: parent.top; leftMargin: 15; topMargin: calendarContent.headerHeight + 7 }
-                    text: I18n.fmt(calendarClock.dayDate, I18n.tr("d"))
-	                    color: AppearanceTokens.content.ink("#15151a")
-                    font { family: AppearanceTokens.typography.displayFamily; pixelSize: 32; weight: Font.DemiBold }
-                }
-                Text {
-                    anchors { left: parent.left; top: parent.top; leftMargin: 16; topMargin: calendarContent.headerHeight + 46 }
-                    text: I18n.fmt(calendarClock.dayDate, "ddd") + " · " + root.lunarDate(calendarClock.dayDate)
-	                    color: AppearanceTokens.content.ink("#4d4d55", 0.74)
-                    font { pixelSize: 10; weight: Font.DemiBold }
-                }
-                Column {
-                    visible: calendarContent.widgetSize !== "small"
-                        && !calendarContent.narrow
-                    anchors { left: parent.left; right: monthGrid.left; bottom: parent.bottom; leftMargin: 16; rightMargin: 8; bottomMargin: 10 }
-                    spacing: 3
-                    Repeater {
-                        model: calendarContent.todayEvents
-                        delegate: Text {
-                            required property var modelData
-                            width: parent.width
-                            text: "• " + String(PimWidgetService.value(modelData, "title",
-                                I18n.tr("Event")))
-                            color: AppearanceTokens.surface.pick(AppearanceTokens.colors.surfaceVariantForeground, "#4d4d55")
-                            elide: Text.ElideRight
-                            font.pixelSize: 9
-                        }
-                    }
-                    Text {
-                        visible: PimWidgetService.showFeedback
-                        width: parent.width
-                        text: PimWidgetService.errorMessage
-                        maximumLineCount: 2
-                        wrapMode: Text.Wrap
-                        color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
-                        elide: Text.ElideRight
-                        font.pixelSize: 9
-                    }
-                }
-                Text {
-                    visible: calendarContent.narrow && PimWidgetService.state !== "not-installed"
-                        && (!PimWidgetService.ready || !!IndependentAppWidgetService.launchErrors.calendar)
-                    anchors { left: parent.left; right: parent.right; top: parent.top; leftMargin: 16; rightMargin: 16; topMargin: 100 }
-                    text: PimWidgetService.errorMessage
-                    maximumLineCount: 2
-                    wrapMode: Text.Wrap
-                    elide: Text.ElideRight
-                    color: AppearanceTokens.content.ink("#9a9aa2", 0.55)
-                    font.pixelSize: 9
-                }
-                Item {
-                    id: monthGrid
-                    visible: !calendarContent.narrow || card.displayRows > 1
-                    anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; leftMargin: calendarContent.narrow ? 10 : parent.width * 0.42 + 10; rightMargin: 10; topMargin: calendarContent.narrow ? 130 : calendarContent.headerHeight + 6; bottomMargin: 7 }
-                    Row {
-                        width: parent.width
-                        height: 15
-                        Repeater {
-                            model: [I18n.tr("Mo"), I18n.tr("Tu"), I18n.tr("We"), I18n.tr("Th"),
-                                I18n.tr("Fr"), I18n.tr("Sa"), I18n.tr("Su")]
-                            delegate: Text {
-                                required property var modelData
-                                required property int index
-                                width: parent.width / 7
-                                text: modelData
-                                horizontalAlignment: Text.AlignHCenter
-	                                color: AppearanceTokens.content.ink((index >= 5 ? "#e95a63" : "#5d5d65"))
-                                font { pixelSize: 10; weight: Font.Bold }
-                            }
-                        }
-                    }
-                    Grid {
-                        anchors { left: parent.left; right: parent.right; top: parent.top; bottom: parent.bottom; topMargin: 15 }
-                        columns: 7
-                        Repeater {
-                            model: calendarContent.weekCount * 7
-                            delegate: Item {
-                                required property int index
-                                width: parent.width / 7
-                                height: parent.height / calendarContent.weekCount
-                                readonly property int day: index - calendarContent.firstWeekday + 1
-                                readonly property bool today: day === calendarClock.dayDate.getDate()
-                                    && calendarContent.month === calendarClock.dayDate.getMonth()
-                                Rectangle {
-                                    anchors.centerIn: parent
-                                    width: 16
-                                    height: 16
-                                    radius: 8
-	                                    color: parent.today
-	                                        ? AppearanceTokens.surface.pick(AppearanceTokens.colors.primary,
-	                                            AppearanceTokens.content.ink("#ef5661", 0.22))
-	                                        : "transparent"
-                                }
-                                Text {
-                                    anchors.centerIn: parent
-                                    visible: parent.day > 0 && parent.day <= calendarContent.daysInMonth
-                                    text: parent.day
-	                                    // Today's numeral sits on the scheme's primary
-	                                    // circle, so it takes the matching on-colour --
-	                                    // through the same policy exit as the circle itself
-	                                    // rather than a second style test.
-	                                    color: parent.today
-	                                        ? AppearanceTokens.surface.pick(
-	                                            AppearanceTokens.colors.primaryForeground, "white")
-	                                        : AppearanceTokens.content.ink("#29292f")
-                                    font { pixelSize: 10; weight: parent.today ? Font.Bold : Font.DemiBold }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-                }
-            }
+            contentComponent: root.resolveContentComponent(modelData)
+            contentEnabled: !root.editMode
         }
     }
 
@@ -3783,12 +1665,8 @@ PanelWindow {
                 createNewFile()
             else if (kind === "openEntry")
                 root.desktopFiles.openEntry(entry)
-            else if (kind === "rename") {
-                if (root.groupsWidgetShown)
-                    root.beginGroupsRename(entry)
-                else
-                    beginInlineRename(entry)
-            }
+            else if (kind === "rename")
+                beginInlineRename(entry)
             else if (kind === "openWithMore")
                 openWithDialog.show(entry)
             else if (kind === "trash") {
@@ -3916,17 +1794,10 @@ PanelWindow {
                 items.push(_ctxAct(I18n.tr("Open in File Manager"), "open"))
             } else {
                 // desktop background
-                items.push(_ctxAct(I18n.tr("Add Widgets…"), "addWidgets"))
                 items.push(_ctxAct(I18n.tr("Edit Widgets"), "editWidgets"))
                 items.push(_ctxAct(I18n.tr("New File"), "newFile"))
                 items.push(_ctxAct(I18n.tr("New Folder"), "newFolder"))
                 items.push(_ctxAct(I18n.tr("Paste"), "paste"))
-                items.push({ separator: true })
-                // One click, remembered state: the grouped view is a
-                // projection of the same entries, never a change to the
-                // underlying files or their saved slots.
-                items.push(_ctxCheck(I18n.tr("Grouped View"), "toggleGroupsWidget",
-                    null, root.groupsWidgetVisible))
                 items.push({ separator: true })
                 const arrange = [
                     _ctxAct(I18n.tr("By Name"), "arrangeByName"),
@@ -3978,8 +1849,7 @@ PanelWindow {
             const path = e?.path ?? ""
             const v = item?.value
             switch (cmd) {
-            case "addWidgets": root.enterWidgetEditMode(true); break
-            case "editWidgets": root.enterWidgetEditMode(false); break
+            case "editWidgets": root.enterWidgetEditMode(); break
             case "openEntry": triggerContextAction("openEntry"); break
             case "rename": triggerContextAction("rename"); break
             case "setColor": setFolderColor(path, v); break
@@ -4006,12 +1876,6 @@ PanelWindow {
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
             case "setShortcutAlignment": setShortcutAlignment(v); break
-            case "toggleGroupsWidget": {
-                AppearanceConfigService.setDeskCenterWidgetVisible("groups",
-                    !root.groupsWidgetVisible)
-                desktopFileGrid.clearDesktopSelection()
-                break
-            }
             case "refresh": triggerContextAction("refresh"); break
             // Session entries live in a submenu; without these the menu closes
             // and the command is dropped.
@@ -4093,43 +1957,6 @@ PanelWindow {
             }
         }
 
-        DropArea {
-            id: externalDesktopDrop
-            anchors.fill: parent
-            z: 20
-            // The free-slot surface owns external drops while it is visible.
-            // The grouped widget hides it, so this fallback keeps
-            // "copy to desktop" working over the widget.
-            enabled: root.groupsWidgetShown
-            onEntered: function(drag) {
-                // Ignore a desktop icon's own outgoing URI drag.
-                drag.accepted = drag.hasUrls && !drag.source
-            }
-            onDropped: function(drop) {
-                if (!drop.hasUrls || drop.source) {
-                    drop.accepted = false
-                    return
-                }
-                root.desktopFiles.importExternalUrls(drop.urls, drop.proposedAction, root.desktopOutput)
-                drop.accepted = true
-            }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            visible: externalDesktopDrop.containsDrag
-            color: Qt.rgba(1, 1, 1, 0.06)
-            border { width: 1; color: Qt.rgba(1, 1, 1, 0.32) }
-            radius: 16
-            z: 19
-            Text {
-                anchors.centerIn: parent
-                text: I18n.tr("Copy to desktop")
-                color: Qt.rgba(1, 1, 1, 0.78)
-                font { pixelSize: 13; weight: Font.DemiBold }
-            }
-        }
-
         MouseArea {
             id: desktopBackgroundPointer
             anchors.fill: parent
@@ -4202,9 +2029,6 @@ PanelWindow {
 
         FreeSlotDesktopDemo {
             id: freeSlotDesktop
-            // The grouped widget hides the icon field but never touches its
-            // slots or order, so hiding the widget restores it exactly.
-            visible: !root.groupsWidgetShown
             x: -desktopFileGrid.x
             y: -desktopFileGrid.y
             width: root.width
@@ -4256,7 +2080,7 @@ PanelWindow {
                 root.desktopFiles.openEntry(entry)
             }
             onActivityRequested: desktopFileGrid.activateKeyboard()
-            onBackgroundPressAndHold: root.enterWidgetEditMode(false)
+            onBackgroundPressAndHold: root.enterWidgetEditMode()
             // 空桌面普通单击：编辑模式下退出编辑（只收尾，位置/尺寸各自
             // 手势里已落盘），否则＝显示桌面开关。这个 MouseArea 盖住绝大
             // 部分桌面，是比背景捕获器更主要的入口。

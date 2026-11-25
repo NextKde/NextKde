@@ -1,0 +1,9 @@
+{
+  "id": "org.nextkde.example.clock",
+  "name": "数字时钟",
+  "description": "显示本地时间，宽档额外显示日期。",
+  "version": "0.1.0",
+  "sdkVersion": 1,
+  "sizes": [[2, 2], [3, 2]],
+  "defaultSize": [2, 2]
+}

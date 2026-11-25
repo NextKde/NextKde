@@ -23,6 +23,8 @@ Item {
     id: root
 
     property string title: ""
+    property Component contentComponent: null
+    property bool contentEnabled: true
     // Gallery copies paint a bounded thumbnail; they never publish compositor
     // surface shapes or blur regions into the desktop window.
     property bool preview: false
@@ -55,56 +57,124 @@ Item {
     // contain their own full-bleed header or artwork, so mask their composed
     // layer to the same continuous contour that KWin uses for glass cards. The
     // tonal backend and the KWin-backed card already have their own mask path.
-    layer.enabled: root.usesColorArtwork && !root.tonalSurface
-    layer.effect: SquircleMask {
-        cornerRadius: root.radius
-        cornerExponent: AppearanceTokens.shape.cornerExponent
-        maskWidth: root.width
-        maskHeight: root.height
-    }
-
-    clip: true
-
-    Component {
-        id: tonalSurfaceComponent
-
-        MaterialCardSurface {
-            // The surface fills this card at local (0,0); both regions read the
-            // anchor's x/y verbatim as surface coordinates, so point them at THIS
-            // wrapper (whose x/y carry the grid offset the delegate assigned)
-            // instead of the surface, or the region lands at the window origin.
-            blurAnchor: root
-            radius: root.radius
-            fillColor: root.materialSurfaceColor
-            fillOpacity: AppearanceTokens.surface.widgetOpacity
-            flowerShaped: root.shapedSurface
-        }
-    }
-
-    Component {
-        id: glassSurfaceComponent
-
-        ControlCenterCard {
-            // KWin keeps the material as the card's only paint layer; this card
-            // then exists solely to publish the blur shape and the SurfaceShape
-            // KWin paints from.
-            fallbackEnabled: false
-            // Same anchor rule as the tonal surface above.
-            blurAnchor: root
-            cardRadius: root.radius
-            // Desktop widgets keep the same see-through level as the Dock.
-            cardScrimLevel: "subtle"
-        }
-    }
-
-    Loader {
-        id: surfaceBackend
+    //
+    // This clip/mask lives on `surface` (below), not on `root` itself: the
+    // host (DeskCenterWindow) parents edit-mode affordances -- the remove
+    // badge, settings affordance, resize handle -- directly onto this
+    // component as root's own children, and those are deliberately drawn
+    // hanging half outside the card's corner (see the remove badge's
+    // negative anchor margins). Clipping at root would cut that overhang off
+    // along with anything else drawn outside the card's rectangle.
+    Item {
+        id: surface
         anchors.fill: parent
-        // The tonal form always has a surface; the glass form only owns one when
-        // the card is not drawing colour artwork of its own.
-        sourceComponent: root.preview ? null : root.tonalSurface
-            ? tonalSurfaceComponent
-            : (root.usesColorArtwork ? null : glassSurfaceComponent)
+        clip: true
+        layer.enabled: root.usesColorArtwork && !root.tonalSurface
+        layer.effect: SquircleMask {
+            cornerRadius: root.radius
+            cornerExponent: AppearanceTokens.shape.cornerExponent
+            maskWidth: surface.width
+            maskHeight: surface.height
+        }
+
+        Component {
+            id: tonalSurfaceComponent
+
+            MaterialCardSurface {
+                // The surface fills this card at local (0,0); both regions read the
+                // anchor's x/y verbatim as surface coordinates, so point them at THIS
+                // wrapper (whose x/y carry the grid offset the delegate assigned)
+                // instead of the surface, or the region lands at the window origin.
+                blurAnchor: root
+                radius: root.radius
+                fillColor: root.materialSurfaceColor
+                fillOpacity: AppearanceTokens.surface.widgetOpacity
+                flowerShaped: root.shapedSurface
+            }
+        }
+
+        Component {
+            id: glassSurfaceComponent
+
+            ControlCenterCard {
+                // KWin keeps the material as the card's only paint layer; this card
+                // then exists solely to publish the blur shape and the SurfaceShape
+                // KWin paints from.
+                fallbackEnabled: false
+                // Same anchor rule as the tonal surface above.
+                blurAnchor: root
+                cardRadius: root.radius
+                // Desktop widgets keep the same see-through level as the Dock.
+                cardScrimLevel: "subtle"
+            }
+        }
+
+        Loader {
+            id: surfaceBackend
+            anchors.fill: parent
+            // The tonal form always has a surface; the glass form only owns one when
+            // the card is not drawing colour artwork of its own.
+            sourceComponent: root.preview ? null : root.tonalSurface
+                ? tonalSurfaceComponent
+                : (root.usesColorArtwork ? null : glassSurfaceComponent)
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: root.radius
+            visible: root.preview && (!root.usesColorArtwork || root.tonalSurface)
+            color: root.tonalSurface ? root.materialSurfaceColor : AppearanceTokens.colors.layer1
+            border.width: 1
+            border.color: AppearanceTokens.colors.outlineVariant
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: root.radius
+            visible: root.usesColorArtwork && !root.tonalSurface
+            gradient: Gradient {
+                GradientStop { position: 0; color: root.startColor }
+                GradientStop { position: 1; color: root.endColor }
+            }
+        }
+
+        // A broad, low-contrast bloom makes colour cards feel like widgets rather
+        // than rectangular panels, while never running beneath the text itself.
+        Rectangle {
+            visible: root.showSurface && root.usesColorArtwork && !root.tonalSurface
+            width: parent.width * 0.78
+            height: width
+            radius: width / 2
+            x: parent.width * 0.48
+            y: -height * 0.44
+            color: Qt.rgba(1, 1, 1, 0.1)
+        }
+
+        Loader {
+            id: contentLoader
+            anchors.fill: parent
+            active: root.visible
+            enabled: root.contentEnabled && !root.preview
+            sourceComponent: root.contentComponent
+        }
+
+        Text {
+            visible: root.title.length > 0
+            text: root.title
+            color: AppearanceTokens.surface.widgetForeground
+
+            anchors {
+                left: parent.left
+                top: parent.top
+                leftMargin: 18
+                topMargin: 15
+            }
+
+            font {
+                pixelSize: 12
+                weight: Font.DemiBold
+            }
+        }
     }
 
     // Published (as composite member) to the window's single blur region union.
@@ -113,52 +183,9 @@ Item {
     readonly property var blurRegion:
         surfaceBackend.item ? surfaceBackend.item.blurRegion : null
 
-    Rectangle {
-        anchors.fill: parent
-        radius: root.radius
-        visible: root.preview && (!root.usesColorArtwork || root.tonalSurface)
-        color: root.tonalSurface ? root.materialSurfaceColor : AppearanceTokens.colors.layer1
-        border.width: 1
-        border.color: AppearanceTokens.colors.outlineVariant
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        radius: root.radius
-        visible: root.usesColorArtwork && !root.tonalSurface
-        gradient: Gradient {
-            GradientStop { position: 0; color: root.startColor }
-            GradientStop { position: 1; color: root.endColor }
-        }
-    }
-
-    // A broad, low-contrast bloom makes colour cards feel like widgets rather
-    // than rectangular panels, while never running beneath the text itself.
-    Rectangle {
-        visible: root.showSurface && root.usesColorArtwork && !root.tonalSurface
-        width: parent.width * 0.78
-        height: width
-        radius: width / 2
-        x: parent.width * 0.48
-        y: -height * 0.44
-        color: Qt.rgba(1, 1, 1, 0.1)
-    }
-
-    Text {
-        visible: root.title.length > 0
-        text: root.title
-        color: AppearanceTokens.surface.widgetForeground
-
-        anchors {
-            left: parent.left
-            top: parent.top
-            leftMargin: 18
-            topMargin: 15
-        }
-
-        font {
-            pixelSize: 12
-            weight: Font.DemiBold
-        }
-    }
+    // Lets a settings affordance built by the host (DeskCenterWindow) reach
+    // into the same running content instance instead of creating a second,
+    // out-of-sync one -- a package's settings must edit the live instance's
+    // data service, not a throwaway copy.
+    readonly property Item loadedContent: contentLoader.item
 }
