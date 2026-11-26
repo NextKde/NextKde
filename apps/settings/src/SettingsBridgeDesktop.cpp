@@ -1,6 +1,5 @@
 #include "SettingsBridge.h"
 
-#include <QDBusArgument>
 #include <QDBusError>
 #include <QDBusMetaType>
 #include <QDBusConnection>
@@ -472,17 +471,14 @@ void SettingsBridge::startIntegrationProbe(const QVariantMap& replyMap)
             // and Properties.Get wraps its reply in a D-Bus variant whose
             // payload demarshals to QStringList.
             QStringList loadedEffects;
-            bool kwinAvailable = false;
             if (!interrupted) {
-                QDBusInterface effectsService(QStringLiteral("org.kde.KWin"),
-                    QStringLiteral("/Effects"),
-                    QStringLiteral("org.freedesktop.DBus.Properties"), sessionBus);
-                effectsService.setTimeout(kDbusProbeTimeoutMs);
-                const QDBusMessage propertyReply = effectsService.call(QStringLiteral("Get"),
-                    QStringLiteral("org.kde.kwin.Effects"), QStringLiteral("loadedEffects"));
-                kwinAvailable = propertyReply.type() == QDBusMessage::ReplyMessage
-                    && !propertyReply.arguments().isEmpty();
-                if (kwinAvailable) {
+                const QDBusMessage propertyReply = boundedBusCall(sessionBus,
+                    QStringLiteral("org.kde.KWin"), QStringLiteral("/Effects"),
+                    QStringLiteral("org.freedesktop.DBus.Properties"), QStringLiteral("Get"),
+                    { QVariant(QStringLiteral("org.kde.kwin.Effects")),
+                        QVariant(QStringLiteral("loadedEffects")) });
+                if (propertyReply.type() == QDBusMessage::ReplyMessage
+                    && !propertyReply.arguments().isEmpty()) {
                     const QVariant value = propertyReply.arguments().constFirst();
                     const QVariant payload
                         = value.metaType() == QMetaType::fromType<QDBusVariant>()
