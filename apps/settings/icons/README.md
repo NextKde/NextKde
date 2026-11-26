@@ -17,7 +17,8 @@ were performed in the dedicated VM; no application was run on the host.
 
 `nextkde-logo.svg` and `nextkde-logo-dark.svg` mirror the copies in
 `docs/images/` for the About page header; the installed Settings app has no
-checkout, so it cannot read `docs/` at runtime.
+checkout, so it cannot read `docs/` at runtime. The standalone login splash
+also carries this pair under `shell/splash/`; keep all three copies in sync.
 
 `kde-symbolic.svg` and `kde-symbolic-dark.svg` retain the KDE mark from Breeze
 Icons 6.31.0, under its LGPL-3.0-or-later / LGPL-2.1-only terms. These identify the

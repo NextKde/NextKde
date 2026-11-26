@@ -129,6 +129,8 @@ public:
     Q_INVOKABLE void updateBarMacStyle(bool enabled);
     Q_INVOKABLE void updateBarMacTint(double tint);
     Q_INVOKABLE void updateStartupMotion(bool reduced, int duration);
+    Q_INVOKABLE void updateSplashBackgroundMode(const QString& mode);
+    Q_INVOKABLE void updateSplashBackgroundImage(const QString& pathOrUrl);
     Q_INVOKABLE void updateDockWindowAnimationStyle(const QString& style);
     Q_INVOKABLE void updateDesktopFontFamily(const QString& family);
     Q_INVOKABLE void resetAppearanceStrengths();

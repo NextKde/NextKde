@@ -85,6 +85,11 @@ def run(base_env=None):
             print(f'Loading installed Shell after {kind} damage', flush=True)
             load(installed, env, base / 'shell.log')
             if kind == 'original':
+                # The login splash is a second Quickshell root with a local
+                # policy import; prove deployment materializes it and the
+                # installed copy loads without the source tree.
+                print('Loading installed login splash', flush=True)
+                load(installed / 'splash', env, base / 'splash.log')
                 # Prove this is a runtime regression gate, not merely a file
                 # copier check: removing a real imported catalog must fail.
                 (installed / 'shared/qml/i18n/ZhCatalog.mjs').unlink()

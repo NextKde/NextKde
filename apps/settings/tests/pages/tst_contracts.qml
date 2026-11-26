@@ -191,6 +191,7 @@ Item {
         function test_settingsDropdowns_data() {
             return [
                 {tag:"material", name:"ThemeSettingsPage", objectName:"themeMaterialStyleSelect", count:3},
+                {tag:"startup-background", name:"ThemeSettingsPage", objectName:"splashBackgroundModeSelect", count:2},
                 {tag:"display-material", name:"DisplaySettingsPage", objectName:"displayMaterialStyleSelect", count:3},
                 {tag:"launcher", name:"LauncherSettingsPage", objectName:"launcherDisplayModeSelect", count:4},
                 {tag:"icon-presets", name:"IconAppearanceSection", objectName:"iconTintPresetSelect", count:4}
@@ -208,6 +209,36 @@ Item {
             compare(picker.sheetColor, "#f0f0f1")
             compare(picker.height, 24)
             compare(picker.textRole, "label")
+        }
+        function test_splash_image_chooser_visibility_data() {
+            return [
+                {tag: "solid", mode: "solid", image: ""},
+                {tag: "image", mode: "image", image: "/home/u/splash.png"}
+            ]
+        }
+        function test_splash_image_chooser_visibility(data) {
+            const page = makePage("ThemeSettingsPage")
+            page.splashBackgroundMode = data.mode
+            page.splashBackgroundImage = data.image
+            const chooser = findChild(page, "splashImageChooser")
+            verify(chooser !== null)
+            verify(chooser.visible, "the chooser must stay reachable in " + data.tag + " mode")
+        }
+        function test_splash_background_state_validation() {
+            const page = makePage("ThemeSettingsPage")
+            page.applyState({
+                shellStyle: "macos",
+                splashBackgroundMode: "video",
+                splashBackgroundImage: "/home/u/splash.png"
+            })
+            compare(page.splashBackgroundMode, "solid")
+            compare(page.splashBackgroundImage, "/home/u/splash.png")
+            page.applyState({
+                shellStyle: "macos",
+                splashBackgroundMode: "image",
+                splashBackgroundImage: "/home/u/splash.png"
+            })
+            compare(page.splashBackgroundMode, "image")
         }
         function test_theme_reports_confirmed_state() {
             const page = makePage("ThemeSettingsPage")

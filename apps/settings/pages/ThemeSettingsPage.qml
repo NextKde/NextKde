@@ -1,10 +1,12 @@
 import Kos.Demo as Demo
 import QtQuick
 import QtQuick.Controls
+import QtQuick.Dialogs as Platform
 import QtQuick.Layouts
 import QtQuick.Window
 import "../../../shared/qml/controls" as LiquidControls
 import "../../../shared/qml/foundation" as Foundation
+import "../../../shared/qml/foundation/SplashBackgroundPolicy.mjs" as SplashBackgroundPolicy
 import "../../../shared/qml/i18n"
 import "../components" as Controls
 
@@ -23,6 +25,15 @@ ColumnLayout {
     property var bridge: null
     property bool reduceMotion: false
     property int startupRevealDuration: 1500
+    // The login splash's optional background picture. The Shell persists both
+    // fields in the appearance config; its separate splash instance reads the
+    // same file before this window exists.
+    property string splashBackgroundMode: "solid"
+    property string splashBackgroundImage: ""
+    readonly property string splashImageName: {
+        const path = splashBackgroundImage;
+        return path.slice(path.lastIndexOf("/") + 1);
+    }
     // Offered durations. AppearanceConfigService accepts anything in
     // 800..2000 and rounds to whole milliseconds.
     // 800 is not offered as a fresh choice, but legacy configs clamp to it and
@@ -89,6 +100,10 @@ ColumnLayout {
             return;
         reduceMotion = state.reduceMotion === true;
         startupRevealDuration = Number(state.startupRevealDuration ?? 1500);
+        splashBackgroundMode =
+            SplashBackgroundPolicy.isValidBackgroundMode(state.splashBackgroundMode)
+                ? state.splashBackgroundMode : "solid";
+        splashBackgroundImage = String(state.splashBackgroundImage ?? "");
         shellStyle = state.shellStyle;
         // The window palette follows the same style. ControlForm is NOT
         // assigned here: reading themePage.materialForm before this line would
@@ -156,6 +171,16 @@ ColumnLayout {
         bridge.updateLanguage(lang);
     }
 
+    function isValidSplashBackgroundMode(mode) {
+        return SplashBackgroundPolicy.isValidBackgroundMode(mode);
+    }
+
+    function setSplashBackgroundMode(mode) {
+        if (!bridge || !isValidSplashBackgroundMode(mode))
+            return;
+        bridge.updateSplashBackgroundMode(mode);
+    }
+
     Connections {
         target: themePage.bridge
         enabled: themePage.bridge !== null
@@ -185,6 +210,21 @@ ColumnLayout {
         refresh();
         if (bridge)
             bridge.i18nSnapshot();
+    }
+
+    // Picks the picture the login splash paints. The bridge converts the
+    // dialog's URL to a local path; the Shell validates and persists it, and
+    // switches the splash mode to "image" in the same save.
+    Platform.FileDialog {
+        id: splashImageDialog
+        title: I18n.tr("Choose splash image")
+        fileMode: Platform.FileDialog.OpenFile
+        nameFilters: [I18n.tr("Images (*.jpg *.jpeg *.png *.webp *.bmp *.avif)")]
+        onAccepted: {
+            if (themePage.bridge
+                    && typeof themePage.bridge.updateSplashBackgroundImage === "function")
+                themePage.bridge.updateSplashBackgroundImage(selectedFile.toString());
+        }
     }
 
     // Existing appearance adapter retains preview/commit/cancel and confirmed state.
@@ -360,6 +400,40 @@ ColumnLayout {
                 currentIndex: themePage.revealDurationIndex()
                 onSelectionChanged: index => themePage.bridge.updateStartupMotion(
                     themePage.reduceMotion, themePage.startupRevealOptions[index])
+            }
+        }
+        Demo.SettingsItem {
+            title: I18n.tr("Splash background")
+            description: I18n.tr("Solid follows the light or dark appearance; an image is shown full screen while the desktop loads")
+            Controls.SettingsSelect {
+                objectName: "splashBackgroundModeSelect"
+                colors: themePage.colors
+                materialForm: themePage.materialForm
+                enabled: themePage.bridge !== null
+                textRole: "label"
+                model: [
+                    { id: "solid", label: I18n.tr("Solid color") },
+                    { id: "image", label: I18n.tr("Image") }
+                ]
+                currentIndex: Math.max(0, model.findIndex(function(option) {
+                    return option.id === themePage.splashBackgroundMode
+                }))
+                onSelectionChanged: function(index) {
+                    themePage.setSplashBackgroundMode(model[index].id)
+                }
+            }
+        }
+        Demo.SettingsItem {
+            title: I18n.tr("Splash image")
+            description: themePage.splashImageName.length > 0
+                ? themePage.splashImageName
+                : I18n.tr("No image chosen; the solid background stays until one is picked")
+            Controls.SettingsTextButton {
+                objectName: "splashImageChooser"
+                label: I18n.tr("Choose image…")
+                colors: themePage.colors
+                enabled: themePage.bridge !== null
+                onClicked: splashImageDialog.open()
             }
         }
     }

@@ -63,6 +63,10 @@ class ShellDeployment(unittest.TestCase):
         for name in ('I18n.qml', 'ZhCatalog.mjs', 'PtBrCatalog.mjs', 'SystemLanguage.mjs'):
             self.assertEqual((self.output / 'shared/qml/i18n' / name).read_bytes(),
                              (self.shared / 'i18n' / name).read_bytes())
+        splash_policy = self.output / 'splash/SplashBackgroundPolicy.mjs'
+        self.assertFalse(splash_policy.is_symlink())
+        self.assertEqual(splash_policy.read_bytes(),
+                         (self.shared / 'foundation/SplashBackgroundPolicy.mjs').read_bytes())
 
     def test_source_alias_variants(self):
         for kind in ('original', 'directory', 'file', 'dangling', 'missing'):

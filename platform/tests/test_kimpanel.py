@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise production takeover against a fake Fcitx/KWin on a private bus."""
 import configparser
+import dbus
 import json
 import os
 from pathlib import Path
@@ -105,14 +106,23 @@ with tempfile.TemporaryDirectory(prefix='kos-kimpanel-') as directory:
             return [json.loads(line) for line in (root / 'trace').read_text().splitlines()]
         def clear_choice():
             (root / 'config/kos/inputmethod.json').unlink(missing_ok=True)
+        def wait_panel_owned(owned):
+            bus = dbus.SessionBus()
+            deadline = time.monotonic() + 5
+            while bus.name_has_owner('org.nextkde.FcitxPanel') != owned:
+                assert time.monotonic() < deadline, \
+                    'fake Fcitx panel D-Bus ownership did not settle'
+                time.sleep(.01)
         run('off')
         assert trace() == [], 'default-off construction changed Fcitx'
         for problem in ('missing-adapter', 'wrong-version'):
             (root / problem).touch()
+            wait_panel_owned(problem != 'missing-adapter')
             run('failure')
             assert trace() == [], 'failed adapter negotiation changed Fcitx addons'
             assert not (root / 'config/kos/inputmethod-recovery.json').exists()
             (root / problem).unlink()
+            wait_panel_owned(True)
             clear_choice()
         for mode in ('toggle', 'disconnect'):
             run(mode)

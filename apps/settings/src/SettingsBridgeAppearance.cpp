@@ -6,6 +6,7 @@
 #include <QJsonDocument>
 #include <QSettings>
 #include <QStandardPaths>
+#include <QUrl>
 
 namespace {
 
@@ -236,6 +237,23 @@ void SettingsBridge::updateStartupMotion(bool reduced, int duration)
         reduced ? QStringLiteral("true") : QStringLiteral("false"), QString::number(duration) });
 }
 
+void SettingsBridge::updateSplashBackgroundMode(const QString& mode)
+{
+    callAppearance({ QStringLiteral("updateSplashBackgroundMode"), mode });
+}
+
+void SettingsBridge::updateSplashBackgroundImage(const QString& pathOrUrl)
+{
+    // FileDialog hands the page a URL. The shell persists and the splash
+    // paints a local path, so decode here once; an already-plain path passes
+    // through unchanged and keeps filename characters such as '#' and '?'.
+    const bool isFileUrl = pathOrUrl.startsWith(
+        QStringLiteral("file:"), Qt::CaseInsensitive);
+    const QUrl url(pathOrUrl);
+    callAppearance({ QStringLiteral("updateSplashBackgroundImage"),
+        isFileUrl && url.isLocalFile() ? url.toLocalFile() : pathOrUrl });
+}
+
 void SettingsBridge::updateDockWindowAnimationStyle(const QString& style)
 {
     callAppearance({ QStringLiteral("updateDockWindowAnimationStyle"), style });
@@ -361,6 +379,12 @@ QVariantMap SettingsBridge::appearanceSnapshotFromReply(const QString& payload)
         { QStringLiteral("barMacTint"), object.value(QStringLiteral("barMacTint")).toDouble(0.30) },
         { QStringLiteral("reduceMotion"), object.value(QStringLiteral("reduceMotion")).toBool() },
         { QStringLiteral("startupRevealDuration"), object.value(QStringLiteral("startupRevealDuration")).toInt(1500) },
+        // Older shells have neither key; the fallbacks are the solid surface
+        // and no picture, which is exactly what those shells render.
+        { QStringLiteral("splashBackgroundMode"),
+            object.value(QStringLiteral("splashBackgroundMode")).toString(QStringLiteral("solid")) },
+        { QStringLiteral("splashBackgroundImage"),
+            object.value(QStringLiteral("splashBackgroundImage")).toString() },
         { QStringLiteral("dockWindowAnimationStyle"),
             object.value(QStringLiteral("dockWindowAnimationStyle")).toString() },
         { QStringLiteral("desktopFontAvailable"), object.contains(QStringLiteral("desktopFontFamily")) },
