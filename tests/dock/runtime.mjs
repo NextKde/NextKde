@@ -259,6 +259,80 @@ ListModel {
             }
         }
     },
+    "middle-click": async () => {
+        // Loads the shipping DockIcon offscreen and drives real synthetic
+        // middle/left/right presses through its MouseArea. Nothing is
+        // launched: the fixture observes DockIcon's own newWindowRequested,
+        // activate and contextRequested signals, while model.test.mjs asserts
+        // that DockContainer routes the signal to
+        // DockModelService.launchNewWindow.
+        const repository = fileURLToPath(new URL("../..", import.meta.url));
+        const shell = join(repository, "shell");
+
+        const directory = mkdtempSync(join(tmpdir(), "kos-dock-middle-click-"));
+        try {
+            copyFileSync(new URL("./middle-click.qml", import.meta.url),
+                join(directory, "shell.qml"));
+            symlinkSync(join(shell, "desktop"), join(directory, "desktop"), "dir");
+            symlinkSync(join(shell, "shared"), join(directory, "shared"), "dir");
+            symlinkSync(join(shell, "Kos"), join(directory, "Kos"), "dir");
+
+            // An empty config home keeps the default shell style, matching
+            // hover-hit's isolation from the machine running the test.
+            const configHome = join(directory, "config");
+            mkdirSync(configHome, { recursive: true });
+            const runtimeDir = join(directory, "runtime");
+            mkdirSync(runtimeDir, { mode: 0o700 });
+
+            // --no-color keeps the post-PASS teardown filter below matching:
+            // Quickshell paints the "WARN scene:" prefix with ANSI escapes
+            // otherwise, and a filter that cannot match would silently tolerate
+            // nothing at all.
+            const result = spawnSync(process.argv[3] || "quickshell",
+                ["-p", directory, "--no-color"], {
+                    encoding: "utf8",
+                    timeout: 20000,
+                    env: {
+                        ...process.env,
+                        QT_QPA_PLATFORM: "offscreen",
+                        QT_QUICK_BACKEND: "software",
+                        XDG_CONFIG_HOME: configHome,
+                        XDG_STATE_HOME: join(directory, "state"),
+                        XDG_RUNTIME_DIR: runtimeDir,
+                        WAYLAND_DISPLAY: "",
+                        DISPLAY: "",
+                    },
+                });
+
+            const output = (result.stdout || "") + (result.stderr || "");
+            assert.equal(result.error, undefined, String(result.error));
+            assert.equal(result.status, 0, output);
+            assert.match(output, /DOCK_MIDDLE_CLICK_PASS/);
+            // Singleton teardown after Qt.quit() can emit the known DockIcon
+            // bool/double warnings recorded for hover-hit and magnification.
+            // They happen after the probes, so tolerate only those after the
+            // PASS marker; anything during the interaction still fails.
+            const passedAt = output.indexOf("DOCK_MIDDLE_CLICK_PASS");
+            const checkedOutput = output.slice(0, passedAt)
+                + output.slice(passedAt).replace(
+                    /^.*WARN scene: @desktop\/modules\/dock\/DockIcon\.qml\[\d+:\d+\]: Unable to assign \[undefined\] to (?:bool|double)\r?\n/gm, "");
+            // A QML error during the probes is the regression this case exists
+            // to catch, so the exception list stays the same as hover-hit's.
+            assert.doesNotMatch(checkedOutput,
+                /FAIL |ReferenceError|TypeError|Binding loop|is not a type|is not a function|Cannot assign|Unable to assign/,
+                output);
+
+            for (const line of output.split("\n"))
+                if (line.includes("REPORT ")) console.log(line.slice(line.indexOf("REPORT ")));
+            console.log("Dock middle-click: new-window gesture, unchanged left/right click, edit suppression and hold guard passed");
+        } finally {
+            try {
+                rmSync(directory, { recursive: true, force: true });
+            } catch {
+                console.error(`left ${directory} for the system temp reaper`);
+            }
+        }
+    },
     "launch-feedback": async () => {
         // Runs the shipping DockIcon through boundary, entry, tracking and exit probes.
         const repository = fileURLToPath(new URL("../..", import.meta.url));

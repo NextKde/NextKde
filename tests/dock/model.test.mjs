@@ -797,3 +797,122 @@ test("shell menus do not reserve an empty icon column", () => {
             `${path} must not reserve an icon column in context menus`);
     }
 });
+
+test("dock middle-click opens a new window for every application tile", () => {
+    const iconSource = readFileSync(
+        new URL("../../shell/desktop/modules/dock/DockIcon.qml", import.meta.url), "utf8");
+    const containerSource = readFileSync(
+        new URL("../../shell/desktop/modules/dock/DockContainer.qml", import.meta.url), "utf8");
+    const serviceSource = readFileSync(
+        new URL("../../shell/desktop/modules/dock/DockModelService.qml", import.meta.url), "utf8");
+
+    // ── DockIcon owns the pointer gesture ──
+    assert.match(iconSource, /signal newWindowRequested\(\)/,
+        "DockIcon must declare the host-facing new-window signal");
+
+    const accepted = iconSource.match(
+        /acceptedButtons:([\s\S]*?)\n\s*\/\/ Never resist pointer stealing/);
+    assert.ok(accepted,
+        "the DockIcon MouseArea acceptedButtons expression moved; update this test");
+    assert.match(accepted[1], /Qt\.MiddleButton/,
+        "the DockIcon MouseArea must accept the middle button");
+    assert.match(accepted[1],
+        /\(icon\.newWindowEnabled && icon\.appId\.length > 0\s*\?\s*Qt\.MiddleButton\s*:\s*Qt\.NoButton\)/,
+        "middle must require both the host-enabled gesture and a non-empty appId");
+
+    const clicked = iconSource.match(
+        /onClicked: function\(mouse\) \{([\s\S]*?)\n        \}\n/);
+    assert.ok(clicked, "the DockIcon onClicked handler moved; update this test");
+    const middle = clicked[1].match(
+        /if \(mouse\.button === Qt\.MiddleButton\) \{([\s\S]*?)\n            \}/);
+    assert.ok(middle, "middle-click must keep its own onClicked branch");
+    assert.match(middle[1], /icon\.newWindowRequested\(\)/,
+        "middle-click must emit the new-window request");
+    assert.match(middle[1],
+        /if \(icon\.newWindowEnabled && icon\.appId\.length > 0\)/,
+        "the emitter must require both the host-enabled gesture and a non-empty appId");
+    assert.match(middle[1], /return/,
+        "middle-click must not fall through to activate()");
+    assert.match(clicked[1], /icon\.activate\(\)/,
+        "left-click activation must remain in the same handler");
+
+    const hold = iconSource.match(
+        /onPressAndHold: function\(mouse\) \{([\s\S]*?)\n        \}/);
+    assert.ok(hold, "the DockIcon press-and-hold handler must receive the mouse event");
+    assert.match(hold[1], /mouse\.button === Qt\.MiddleButton/,
+        "a middle press-and-hold must not enter reorder/edit mode");
+    const holdMiddle = hold[1].match(
+        /if \(mouse\.button === Qt\.MiddleButton\) \{([\s\S]*?)\n            \}/);
+    assert.ok(holdMiddle, "the middle-button hold guard moved; update this test");
+    assert.match(holdMiddle[1], /mouse\.accepted\s*=\s*false/,
+        "rejecting the composed press-and-hold event keeps a held middle press a click");
+
+    // ── DockContainer routes every application tile to the launch action ──
+    // Every application delegate must derive the gesture from a resolved
+    // desktop entry, not from appId alone, and share the edit-session guard.
+    const hosts = [
+        {
+            name: "pinned app",
+            anchor: "id: pinnedIconRow",
+            gate: /newWindowEnabled: appId\.length > 0\s*&& \(pinnedItemLoader\.itemData\.hasDesktopEntry \?\? false\)/,
+        },
+        {
+            name: "extra window",
+            anchor: "model: pinnedItemLoader.itemData.extraWindows ?? []",
+            gate: /newWindowEnabled: appId\.length > 0\s*&& \(modelData\.identity\.hasDesktopEntry \?\? false\)/,
+        },
+        {
+            name: "unpinned window task",
+            anchor: "id: windowsRepeater",
+            gate: /newWindowEnabled: appId\.length > 0\s*&& \(model\.hasDesktopEntry \?\? false\)/,
+        },
+    ];
+    for (const host of hosts) {
+        host.at = containerSource.indexOf(host.anchor);
+        assert.ok(host.at >= 0, `the ${host.name} delegate moved; update this test`);
+    }
+    const occurrences = [...containerSource.matchAll(
+        /onNewWindowRequested: container\.launchNewWindowFor\(appId\)/g)];
+    assert.equal(occurrences.length, hosts.length,
+        "pinned apps, extra windows and unpinned window tasks all need the gesture; update this test");
+    for (const occurrence of occurrences) {
+        const host = hosts
+            .filter(candidate => candidate.at < occurrence.index)
+            .sort((a, b) => b.at - a.at)[0];
+        assert.ok(host, "every new-window handler must sit inside an application delegate");
+        assert.ok(!host.seen, `the ${host.name} delegate must not carry two handlers`);
+        host.seen = true;
+        assert.match(containerSource.slice(host.at, occurrence.index), host.gate,
+            `the ${host.name} delegate must enable the gesture only for a resolved desktop entry`);
+    }
+    for (const host of hosts)
+        assert.ok(host.seen, `the ${host.name} delegate must keep its new-window handler`);
+
+    const helper = containerSource.match(
+        /function launchNewWindowFor\(appId\) \{([\s\S]*?)\n    \}/);
+    assert.ok(helper, "the shared new-window handler moved; update this test");
+    assert.match(helper[1], /if \(container\.isEditing\) \{/,
+        "the shared handler must end an edit session before launching");
+    assert.match(helper[1], /container\.editMode = false/,
+        "a tap during sorting must only end the session");
+    assert.match(helper[1], /DockModelService\.launchNewWindow\(appId\)/,
+        "the shared handler must call the service launch action");
+
+    const entryFlags = [...serviceSource.matchAll(
+        /hasDesktopEntry: (?:identity|record\.identity)\.hasDesktopEntry/g)];
+    assert.equal(entryFlags.length, 3,
+        "pinned, grouped and separate items must expose hasDesktopEntry");
+    assert.match(serviceSource, /item\.hasDesktopEntry === prev\.hasDesktopEntry/,
+        "pinned items must refresh when desktop-entry resolution changes");
+
+    // Fixed shell controls have no app identity and must stay inert.
+    for (const id of ["appLauncherIcon", "trashIcon"]) {
+        const start = containerSource.indexOf(`id: ${id}`);
+        assert.ok(start >= 0, `${id} moved; update this test`);
+        const end = containerSource.indexOf("\n        }", start);
+        assert.ok(end > start, `${id}'s block is no longer readable`);
+        const block = containerSource.slice(start, end);
+        assert.doesNotMatch(block, /onNewWindowRequested/,
+            `${id} must not bind a new-window gesture without an app id`);
+    }
+});
