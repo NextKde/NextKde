@@ -42,6 +42,17 @@ Item {
         trailingAccessoryLoader.item?.closeCollectionOutside(x, y)
     }
 
+    // New-window launches share the activation boundary: sorting must not
+    // spawn instances. Window tiles do not carry the pinned edit state
+    // themselves, so this checks the container session for every host.
+    function launchNewWindowFor(appId) {
+        if (container.isEditing) {
+            container.editMode = false
+            return
+        }
+        DockModelService.launchNewWindow(appId)
+    }
+
     // ═══════════════════════════════════════════════════════════
     // Inputs (from services / parent)
     // ═══════════════════════════════════════════════════════════
@@ -1178,6 +1189,8 @@ Item {
                                     pinnedItemLoader.itemData.appId ?? "")
                                 isUrgent: pinnedItemLoader.itemData.isUrgent ?? false
                                 appId: pinnedItemLoader.itemData.appId ?? ""
+                                newWindowEnabled: appId.length > 0
+                                    && (pinnedItemLoader.itemData.hasDesktopEntry ?? false)
                                 isWindowItem: false
                                 isPinnedItem: true
                                 editMode: container.isEditing
@@ -1191,6 +1204,7 @@ Item {
                                     if (!container.isEditing)
                                         DockModelService.activateApp(appId)
                                 }
+                                onNewWindowRequested: container.launchNewWindowFor(appId)
                             }
 
                             Repeater {
@@ -1214,6 +1228,8 @@ Item {
                                     isActivated: modelData.toplevel.activated ?? false
                                     isUrgent: modelData.isUrgent ?? false
                                     appId: modelData.identity.desktopId ?? ""
+                                    newWindowEnabled: appId.length > 0
+                                        && (modelData.identity.hasDesktopEntry ?? false)
                                     windowId: modelData.windowId ?? ""
                                     animationWindowId: modelData.provider === "kwin"
                                         ? String(modelData.handleId ?? "") : ""
@@ -1223,6 +1239,7 @@ Item {
                                         container.editMode = false
                                         DockModelService.toggleWindow(windowId)
                                     }
+                                    onNewWindowRequested: container.launchNewWindowFor(appId)
                                 }
                             }
                         }
@@ -1263,6 +1280,8 @@ Item {
                 isActivated: model.isActivated ?? false
                 isUrgent: model.isUrgent ?? false
                 appId: model.appId ?? ""
+                newWindowEnabled: appId.length > 0
+                    && (model.hasDesktopEntry ?? false)
                 windowId: model.isWindowItem ? (model.windowId ?? "") : ""
                 animationWindowId: model.effectWindowId ?? ""
                 isWindowItem: model.isWindowItem ?? false
@@ -1274,6 +1293,7 @@ Item {
                     else
                         DockModelService.activateApp(model.appId)
                 }
+                onNewWindowRequested: container.launchNewWindowFor(appId)
             }
         }
 

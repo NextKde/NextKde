@@ -27,6 +27,10 @@ Item {
     property string iconSource:  ""
     property string displayName: ""
     property string appId:       ""
+    // The host enables the middle-click gesture only when it resolved a real
+    // desktop entry. A non-empty raw window class can synthesise an appId, so
+    // `appId` alone is not proof that launchNewWindow can succeed.
+    property bool   newWindowEnabled: false
     property string windowId:    ""
     // KWin's real internal UUID, kept separate from WindowService's synthetic
     // windowId used by Dock actions and previews.
@@ -176,6 +180,10 @@ Item {
         && !showActiveBackground
 
     signal activate()
+    // Middle-click on an enabled application icon asks the host to launch
+    // another instance of that application. Fixed shell controls and tasks
+    // without a resolved desktop entry leave the gesture disabled.
+    signal newWindowRequested()
     signal requestEdit()
     // Emitted when a plain tap (not the press-and-hold that started editing)
     // lands on the icon while editing; the owning surface ends its edit state.
@@ -1044,8 +1052,14 @@ Item {
         anchors.fill: parent
         enabled: icon.interactive
         hoverEnabled: true
-        acceptedButtons: (icon.showContextMenu || icon.customContextMenu)
-            ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton
+        // Middle-click is only an application gesture. Hosts enable it only
+        // after resolving a desktop entry, so the launcher, trash and
+        // unresolved window tasks leave the middle button untouched. appId
+        // remains a second, fail-closed gate for a misconfigured host.
+        acceptedButtons: ((icon.showContextMenu || icon.customContextMenu)
+            ? Qt.LeftButton | Qt.RightButton : Qt.LeftButton)
+            | (icon.newWindowEnabled && icon.appId.length > 0
+                ? Qt.MiddleButton : Qt.NoButton)
         // Never resist pointer stealing: a deliberate drag must let the
         // pinned delegate's DragHandler take the grab and reorder directly
         // (macOS-style), not only after a long press enters edit mode. Plain
@@ -1062,7 +1076,17 @@ Item {
         }
         onReleased: icon.setPressFeedback(false)
         onCanceled: icon.setPressFeedback(false)
-        onPressAndHold: {
+        onPressAndHold: function(mouse) {
+            // The middle button is a new-window gesture, not an edit hold.
+            // Rejecting the composed press-and-hold event clears Qt's
+            // long-press latch, so the release still emits clicked and the
+            // window opens instead of the gesture silently vanishing. The
+            // other buttons keep the hold behavior they had before the middle
+            // button was accepted.
+            if (mouse.button === Qt.MiddleButton) {
+                mouse.accepted = false
+                return
+            }
             if (!icon.allowEdit)
                 return
             // Entering edit mode steals the pointer for reordering; the press
@@ -1078,6 +1102,15 @@ Item {
             if (icon.editMode) {
                 if (!icon._heldForEdit)
                     icon.requestEditExit()
+                return
+            }
+            if (mouse.button === Qt.MiddleButton) {
+                // Launching another instance is not an activation toggle: the
+                // current window keeps focus until the new one maps. The host
+                // decides what the action means for its tile and only enables
+                // it when the app identity resolved to a real desktop entry.
+                if (icon.newWindowEnabled && icon.appId.length > 0)
+                    icon.newWindowRequested()
                 return
             }
             if (mouse.button === Qt.RightButton) {
