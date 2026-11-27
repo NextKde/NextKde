@@ -11,7 +11,7 @@ import QtQuick.Controls
 Item {
     id: root
 
-    required property var data
+    property var settings: ({})
     signal apply(var next)
 
     implicitWidth: 220
@@ -38,8 +38,8 @@ Item {
             }
             Switch {
                 anchors.verticalCenter: parent.verticalCenter
-                checked: root.data.format24h === true
-                onToggled: root.apply({ format24h: checked })
+                checked: root.settings?.format24h !== false
+                onToggled: root.apply(Object.assign({}, root.settings, { format24h: checked }))
             }
         }
     }

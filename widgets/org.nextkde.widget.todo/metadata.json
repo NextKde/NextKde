@@ -1,0 +1,37 @@
+{
+  "id": "org.nextkde.widget.todo",
+  "name": "To-Do",
+  "description": "Keep your next reminders and tasks close by.",
+  "category": "calendar",
+  "categoryName": "Calendar & To-Do",
+  "i18n": {
+    "en": {
+      "name": "To-Do",
+      "description": "Keep your next reminders and tasks close by.",
+      "categoryName": "Calendar & To-Do"
+    },
+    "zh-CN": {
+      "name": "待办",
+      "description": "查看提醒事项与待办清单，点击打开日历待办视图。",
+      "categoryName": "日程与待办"
+    }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "sizes": [[1, 1], [2, 1], [2, 2]],
+  "defaultSize": [2, 1],
+  "widgets": [
+    {
+      "id": "org.nextkde.widget.todo.macos",
+      "style": "macos",
+      "widgetEntry": "macos/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.todo.material",
+      "style": "material",
+      "widgetEntry": "material/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

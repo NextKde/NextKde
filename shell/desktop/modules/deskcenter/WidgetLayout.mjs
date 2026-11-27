@@ -2,8 +2,10 @@ export const sizeOrder = ["1x1", "1x2", "2x2", "2x1"];
 
 // Legacy gallery size names shared by the gallery and its desktop host.
 export function namedGallerySpan(size) {
-    if (Array.isArray(size) && size.length === 2
-        && Number.isInteger(size[0]) && Number.isInteger(size[1])) return size;
+    const pair = toArray(size);
+    if (pair && pair.length === 2
+        && Number.isInteger(Number(pair[0])) && Number.isInteger(Number(pair[1])))
+        return [Number(pair[0]), Number(pair[1])];
     const match = /^(\d+)x(\d+)$/.exec(String(size));
     if (match) return [Number(match[1]), Number(match[2])];
     return size === "large" ? [2, 2] : size === "medium" ? [2, 1] : [1, 1];
@@ -51,6 +53,7 @@ export function isValidSize(widgetId, size) {
     const value = String(size);
     if (["small", "medium", "large"].includes(value)) return true;
     if (allowedSizeOrder(widgetId).includes(value)) return true;
+    if (Object.prototype.hasOwnProperty.call(variants, String(widgetId))) return false;
     // Package-backed widget instances are not one of the eight legacy named
     // ids above (see DeskCenterWindow.qml's addGalleryWidget/resizeWidget),
     // so they never appear in allowedSizeOrder/variants and would otherwise
@@ -69,7 +72,7 @@ export function isValidSize(widgetId, size) {
 // is not the same realm's Array). Array.prototype.slice.call duck-types on
 // `.length` instead, so it accepts that wrapper as well as a plain array.
 function toArray(value) {
-    return (value != null && typeof value.length === "number")
+    return (value != null && typeof value !== "string" && typeof value.length === "number")
         ? Array.prototype.slice.call(value) : null;
 }
 
@@ -107,6 +110,41 @@ export function nearestDeclaredSize(columns, rows, sizes) {
         if (distance < bestDistance) { bestDistance = distance; best = span; }
     }
     return [best[0], best[1]];
+}
+
+// Reconcile a persisted instance span against the package's current `sizes`
+// list (e.g. after a package update removed a previously used size). Returns
+// `{ span: [cols, rows], changed: bool }`.
+export function resolveDeclaredSpan(columns, rows, sizes, defaultSize) {
+    const rawList = toArray(sizes);
+    if (!rawList || rawList.length === 0)
+        return { span: [columns, rows], changed: false };
+    const validList = [];
+    for (const item of rawList) {
+        const pair = toArray(item);
+        if (!pair || pair.length !== 2) continue;
+        const c = Number(pair[0]);
+        const r = Number(pair[1]);
+        if (Number.isInteger(c) && Number.isInteger(r) && c >= 1 && c <= 4 && r >= 1 && r <= 4)
+            validList.push([c, r]);
+    }
+    if (validList.length === 0)
+        return { span: [columns, rows], changed: false };
+    if (Number.isInteger(columns) && Number.isInteger(rows)
+            && validList.some(pair => pair[0] === columns && pair[1] === rows)) {
+        return { span: [columns, rows], changed: false };
+    }
+    if (Number.isInteger(columns) && Number.isInteger(rows) && columns >= 1 && rows >= 1) {
+        return { span: nearestDeclaredSize(columns, rows, validList), changed: true };
+    }
+    const defPair = toArray(defaultSize);
+    if (defPair && defPair.length === 2) {
+        const dc = Number(defPair[0]);
+        const dr = Number(defPair[1]);
+        if (validList.some(pair => pair[0] === dc && pair[1] === dr))
+            return { span: [dc, dr], changed: true };
+    }
+    return { span: [validList[0][0], validList[0][1]], changed: true };
 }
 
 export function maxSpanFor(widgetId) {
@@ -210,7 +248,7 @@ export function placeAnchoredWidget(widget, placements, columnCount, rowCount) {
         return null;
     const columns = Math.max(1, Number(widget.columns) || 1);
     const rows = Math.max(1, Number(widget.rows) || 1);
-    const obstacles = Array.isArray(placements) ? placements : [];
+    const obstacles = toArray(placements) ?? [];
     const fits = (column, row) => Number.isInteger(column) && Number.isInteger(row)
         && column >= 0 && row >= 0
         && column + columns <= columnCount && row + rows <= rowCount

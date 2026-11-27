@@ -6,7 +6,7 @@ Item {
     required property var data
     required property var widgetSize
     required property var appearance
-    readonly property bool wide: widgetSize[0] === 3
+    readonly property bool wide: Number(widgetSize?.[0] ?? 1) >= 2
     readonly property var backgroundSpec: appearance.isDark
         ? ({ startColor: "#263d62", endColor: "#141d35" })
         : ({ startColor: "#d9efff", endColor: "#f3e8ff" })
@@ -20,7 +20,7 @@ Item {
 
         Text {
             width: parent.width
-            height: root.height * 0.40
+            height: root.wide ? root.height * 0.42 : root.height * 0.40
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             fontSizeMode: Text.Fit
@@ -39,7 +39,7 @@ Item {
         Text {
             visible: root.wide
             width: parent.width
-            height: root.height * 0.16
+            height: root.height * 0.18
             horizontalAlignment: Text.AlignHCenter
             verticalAlignment: Text.AlignVCenter
             fontSizeMode: Text.Fit

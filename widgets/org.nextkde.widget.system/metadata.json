@@ -1,0 +1,37 @@
+{
+  "id": "org.nextkde.widget.system",
+  "name": "System",
+  "description": "CPU, memory, disk usage rings, temperature, and live trends.",
+  "category": "system",
+  "categoryName": "System & Monitor",
+  "i18n": {
+    "en": {
+      "name": "System",
+      "description": "CPU, memory, disk usage rings, temperature, and live trends.",
+      "categoryName": "System & Monitor"
+    },
+    "zh-CN": {
+      "name": "系统监控",
+      "description": "查看 CPU、内存、磁盘环形占比、温度与实时曲线。",
+      "categoryName": "系统监控"
+    }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "sizes": [[1, 1], [2, 1], [2, 2]],
+  "defaultSize": [2, 1],
+  "widgets": [
+    {
+      "id": "org.nextkde.widget.system.macos",
+      "style": "macos",
+      "widgetEntry": "macos/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.system.material",
+      "style": "material",
+      "widgetEntry": "material/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

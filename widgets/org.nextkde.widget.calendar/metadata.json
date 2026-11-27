@@ -1,0 +1,37 @@
+{
+  "id": "org.nextkde.widget.calendar",
+  "name": "Calendar",
+  "description": "Today's date, monthly calendar, and upcoming events.",
+  "category": "calendar",
+  "categoryName": "Calendar & To-Do",
+  "i18n": {
+    "en": {
+      "name": "Calendar",
+      "description": "Today's date, monthly calendar, and upcoming events.",
+      "categoryName": "Calendar & To-Do"
+    },
+    "zh-CN": {
+      "name": "日历",
+      "description": "查看今日日期、月历网格与日程安排，点击打开日历应用。",
+      "categoryName": "日程与待办"
+    }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "sizes": [[1, 1], [2, 1], [2, 2]],
+  "defaultSize": [2, 1],
+  "widgets": [
+    {
+      "id": "org.nextkde.widget.calendar.macos",
+      "style": "macos",
+      "widgetEntry": "macos/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.calendar.material",
+      "style": "material",
+      "widgetEntry": "material/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

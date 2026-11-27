@@ -87,6 +87,8 @@ Item {
             handle.startWidth = handle.cardWidth
             handle.startHeight = handle.cardHeight
             handle.applySpan(handle.startWidth, handle.startHeight)
+            handle.previewWidth = handle.startWidth
+            handle.previewHeight = handle.startHeight
             handle.resizing = true
         }
         onPositionChanged: function(mouse) {
@@ -124,19 +126,15 @@ Item {
             : continuous
         handle.previewColumns = span[0]
         handle.previewRows = span[1]
-        if (hasDeclaredSizes) {
-            // A discrete set has no meaningful "in between" -- ghost the
-            // exact cell size the release will commit instead of an
-            // elastic, continuously-dragged pixel size.
-            handle.previewWidth = span[0] * handle.cellSize + (span[0] - 1) * handle.gap
-            handle.previewHeight = span[1] * handle.cellSize + (span[1] - 1) * handle.gap
-        } else {
-            handle.previewWidth = WidgetLayout.magnetizedSize(width,
-                handle.cellSize, handle.gap, handle.maximumColumns,
-                handle.minimumColumns)
-            handle.previewHeight = WidgetLayout.magnetizedSize(height,
-                handle.cellSize, handle.gap, handle.maximumRows,
-                handle.minimumRows)
-        }
+        // Always bend the drag magnetically so the card smoothly tracks the
+        // pointer while held, then hands velocity off to MotionSpring +
+        // FrameAnimation to snap at native refresh rate onto the committed
+        // discrete declared span upon release.
+        handle.previewWidth = WidgetLayout.magnetizedSize(width,
+            handle.cellSize, handle.gap, handle.maximumColumns,
+            handle.minimumColumns)
+        handle.previewHeight = WidgetLayout.magnetizedSize(height,
+            handle.cellSize, handle.gap, handle.maximumRows,
+            handle.minimumRows)
     }
 }

@@ -106,6 +106,14 @@ if(BUILD_TESTING)
     set_tests_properties(kos-platform.independent-app-widgets PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} LABELS "platform;data" TIMEOUT 30)
 
+    qt_add_executable(kos-widget-package-index-test
+        tests/test_widget_package_index.cpp src/daemon/WidgetPackageIndex.cpp)
+    target_include_directories(kos-widget-package-index-test PRIVATE src/daemon)
+    target_link_libraries(kos-widget-package-index-test PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME kos-platform.widget-package-index COMMAND kos-widget-package-index-test)
+    set_tests_properties(kos-platform.widget-package-index PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} LABELS "platform;data" TIMEOUT 30)
+
     qt_add_executable(kos-status-panel-data-test tests/test_status_panel_data.cpp)
     target_link_libraries(kos-status-panel-data-test PRIVATE Qt6::Core)
     add_test(NAME kos-platform.status-panel-data COMMAND kos-status-panel-data-test)

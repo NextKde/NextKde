@@ -1,0 +1,37 @@
+{
+  "id": "org.nextkde.widget.activity",
+  "name": "Activity",
+  "description": "Today's uptime, 60-day usage heatmap, and top apps.",
+  "category": "activity",
+  "categoryName": "Activity & Health",
+  "i18n": {
+    "en": {
+      "name": "Activity",
+      "description": "Today's uptime, 60-day usage heatmap, and top apps.",
+      "categoryName": "Activity & Health"
+    },
+    "zh-CN": {
+      "name": "活动时长",
+      "description": "查看今日在线时长、60 天热力图与今日常用应用耗时。",
+      "categoryName": "活动与健康"
+    }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "sizes": [[1, 1], [2, 1], [2, 2]],
+  "defaultSize": [2, 1],
+  "widgets": [
+    {
+      "id": "org.nextkde.widget.activity.macos",
+      "style": "macos",
+      "widgetEntry": "macos/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.activity.material",
+      "style": "material",
+      "widgetEntry": "material/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

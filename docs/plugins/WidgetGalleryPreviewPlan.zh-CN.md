@@ -1,12 +1,12 @@
 # 桌面组件图库预览计划
 
-状态：安装、索引、运行时和图库缓存待实现。包接口已有[第三方组件开发指南](WidgetSDK.zh-CN.md)和[时钟原型](../../examples/widgets/org.nextkde.example.clock/)。时钟原型已验证到桌面落位、尺寸响应和组件自带设置面板（`Settings.qml`）这一层，见下文"逐个核对能否用这套 SDK 写出旧的内置组件"；天气/系统/活动/待办/日历/音乐等旧内置组件逐一核对后仍写不出来，缺口已归类为 R1（只读真实数据）和新增的 R11（组件向宿主请求执行动作）。
+状态：进程内动态加载（R2）、只读宿主数据快照（R1：`clock`/`media`/`weather`/`system`/`activity`/`pim`）、反向动作通道（R11）、桌面/Dock 容器契约（R3）、单包多组件（R8）、插件市场分发与安装一致性（R5）、图库预览图片缓存与按需节流渲染（R6）、Material 动态色板 `appearance.palette`、宿主统一异形外框 `surfaceShape` 与通用按实例 `Settings.qml` 均已落地，详见[第三方组件开发指南](WidgetSDK.zh-CN.md)与两个示例包（[时钟](../../examples/widgets/org.nextkde.example.clock/)、[音乐](../../examples/widgets/org.nextkde.example.music/)）。剩余待定项为旧实例迁移（R7）。
 
 ## Shell、面板与组件包的职责
 
 - **Shell** 提供组件发现、索引、加载和实例生命周期管理，以及桌面、Dock 和面板的容器能力。宿主负责组件的添加、落位、移动、尺寸切换和输入分发。
-- **面板** 由 Shell 提供，负责容器布局、背景材质和外壳样式。液态玻璃和 Material Design 都属于面板样式，使用同一套组件加载接口。组件可通过宿主提供的主题信息适配面板外观。
-- **组件包** 提供天气、时钟等具体功能，负责内容绘制和内部交互。官方组件以独立的包交付，和第三方组件使用同一套目录、索引和入口约定。面板切换样式时沿用原有组件配置。
+- **面板** 由 Shell 提供，负责容器布局、背景材质和外壳样式。液态玻璃（macOS）和 Material Design 属于两套材质与形状语言不同的风格，组件包必须在 `metadata.json` 中二选一声明 `"style": "material"` 或 `"style": "macos"`；图库与桌面仅展示并运行匹配当前桌面风格的组件包，另一风格的已放置实例保留在磁盘配置中，切回对应风格后自动恢复。
+- **组件包** 提供天气、时钟等具体功能，负责内容绘制和内部交互。官方组件以独立的包交付，和第三方组件使用同一套目录、索引和入口约定。macOS 风格组件由宿主统一绘制超椭圆彩色/玻璃外罩；Material 风格组件的底色、透明度与合成器模糊均由宿主统一提供，组件可通过 `surfaceShape` 选择宿主内置的异形外罩轮廓（如 `roundedRect`、`slantedOval`、`flower`、`cookie`、`clover`、`arch`、`pill`、`circle`）。
 
 ## 统一安装目录
 
@@ -20,9 +20,9 @@
 
 | 文件 | 接口约定 |
 | --- | --- |
-| `metadata.json` | 登记组件 ID、SDK 版本、支持的 `[列, 行]` 尺寸和默认尺寸。默认尺寸须属于支持列表。 |
+| `metadata.json` | 登记组件 ID、SDK 版本、风格（`style` 必填二选一：`"material"` 或 `"macos"`）、支持的 `[列, 行]` 尺寸和默认尺寸。默认尺寸须属于支持列表。 |
 | `Snapshot.qml` | 根对象公开 `getSnapshot(size)`，参数为 `[列, 行]`，同步返回该尺寸可序列化的样例数据对象。 |
-| `Widget.qml` | 根对象声明 `required property var data` 和 `required property var widgetSize`。`widgetSize` 使用同样的 `[列, 行]` 格式。 |
+| `Widget.qml` | 根对象声明 `property var snapshot: null`、`required property var widgetSize` 和 `required property var appearance`（旧版 `required property var data` 仍向后兼容）。`widgetSize` 使用同样的 `[列, 行]` 格式。 |
 
 数据字段由组件作者定义。图库把 `getSnapshot(size)` 的返回值作为 `data` 传给视图，桌面数据适配层向同一视图提供同结构的真实数据。组件实现绘制和内部交互。拖入桌面、移动、落位和切换尺寸由宿主负责。
 
@@ -34,19 +34,19 @@
 
 Shell 绘制组件外罩，负责圆角、裁切、底板、玻璃、边框和阴影。组件负责内容和内部交互。第三方作者可在 `Widget.qml` 根对象上提供可选的 `readonly property var backgroundSpec`，让宿主为当前实例绘制底色。
 
-| 作者提供 | 草案约定 |
+| 作者提供 | 现行契约 |
 | --- | --- |
 | 省略 `backgroundSpec` 或返回 `null` | 使用宿主默认底板。无效描述也回退到默认底板。 |
-| `solid` | 提供 `color`。 |
-| `linearGradient` | 提供方向和有序色标 `stops`。每个色标包含 `[0, 1]` 范围内的 `position` 和 `color`。 |
+| 纯色面板 | `{ startColor, endColor }`，将 `startColor` 与 `endColor` 设为同一颜色即可。 |
+| 渐变面板 | `{ startColor, endColor, midColor?, midPosition?, orientation?: "vertical" \| "horizontal" }`。`midPosition` 取 `[0.01, 0.99]`（默认 `0.5`）；省略 `midColor` 时按起止色中值插值。 |
 
-`backgroundSpec` 可以绑定到 `data`。例如天气组件在晴天给出蓝色渐变，夜间给出深色渐变。字段变化时，组件重新发布整个描述，宿主验证并更新当前实例的底板。描述采用普通数据，以便在隔离运行时传递。色标数量、颜色格式和方向枚举待 SDK 定稿时确定。
+`backgroundSpec` 可以绑定到 `snapshot` 或 `host` 快照（例如音乐组件绑定 `host.media.artworkColors`，天气组件按晴雨昼夜切换渐变），桌面卡片颜色变更时由外壳（`DeskWidgetCard.qml`）自动做平滑 `ColorAnimation` 过渡。`WidgetGallery.qml`、`DeskWidgetCard.qml` 与 `MusicPreview.qml` 均采用这一统一格式；描述采用普通可序列化数据，字段变化时组件重新发布对象，宿主自动更新当前实例底板。
 
-**用户的透明设置优先。** 透明模式下，宿主同时关闭组件底色、Material 底板、液态玻璃及其合成器区域、外罩边框和阴影，保留内容、裁切、输入命中区与编辑态提示。在其他模式，由宿主决定采用组件底色、将其用于材质着色，或使用主题默认底板。宿主向组件提供实际外观模式和建议前景色，作者可据此调整文字、图标和内容对比度。
+**用户的透明设置优先。** 透明模式下（macOS 玻璃卡片），宿主关闭组件 `backgroundSpec`，保留内容、裁切、输入命中区与编辑态提示，并把 `appearance.transparent` 设为 `true`。Material 桌面模式下不采用 `backgroundSpec`，始终由 `MaterialCardSurface` 统一绘制当前主题底色、透明度与 KWin 合成器模糊区域；仅 `"style": "material"` 的组件包可在 `Widget.qml` 声明 `readonly property string surfaceShape` 点选宿主内置异形轮廓（默认 `"roundedRect"`，`"style": "macos"` 组件忽略该属性），不向第三方开放自定义背景色，保证全局透明度与质感一致。宿主向组件提供实际外观模式、动态色板和建议前景色，作者可据此调整文字、图标和内容配色。
 
 作者应把需要随透明设置消失的整卡底色都交给 `backgroundSpec`。组件可以在内容层绘制图表、图标和局部色块。全幅 Canvas 或 `Rectangle` 如果把背景画进内容，宿主无法把这些像素单独移除。
 
-图库预览应用同一套外罩规则。将实际外观模式纳入图片缓存键。若隔离渲染环境没有合成器，玻璃预览采用宿主定义的替代底板，透明预览保留图像的透明通道。
+**单一外壳硬性约定（禁止在图库侧重写第二套卡片外壳）：** 图库预览（`WidgetGallery.qml`）与桌面正式实例（`DeskCenterWindow.qml`）**不仅加载同一份 `Widget.qml`，外层卡片也必须共用同一个 `DeskWidgetCard.qml`**（图库侧仅开启 `preview: true` 以关闭合成器模糊区域与背景渐变动画，并按桌面逻辑尺寸渲染后等比缩放）。**严禁在图库里另外手写简化的 `Rectangle` / `Gradient` 背景**，避免出现圆角遮罩（`SquircleMask`）、渐变或透明底板与桌面不一致的问题。预览与桌面之间只允许存在数据源（`Snapshot.qml` 样例 vs 实时 `host.*`）以及无合成器时的玻璃预览替代底板差异；每次调整 `DeskWidgetCard.qml` 的预览视觉表现时，须同步递增 `WidgetPreviewCacheLogic.mjs` 的 `CACHE_FORMAT_VERSION`，让磁盘上已缓存的旧缩略图自动失效重绘。将实际外观模式纳入图片缓存键。
 
 ## 从第三方场景核对 Shell 能力
 
@@ -88,19 +88,25 @@ Shell 绘制组件外罩，负责圆角、裁切、底板、玻璃、边框和�
 
 以下各项均待 Review。逐项记录第三方作者需要的公开接口、Shell 现有能力、缺口和最终决定。若示例需要访问 Shell 私有对象，对应的公开接口仍有缺口。
 
-- [ ] **R1 正式数据来源与授权。** 区分正式实例和 `getSnapshot(size)` 的数据来源。评审时间、媒体、日历等由宿主按权限提供的数据，以及组件自有远程数据可用的受限网络接口。明确谁实现获取逻辑、如何刷新、离线时显示什么、权限撤销后如何停止访问并处理旧数据。
-- [ ] **R2 正式视图嵌入与输入。** 确定独立进程的 QML 画面如何嵌入桌面和 Dock，以及坐标、裁切、缩放、指针输入、键盘焦点和崩溃恢复如何处理。用可点击数据点、可用键盘切换焦点的 Canvas 组件核对公开接口。编辑态由宿主处理整卡拖动与落位。
-- [ ] **R3 桌面与 Dock 的容器契约。** 桌面用 `[列, 行]` 描述占格。核对 SDK 如何提供容器类型、实际逻辑尺寸和 Dock 方向，以及正式入口和预览入口如何接收这些信息。用同一时钟包核对桌面表盘与横向、竖向 Dock 紧凑布局。
+- [x] **R1 正式数据来源与封装。** 区分正式实例和 `getSnapshot(size)` 的数据来源。通过宿主只读快照封装时间、媒体、天气、系统、活动与日历/待办数据，明确刷新与离线展示状态。
+  **2026-11-25 完成：** 在**进程内运行、安全由使用者自行审计**的信任模型下，`WidgetHostService.qml` 已封装全部 6 组响应式只读 R1 快照（`clock` / `media` / `weather` / `system` / `activity` / `pim`，均带 `status: ready|idle|loading|unavailable`），并通过 `WidgetPackageHost.qml` 的只读 `host` 代理直接注入任意 `Widget.qml`（图库侧 `WidgetPreviewHost.qml` 注入 `host.isPreview === true` 桩对象）。`appearance` 同步暴露 `style` 与完整 Material 动态色板 `palette`。新增组件不再需要写 per-package `*WidgetDataService.qml`。
+- [x] **R2 正式视图嵌入与输入。**
+  **2026-11-25 完成（进程内动态加载，去白名单）：** 确定采用进程内信任模型（类似 Plasma Plasmoids，不建独立渲染进程）。`WidgetPackageIndex.cpp` 校验并返回每个已安装包的 `rootPath` / `widgetEntry` / `snapshotEntry` / `hasSettings` / `settingsEntry`；`WidgetRegistry.canExecute(entry)` 不再查硬编码白名单；`WidgetPreviewHost.qml` 与 `WidgetPackageHost.qml` 直接从 `$XDG_DATA_HOME/kos/widgets/<id>/` 动态加载 `Snapshot.qml`、`Widget.qml` 与可选 `Settings.qml`；编辑态下由 `DeskWidgetCard` 统一禁用内容输入（`contentEnabled: !root.editMode`）。
+- [x] **R3 桌面与 Dock 的容器契约。** 桌面用 `[列, 行]` 描述占格。核对 SDK 如何提供容器类型、实际逻辑尺寸和 Dock 方向，以及正式入口和预览入口如何接收这些信息。用同一时钟包核对桌面表盘与横向、竖向 Dock 紧凑布局。
+  **2026-11-26 完成：** `WidgetPackageIndex.cpp` 支持声明 `containers`（`["desktop", "dock"]`）与 `dockUnits`（`2`～`4`）；`host.container`（`"desktop"` \| `"dock"`）与 `host.orientation`（`"horizontal"` \| `"vertical"`）已由 `WidgetPackageHost` / `WidgetPreviewHost` 暴露；`DockContainer`、`DockInfoCarousel`、`DockSideInfoCarousel`、`DockConfigService` 与图库「Dock Widgets」标签均已接入第三方包，示例时钟已验证桌面与横/竖向 Dock 三种形态。
 - [ ] **R4 实例配置与生命周期。** 用两份城市各异的天气实例核对配置声明、默认值、更新通知和独立持久化。明确实例暂时隐藏、恢复、重启或升级时的行为，以及定时刷新、动画和资源释放由谁管理。
   "同一个包能添加多份独立实例"这条已经打通一条最小路径：每次从图库把包添加到桌面都会生成一个新的实例 ID（如 `org.nextkde.example.clock#1`、`#2`），各自独立的位置、尺寸和 `Settings.qml` 数据。但这条路径只活在当前这次运行里——已放置的实例完全不会写回 `DeskCenterConfigService` 之外的持久层，重启 Shell 后全部消失，跟桌面文件图标的持久化是两套机制。R4 要闭环，还得把实例 ID、位置、尺寸这三项接上一个会在启动时重新展开的持久化来源。
   **2026-11-25 进展（落盘这一环已接上）：** 实例记录（实例 ID + 包 ID）写入 `deskcenter-widgets.ini` 的 `instancesJson`（按输出分组），位置与尺寸沿用原有键；Shell 启动时按输出重新展开成 `widgetInstances`，ID 序号跨输出持久化，删除实例时同步清掉记录、位置和尺寸。包缺失或当前不可执行的记录会保留在磁盘和内存里（不显示、不丢弃），供 R7 迁移恢复。仍差：实例隐藏/恢复/重启/升级的具体语义，以及定时刷新、动画和资源释放的归属。
-- [ ] **R5 安装记录与运行版本的一致性。** 官方包与第三方包共用安装目录，评审如何将官方身份与已验证的安装内容绑定。检查索引何时发布新版本、旧实例何时切换、更新失败如何保留旧版本，以及安装中断后目录、记录与索引如何恢复一致。预览任务完成时也应核对当前内容修订。
-- [ ] **R6 已展示组件的预览更新策略。** 新安装的组件等默认尺寸预览就绪后进入图库。评审升级、主题变化或缩放变化时，是否短暂保留上一次成功的预览，以及何时替换、失败提示和旧图过期规则。卸载或撤销信任时立即移除对应图库条目。
+- [x] **R5 安装记录与运行版本的一致性。** 官方包与第三方包共用安装目录，评审如何将官方身份与已验证的安装内容绑定。检查索引何时发布新版本、旧实例何时切换、更新失败如何保留旧版本，以及安装中断后目录、记录与索引如何恢复一致。预览任务完成时也应核对当前内容修订。
+  **2026-11-26 完成：** 在 `kos-settings`「应用与服务」新增「插件」标签页并复用 `AppCatalog` + GitHub Release 审核流水线：目录仓库中的插件清单放在独立签名文件 `widgets.json` + `widgets.json.sig`；`WidgetPackages` 下载发布压缩包（`.tar.gz`/`.tgz`/`.zip`/`.koswidget`）后校验体积与 SHA-256、在临时暂存区解包并调用 `WidgetPackageIndex::snapshotForRoots()` 做兼容性与安全结构检查，随后原子替换 `$XDG_DATA_HOME/kos/widgets/<appId>`（升级失败自动回滚保留原版本），并在 `AppCatalog` 独立写入 `widget-installed-<appId>.json` 来源回执；`WidgetPackageWatcher` 自动监听变更并通知图库与桌面。
+- [x] **R6 已展示组件的预览更新策略。** 新安装的组件等默认尺寸预览就绪后进入图库。评审升级、主题变化或缩放变化时，是否短暂保留上一次成功的预览，以及何时替换、失败提示和旧图过期规则。卸载或撤销信任时立即移除对应图库条目。
+  **2026-11-26 完成：** 新增 `WidgetPreviewCacheLogic.mjs` 与 `WidgetPreviewCache.qml`，将渲染结果以 PNG 缓存至 `$XDG_CACHE_HOME/kos/widgets/`（索引存 `$XDG_STATE_HOME/.../widget-preview-cache.ini`），键绑定组件 ID、内容修订号、尺寸、桌面风格、主题色板、语言与屏幕缩放；冷命中直接展示静态图并销毁后台实时 QML 预览，插件升级或切换主题/缩放时暂留上一版有效预览图直至后台以最多 2 个并发（默认尺寸优先）重新抓帧落盘后无缝替换；超出上限优先淘汰非默认尺寸的冷门缓存，卸载、无效或崩溃暂停的包在图库目录同步时立即移除索引与对应缓存图。
 - [ ] **R7 现有实例迁移。** 评审内置天气、时钟等拆包后，如何映射旧组件 ID、位置、尺寸和配置。首次升级时目标包尚未部署的情况应保留实例记录，待包就绪后恢复显示。
-- [ ] **R8 一个包包含多个组件。** 方向已确认（多个组件可以共享一个包），结构未定。`WidgetPackageIndex.cpp` 的 `readPackage()` 仍假设一个目录对应一个组件（单个 `id`/`sizes`，固定各一份的 `Widget.qml`/`Snapshot.qml`），需要定义多组件包的元数据结构、目录内多组视图文件如何组织，以及索引如何把包内每个组件分别暴露给图库。
-- [x] **R9 图库多尺寸展示约定。** 方向已确认：同一个组件 ID 显示为一个分组标题，标题下按 `metadata.json` 的 `sizes` 数组各显示一张预览卡（`WidgetGallery.qml` 的 `Column`/`Flow` 结构已是这个布局），不拆成互不相关的多个图库条目，也不收进一张带选择器的单卡。`sizeChoices()` 已改为直接读包自身声明的 `sizes`（任意 1～4 的 `[列, 行]`，按 `.length` 做类数组判断，不再限定 2×2/3×2，也不再用包 ID 判断）；可执行范围仍由 `WidgetRegistry.executablePackages` 白名单决定，索引发现不等于允许执行。
+- [x] **R8 一个包包含多个组件。** 方向已确认（多个组件可以共享一个包），结构未定。`WidgetPackageIndex.cpp` 的 `readPackage()` 仍假设一个目录对应一个组件（单个 `id`/`sizes`，固定各一份的 `Widget.qml`/`Snapshot.qml`），需要定义多组件包的元数据结构、目录内多组视图文件如何组织，以及索引如何把包内每个组件分别暴露给图库。
+  **2026-11-26 完成：** `metadata.json` 支持可选 `widgets: [...]` 数组（单组件包保持完全兼容），子组件 `id` 需与包 `id` 一致或以其为命名空间前缀，入口路径 `widgetEntry` / `snapshotEntry` / `settingsEntry` 校验留在包根目录内且支持同目录自动探测 `Settings.qml`，`WidgetPackageWatcher` 同步监听嵌套子目录及入口文件，索引向图库展开为独立条目并附带所属 `packageId`。
+- [x] **R9 图库多尺寸展示约定。** 方向已确认：同一个组件 ID 显示为一个分组标题，标题下按 `metadata.json` 的 `sizes` 数组各显示一张预览卡（`WidgetGallery.qml` 的 `Column`/`Flow` 结构已是这个布局），不拆成互不相关的多个图库条目，也不收进一张带选择器的单卡。`sizeChoices()` 直接读包自身声明的 `sizes`（任意 1～4 的 `[列, 行]`，按 `.length` 做类数组判断），并通过 `WidgetPreviewHost` 动态执行所有匹配当前桌面风格的已安装包。
   其下游曾有一个渲染缺陷，已定位并修复：不同档位（如 2×2 与 3×2）的预览卡像素尺寸看起来完全相同。真正原因不是 `cellUnit` 换算公式本身（公式一直是对的），是 `modelData.span` 这个数组字段穿过 `Repeater` 的 `model:` 绑定边界后，被 QML 装箱成一个"类数组"对象——能用下标取值、能 `JSON.stringify`，但 `Array.isArray()` 对它返回 `false`；`WidgetGallery.qml` 的 `cols`/`rows` 判断原来就是用 `Array.isArray(modelData.span)`，于是永远落回 1，预览卡永远按 1×1 的比例换算宽高。现在改成按 `.length` 做类数组判断，不用 `Array.isArray`，已经人工验收通过。
-- [x] **R10 落位后尺寸按离散档位吸附，宿主要把新尺寸传回组件内部。** 方向已确认：组件尺寸不是连续区间，是像内置组件 `allowedSizeOrder`（`WidgetLayout.mjs`）那样按包声明的 `sizes` 离散吸附；吸附后宿主必须把新的 `widgetSize` 传给同一个正式运行的 `Widget.qml` 实例，组件据此重新布局（见[组件开发指南](WidgetSDK.zh-CN.md)第 3 节的 `widgetSize` 契约）。桌面落位的最后一段接线已完成：`DeskCenterWindow.qml` 的 `resolveContentComponent()` 把 `org.nextkde.example.clock` 映射到一个内容 `Component`（`Clock.Widget` + 独立的 `ClockWidgetDataService` 实例），`DeskWidgetCard` 的 `contentComponent` 据此渲染；`widgetSize` 读 `DeskCenterConfigService.spanFor(id)`，拖拽调整尺寸后随之更新。这条路径只给示例时钟这一个包接通，其余已索引包仍不渲染；R1（数据授权）、R2（嵌入与输入隔离）等仍待设计。
+- [x] **R10 落位后尺寸按离散档位吸附，宿主要把新尺寸传回组件内部。** 方向已确认：组件尺寸不是连续区间，是像内置组件 `allowedSizeOrder`（`WidgetLayout.mjs`）那样按包声明的 `sizes` 离散吸附；吸附后宿主必须把新的 `widgetSize` 传给同一个正式运行的 `Widget.qml` 实例，组件据此重新布局（见[组件开发指南](WidgetSDK.zh-CN.md)第 3 节的 `widgetSize` 契约）。桌面落位已升级为通用动态加载：`DeskCenterWindow.qml` 通过 `WidgetPackageHost` 直接加载磁盘上的任意已安装包 `Widget.qml` 与可选 `Settings.qml`，并将 `[card.displayColumns, card.displayRows]` 实时绑定到 `widgetSize`。
   吸附逻辑本身一度整体失效：缩放把手判断 `declaredSizes` 是否存在时同样用了 `Array.isArray()`，命中 R9 描述的同一个装箱 bug，于是永远判定"没有声明尺寸"，退化成连续自由缩放。和 R9 一起修复、一起人工验收通过，现在只能停在包声明的那几档。
 
 建议按三个作者场景开展 Review。先用 Canvas 核对嵌入和输入，再用两份天气实例核对数据、权限和持久化，最后用桌面和 Dock 共用的时钟核对容器契约。三个场景均沿安装、预览、放置、升级与卸载的正常路径核对。
@@ -111,17 +117,18 @@ Shell 绘制组件外罩，负责圆角、裁切、底板、玻璃、边框和�
 
 | 旧组件 | 旧实现实际依赖的 Shell 私有能力 | 当前 SDK 是否覆盖 | 结论 |
 | --- | --- | --- | --- |
-| 时钟 | 只读：本机时间。可选：模拟/数字换面、内嵌倒计时定时器子功能。 | `data`/`widgetSize`/`appearance` 覆盖时间显示和尺寸响应；本次新增的可选 `Settings.qml`（第 6 节）覆盖"组件自带配置"这一类需求，已用 24 小时制开关在示例时钟上接通并验证。 | **核心可写**，示例已验证。但示例没有还原模拟表盘换面和倒计时子功能——这两个是旧组件在同一张卡里叠加的次要功能，不计入"时钟已验证"的范围，仍待另外评审（本质上是"一个组件多个子视图/子状态"，接近 R8 的问题但不完全相同）。 |
-| 天气 | 只读：`WeatherService`（地点、实时气温、天气代码、7 天预报、加载/错误状态），点击卡片打开地点选择。 | 只读数据通道未实现——R1 仍是"待评审"，当前 SDK 没有任何"宿主按权限持续推送真实数据给组件"的公开接口；现有 `data` 只被图库快照和这一个硬编码的本地时间适配层用过，没有通用形态。 | **不可写**，不是示例没做，是整类接口都还没设计。天气是 R1 最具体的验证场景，建议直接拿它当 R1 的测试用例，而不是另起一个假设的场景。 |
-| 系统（CPU/内存/频率） | 只读：`MetricsService` 的三条历史曲线，持续刷新。 | 同上，R1 未覆盖；另外这类数据的刷新频率、历史长度属于"组件自己要多少历史"的协商，SDK 目前完全没有这层协商机制。 | **不可写**，同天气，且比天气多一层"数据形状协商"的空白。 |
-| 活动（应用使用时长等） | 只读：`ActivityUsageService`，本质是跨应用的使用行为统计，比天气/系统更敏感（涉及用户其它应用的使用记录）。 | 同 R1，未覆盖；且这类数据比天气更需要明确的权限边界（第三方组件能不能看到"用户用了什么别的应用多久"是产品决策，不只是技术接口）。 | **不可写**，且在"要不要开这个权限给第三方"上，技术方案之前还需要一个产品层面的决定（本文档的评审清单目前没有专门列出这一问题，建议在 R1 落地时一并带上）。 |
-| 音乐 | 读：`MediaService` 当前播放器元数据、歌词、是否支持桌面歌词；**写**：`MediaService.previous()/togglePlayPause()/next()`、`AppActionService.launchById()`、`WindowService.activateWindow()`/`windowsForApp()`（点封面唤起或聚焦正在播放的那个 App 窗口）。 | 读侧缺口同 R1；**写侧完全没有对应条目**——翻遍本文档和 SDK 指南，没有任何"组件向宿主请求执行一个动作"的约定，R1～R10 都是只读数据或布局契约。 | **不可写**，而且缺口比天气/系统更大一类：音乐是目前发现的唯一一个"旧内置组件需要反向通道（组件→宿主下命令）"的例子，不是数据权限问题，是整个方向都没设计。建议新增 **R11**（见下）单独追踪，不要并进 R1。 |
-| 待办 / 日历 | 读：`PimWidgetService`（待办/日程列表、缓存态、就绪态、错误态）；点击条目调用 `IndependentAppWidgetService.open("calendar", {...})` 深链打开日历 App 的指定视图/条目。 | 读侧同 R1；深链打开指定 App 视图属于前面说的"反向命令通道"的另一种形式（不是控制媒体，是"帮我打开另一个窗口到指定状态"），同样没有设计。 | **不可写**，原因和音乐一样落在 R11，而不是 R1。 |
-| 桌面图标分组（`groups`） | 直接读写桌面文件网格本身的状态（`desktopFileGrid.orderedEntries`、重命名回调、右键菜单回调、分类选择）。 | 不适用——这不是一个"内容独立的组件"，它就是桌面图标视图本身套了一张卡的壳。 | **本来就不该走 SDK**，不是缺口。保留在 Shell 私有实现里即可，评审这一项只是确认"旧内置列表里不是每一项都是真正的第三方候选"，有助于缩小 R1～R11 的范围。 |
+| 时钟 | 只读：本机时间。可选：模拟/数字换面、Material 花瓣异形面板、内嵌倒计时。 | `host.clock` + `host.settings` + 可选 `Settings.qml` + `appearance.palette` + `surfaceShape` 均已覆盖。 | **完全可写**（示例已接入 `host.clock` 与按实例持久化 `Settings.qml`；Material 模拟/数字时钟可直接通过 `surfaceShape: "flower"` / `"clover"` + `appearance.palette` 实现）。 |
+| 天气 | 只读：`WeatherService`（地点、实时气温、天气代码、7 天预报、加载/错误状态），点击卡片打开天气应用。 | `host.weather` + `host.invokeAction("app.open-weather", { location })` + 动态 `backgroundSpec` 均已覆盖。 | **完全可写**，无需新增宿主适配层。 |
+| 系统（CPU/内存/磁盘/频率） | 只读：`MetricsService` 实时值及 `cpuHistory` / `memoryHistory` / `frequencyHistory` 历史曲线。 | `host.system` 已直接暴露实时指标与三条历史数组。 | **完全可写**，无需新增宿主适配层。 |
+| 活动（应用使用时长等） | 只读：`ActivityUsageService` 今日开机时长、60 天趋势、今日应用时长排行。 | `host.activity` 已直接暴露 `todayKey` / `todayUptimeSeconds` / `recentUptimeDays` / `todayApps`。 | **完全可写**（进程内用户自审模型下直接可读）。 |
+| 音乐 | 读：`MediaService` 当前播放器元数据、歌词、封面配色；写：播放控制 + 呼起播放器窗口。 | `host.media`（含 `artworkColors`）+ `host.invokeAction("media.*")` + 动态三段渐变 `backgroundSpec` 均已覆盖。 | **完全可写**，示例包 `org.nextkde.example.music` 已验证。 |
+| 待办 / 日历 | 读：`PimWidgetService`（今日日程、待办列表、缓存/错误状态）；写：深链打开日历 App 指定视图/条目。 | `host.pim` + `host.invokeAction("app.open-calendar", { view, item })`（支持 `day`/`week`/`month`/`year`/`todo`/`today`/`reminders`）均已覆盖。 | **完全可写**，无需新增宿主适配层。 |
+| 桌面图标分组（`groups`） | 直接读写桌面文件网格本身的状态（`desktopFileGrid.orderedEntries`、重命名回调、右键菜单回调、分类选择）。 | 不适用——这不是一个"内容独立的组件"，它就是桌面图标视图本身套了一张卡的壳。 | **本来就不该走 SDK**，保留在 Shell 私有实现里即可。 |
 
-概括:现有 SDK 草案（`data`/`widgetSize`/`appearance`/`backgroundSpec` + 可选 `Settings.qml`）已经足以写出一个纯展示、数据来自组件自己（或像时钟这样可以只用本机只读能力）、配置简单的组件,示例时钟到这一步是真的闭环验证过的,不是声称。但旧内置组件里多数(天气/系统/活动/待办/日历)需要的是"宿主把一份只读的真实数据持续喂给组件"(R1,尚未设计实现,只有示例时钟的本机时间这一种最简单形态验证过);音乐、待办、日历还额外需要"组件向宿主请求执行一个动作"这个全新方向,当前文档体系里完全没有条目覆盖,新增为 R11。
+概括：截至 2026-11-25，随着直调式 `host` 代理（R1 全部 6 组只读快照 + R11 反向动作 + 通用按实例持久化 `Settings.qml`）、`appearance.palette` Material 动态色板，以及去白名单的磁盘动态 QML 加载（R2）全部落地，除本质属于桌面文件视图的 `groups` 之外，**全部 6 类旧内置组件（时钟、天气、系统、活动、音乐、待办/日历）以及自定义第三方组件都已经可以纯按 SDK 文档写出来并直接运行**。
 
-- [ ] **R11 组件向宿主请求执行动作(反向命令通道)。** 旧音乐组件需要播放控制(上一首/播放暂停/下一首)、唤起或聚焦正在播放的 App 窗口;旧待办/日历组件需要"深链打开日历 App 的指定视图或条目"。这两种都是"组件→宿主"方向的请求,不是数据展示,现有 SDK 草案(第三方开发指南的第 3~4 节)完全没有涉及。评审范围应包括:请求是否需要和 R1 一样的权限授权、命令集合是不是要像 `data` 一样由作者自定义还是宿主给一个受限的固定枚举(例如只允许"播放控制"这几个具体动作,不允许"打开任意路径")、失败/无权限/目标不存在时如何提示组件、以及这条通道是否和 R2 的输入隔离边界共用同一个沙箱决定。
+- [x] **R11 组件向宿主请求执行动作(反向命令通道)。** 旧音乐组件需要播放控制(上一首/播放暂停/下一首)、唤起或聚焦正在播放的 App 窗口;旧待办/日历组件需要"深链打开日历 App 的指定视图或条目"。这两种都是"组件→宿主"方向的请求,不是数据展示。
+  **2026-11-25 完成：** `WidgetHostService.invokeAction(actionName, payload)` 封装了 `media.previous`/`media.toggle-play-pause`/`media.next`/`media.raise-player`/`app.open-weather`/`app.open-calendar`（含 `todo`/`today`/`reminders` 视图），返回结构化 `{ ok, code, message }`（`ok`/`unknown-action`/`unavailable`/`invalid-argument`）；`WidgetPackageHost` 同时通过 `host.invokeAction(...)` 与可选 `actionRequested` 信号两条路径提供调用，图库预览自动断开动作通道返回 `unavailable`。
 
 ## 预算与实施顺序
 

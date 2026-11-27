@@ -3,51 +3,34 @@ import QtQuick
 Item {
     id: root
 
-    required property var data
+    property var snapshot: null
     required property var widgetSize
     required property var appearance
-    readonly property bool wide: widgetSize[0] === 3
-    readonly property var backgroundSpec: appearance.isDark
-        ? ({ startColor: "#263d62", endColor: "#141d35" })
-        : ({ startColor: "#d9efff", endColor: "#f3e8ff" })
+    property var host: null
 
-    // Item.data is also Qt Quick's default child list. Keep the SDK input
-    // named data and assign the visual child through Item.children.
-    children: Column {
-        anchors.centerIn: parent
-        width: parent.width * 0.86
-        spacing: root.height * 0.04
+    readonly property bool inDock: host?.container === "dock"
+    readonly property bool verticalDock: inDock && host?.orientation === "vertical"
+    readonly property bool liveMode: Boolean(host && !host.isPreview)
+    readonly property var clockData: liveMode ? (host.clock ?? snapshot) : snapshot
+    readonly property bool format24h: host?.settings?.format24h !== false
+    readonly property bool isDark: Boolean(appearance?.isDark)
+    readonly property color inkColor: isDark ? "#ffffff" : "#242126"
+    readonly property var backgroundSpec: isDark
+        ? ({ startColor: "#536783", endColor: "#35465f" })
+        : ({ startColor: "#fafafa", endColor: "#ffffff" })
 
-        Text {
-            width: parent.width
-            height: root.height * 0.40
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            fontSizeMode: Text.Fit
-            font.pixelSize: Math.max(1, Math.floor(height * 0.90))
-            font.weight: Font.DemiBold
-            color: root.appearance.foreground
-            text: root.data.timeText
-            // appearance.transparent means the host painted no card behind
-            // this content at all (not just "glass"), so there is no
-            // guaranteed contrast against whatever sits behind it -- an
-            // outline keeps the digits legible over any wallpaper.
-            style: root.appearance.transparent ? Text.Outline : Text.Normal
-            styleColor: root.appearance.isDark ? Qt.rgba(0, 0, 0, 0.55) : Qt.rgba(1, 1, 1, 0.65)
-        }
-
-        Text {
-            visible: root.wide
-            width: parent.width
-            height: root.height * 0.16
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            fontSizeMode: Text.Fit
-            font.pixelSize: Math.max(1, Math.floor(height * 0.78))
-            color: root.appearance.foreground
-            text: root.data.dateText
-            style: root.appearance.transparent ? Text.Outline : Text.Normal
-            styleColor: root.appearance.isDark ? Qt.rgba(0, 0, 0, 0.55) : Qt.rgba(1, 1, 1, 0.65)
-        }
+    ClockContent {
+        anchors.fill: parent
+        widgetSize: root.widgetSize
+        appearance: root.appearance
+        clockData: root.clockData
+        clockStyle: "digital"
+        format24h: root.format24h
+        inDock: root.inDock
+        verticalDock: root.verticalDock
+        digitalTimeColor: root.inkColor
+        digitalSubtleColor: root.inkColor
+        digitalRingColor: root.inkColor
+        digitalCornerRadius: 24
     }
 }

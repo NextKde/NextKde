@@ -1173,6 +1173,21 @@ deploy_artifacts() {
     cp -rL --no-preserve=mode "$shared_icons_src" "$prefix/share/shared/Icons"
     rm -f "$prefix/share/shared/Icons/CMakeLists.txt"
 
+    # --- Official default widgets → $prefix/share/kos/default-widgets ---
+    # Never touch $XDG_DATA_HOME/kos/widgets (user-installed/customized packages).
+    local default_widgets_src="$project_dir/widgets"
+    if [[ "$nix_artifact" == true ]]; then
+        default_widgets_src="$artifact_root/share/kos/default-widgets"
+    fi
+    if [[ -d "$prefix/share/kos/default-widgets" ]]; then
+        find "$prefix/share/kos/default-widgets" -type d -exec chmod u+w {} +
+    fi
+    rm -rf "$prefix/share/kos/default-widgets"
+    if [[ -d "$default_widgets_src" ]]; then
+        mkdir -p "$prefix/share/kos/default-widgets"
+        cp -rL --no-preserve=mode "$default_widgets_src/." "$prefix/share/kos/default-widgets/"
+    fi
+
     # --- Shell QML → ~/.config/quickshell/kos ---
     local shell_config="$config_dir/quickshell/kos"
     python3 "$project_dir/tools/deploy/deploy-shell-qml.py" deploy \
@@ -2216,7 +2231,7 @@ uninstall() {
         "$prefix/share/applications/org.kos.Platform.desktop" \
         "$prefix/share/applications/org.kos.Shell.desktop" \
         "$prefix/share/applications/kos-platform.desktop"
-    rm -rf "$prefix/share/kos/settings" "$prefix/share/shared/qml" "$prefix/share/shared/Icons"
+    rm -rf "$prefix/share/kos/settings" "$prefix/share/kos/default-widgets" "$prefix/share/shared/qml" "$prefix/share/shared/Icons"
     rm -rf "$config_dir/quickshell/kos"
     echo "Removed KOS binaries, units, and shell configuration; state data was preserved."
     if is_nixos; then
@@ -2342,6 +2357,11 @@ deploy_shell() {
     fi
     if [[ -d "$prefix/share/shared/qml" ]]; then
         cp -rL --no-preserve=mode "$shared_qml_src/." "$prefix/share/shared/qml/"
+    fi
+    if [[ -d "$project_dir/widgets" ]]; then
+        rm -rf "$prefix/share/kos/default-widgets"
+        mkdir -p "$prefix/share/kos/default-widgets"
+        cp -rL --no-preserve=mode "$project_dir/widgets/." "$prefix/share/kos/default-widgets/"
     fi
 }
 

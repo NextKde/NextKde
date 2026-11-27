@@ -1,0 +1,37 @@
+{
+  "id": "org.nextkde.widget.music",
+  "name": "Music",
+  "description": "Playback controls, track details, and current lyrics.",
+  "category": "media",
+  "categoryName": "Media & Music",
+  "i18n": {
+    "en": {
+      "name": "Music",
+      "description": "Playback controls, track details, and current lyrics.",
+      "categoryName": "Media & Music"
+    },
+    "zh-CN": {
+      "name": "音乐控制",
+      "description": "展示正在播放的曲目、封面配色与播放控制。",
+      "categoryName": "音乐与媒体"
+    }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "sizes": [[1, 1], [2, 1]],
+  "defaultSize": [2, 1],
+  "widgets": [
+    {
+      "id": "org.nextkde.widget.music.macos",
+      "style": "macos",
+      "widgetEntry": "macos/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.music.material",
+      "style": "material",
+      "widgetEntry": "material/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

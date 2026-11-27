@@ -4,11 +4,16 @@ import qs.desktop.modules.common
 import qs.desktop.modules.dock
 import "../../../shared/qml/i18n"
 import "../../../shared/qml/controls" as LiquidControls
-import "bundled-clock" as Clock
+import "WidgetCategories.mjs" as WidgetCategories
+import "WidgetGalleryDiagnostics.mjs" as WidgetDiagnostics
+import "WidgetLocalization.mjs" as WidgetLocalization
 
 Rectangle {
     id: root
     property var catalog: []
+    property var invalidPackages: []
+    property var trippedPackages: []
+    property var missingInstances: []
     property string selectedCategory: "all"
     property string query: ""
     property string feedback: ""
@@ -16,20 +21,54 @@ Rectangle {
     property bool loading: false
     readonly property bool compact: width < 600
     readonly property color ink: ThemeService.foregroundColor
+    readonly property var _trippedList: WidgetDiagnostics.toList(root.trippedPackages)
+    readonly property var _invalidList: WidgetDiagnostics.toList(root.invalidPackages)
+    readonly property var _missingList: WidgetDiagnostics.toList(root.missingInstances)
+    readonly property int unavailableCount: _trippedList.length + _invalidList.length + _missingList.length
+    readonly property string previewThemeKey: WidgetPreviewCache.themeKeyFor(
+        WidgetHostService.widgetAppearance,
+        AppearanceTokens.surface.paintInQml,
+        String(AppearanceTokens.colors.layer1),
+        Screen.devicePixelRatio || 1
+    )
+    function _syncPreviewCache() {
+        WidgetPreviewCache.syncCatalog(root.catalog, root._trippedList)
+    }
+    onCatalogChanged: root._syncPreviewCache()
+    onTrippedPackagesChanged: root._syncPreviewCache()
+    onVisibleChanged: if (!visible) WidgetPreviewCache.clearPendingRenders()
+    Component.onCompleted: root._syncPreviewCache()
     // "dock" is a fixed category (the Dock's own built-in music/weather/
     // clock/metrics widgets, folded in from the retired DockComponentEditor)
     // rather than one derived from the addable catalog, so it is always
     // present even when the catalog is empty or still loading.
     readonly property var categories: {
+        const _lang = I18n.language
         const result = [{id: "all", name: I18n.tr("All Widgets"), icon: ""}]
-        for (const entry of root.publishedEntries) {
-            if (entry.category && !result.some(item => item.id === entry.category))
-                result.push({id: entry.category, name: entry.categoryName, icon: ""})
-        }
+        const stdCats = WidgetCategories.buildSidebarCategories(root.publishedEntries, key => I18n.tr(key))
+        for (let i = 0; i < stdCats.length; i++)
+            result.push(stdCats[i])
         result.push({id: "dock", name: I18n.tr("Dock Widgets"), icon: ""})
+        if (root.unavailableCount > 0)
+            result.push({id: "unavailable", name: I18n.tr("Unavailable") + " (" + root.unavailableCount + ")", icon: ""})
         return result
     }
+    function localized(entry, field) {
+        return WidgetLocalization.localizedField(entry, field, I18n.language)
+    }
+    function supportsContainer(entry, containerName) {
+        if (!entry || typeof entry !== "object") return false
+        const raw = entry.containers
+        if (raw == null || typeof raw === "string" || typeof raw.length !== "number" || raw.length === 0)
+            return containerName === "desktop"
+        for (let i = 0; i < raw.length; i++) {
+            if (String(raw[i]) === containerName) return true
+        }
+        return false
+    }
     signal addRequested(var entry, string size)
+    signal reEnableRequested(string packageId)
+    signal removeRetiredInstanceRequested(string instanceId)
     signal done()
     objectName: "widget-library"
     radius: 0
@@ -70,19 +109,17 @@ Rectangle {
         search.forceActiveFocus()
     }
     function sizeName(size) {
-        if (Array.isArray(size)) return size[0] + "×" + size[1]
+        if (size != null && typeof size !== "string" && size.length === 2)
+            return Number(size[0]) + "×" + Number(size[1])
         return I18n.tr(size === "small" ? "Small" : size === "large" ? "Large" : "Medium")
     }
-    // First integrated SDK preview: execute only packages the host actually
-    // maps to a view (WidgetRegistry.executablePackages). Index discovery
-    // alone must never authorize arbitrary installed QML.
-    Clock.Snapshot { id: clockSnapshot }
     // Read every executable package's own declared sizes instead of assuming
-    // the example clock's 2x2/3x2 pair. Duck-type the nested arrays on
-    // `.length`: arrays that crossed a QML property boundary may be Qt
-    // sequence wrappers where Array.isArray() is false (see R9).
+    // fixed presets. Duck-type the nested arrays on `.length`: arrays that
+    // crossed a QML property boundary may be Qt sequence wrappers where
+    // Array.isArray() is false (see R9).
     function sizeChoices(entry) {
-        if (entry.available !== true || !WidgetRegistry.canExecute(entry.id)) return []
+        if (!WidgetRegistry.canExecute(entry)
+                || !WidgetRegistry.matchesActiveStyle(entry)) return []
         const choices = []
         const sizes = entry.sizes ?? []
         for (let i = 0; i < sizes.length; i++) {
@@ -101,12 +138,18 @@ Rectangle {
     // Resolve sizes from the IPC catalog before entries cross the ListView's
     // model boundary. Delegates use the published choices by package ID.
     readonly property var publishedCatalog: {
+        // Bind explicitly to activePackageStyle so switching shellStyle
+        // immediately re-filters the gallery to matching packages.
+        const styleFilter = WidgetRegistry.activePackageStyle
         const entries = []
         const choicesById = Object.create(null)
         for (const entry of root.catalog) {
-            if (!Array.isArray(entry.defaultSize)) continue
+            if (String(entry.style ?? "") !== styleFilter) continue
+            if (!root.supportsContainer(entry, "desktop")) continue
+            const defaultSize = entry.defaultSize
+            if (defaultSize == null || typeof defaultSize === "string" || defaultSize.length !== 2) continue
             const choices = root.sizeChoices(entry)
-            const defaultValue = entry.defaultSize.join("x")
+            const defaultValue = Number(defaultSize[0]) + "x" + Number(defaultSize[1])
             if (!choices.some(choice => choice.value === defaultValue)) continue
             entries.push(entry)
             choicesById[entry.id] = choices
@@ -115,10 +158,29 @@ Rectangle {
     }
     readonly property var publishedEntries: publishedCatalog.entries
     readonly property var entries: {
+        const _lang = I18n.language
         const needle = query.trim().toLocaleLowerCase()
-        return root.publishedEntries.filter(entry =>
-            (selectedCategory === "all" || entry.category === selectedCategory)
-            && (!needle || (entry.name + " " + (entry.description ?? "") + " " + (entry.categoryName ?? "")).toLocaleLowerCase().includes(needle)))
+        return root.publishedEntries.filter(entry => {
+            const catId = WidgetCategories.normalizeCategory(entry.category)
+            if (selectedCategory !== "all" && catId !== selectedCategory) return false
+            if (!needle) return true
+            const catLabel = I18n.tr(WidgetCategories.categoryLabelKey(catId))
+            return (
+                root.localized(entry, "name") + " " + (entry.name ?? "") + " "
+                + root.localized(entry, "packageName") + " " + (entry.packageName ?? "") + " "
+                + root.localized(entry, "description") + " " + (entry.description ?? "") + " "
+                + catLabel + " " + catId
+            ).toLocaleLowerCase().includes(needle)
+        })
+    }
+    readonly property var groupedEntries: {
+        const _lang = I18n.language
+        return WidgetCategories.groupEntriesByPackage(
+            root.entries,
+            root.publishedCatalog.choicesById,
+            (entry, field) => root.localized(entry, field),
+            key => I18n.tr(key)
+        )
     }
     onCategoriesChanged: {
         if (!categories.some(item => item.id === selectedCategory)) selectedCategory = "all"
@@ -216,14 +278,15 @@ Rectangle {
     ListView {
         id: previewList
         objectName: "widget-gallery-previews"
-        visible: root.selectedCategory !== "dock"
+        visible: root.selectedCategory !== "dock" && root.selectedCategory !== "unavailable"
         x: root.compact ? 14 : sidebar.x + sidebar.width + 28
         y: root.compact ? sidebar.y + sidebar.height + 6 : 16
         width: Math.max(1, parent.width - x - 16)
         height: Math.max(1, parent.height - y - footer.height - 12)
         clip: true
         spacing: 24
-        model: root.visible ? root.entries : []
+        cacheBuffer: 240
+        model: root.visible ? root.groupedEntries : []
         boundsBehavior: Flickable.StopAtBounds
         Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
         delegate: Column {
@@ -232,7 +295,7 @@ Rectangle {
             width: previewList.width - 8
             spacing: 10
             Text {
-                text: group.modelData.name
+                text: String(group.modelData.title ?? "")
                 textFormat: Text.PlainText
                 color: root.ink
                 font { pixelSize: 13; weight: Font.DemiBold }
@@ -241,11 +304,11 @@ Rectangle {
                 width: parent.width
                 spacing: 12
                 Repeater {
-                    model: root.publishedCatalog.choicesById[group.modelData.id] ?? []
+                    model: group.modelData.items ?? []
                     delegate: Item {
                         id: choice
                         required property var modelData
-                        readonly property var entry: group.modelData
+                        readonly property var entry: choice.modelData.entry
                         // modelData.span has crossed this Repeater's model:
                         // boundary, which boxes a plain JS array field into a
                         // Qt sequence wrapper -- still indexable, but
@@ -261,11 +324,47 @@ Rectangle {
                         // distinguishable, not just labeled differently).
                         readonly property real cellUnit: 76
                         readonly property real cellGap: 6
+                        readonly property real previewScale: 0.5
                         readonly property real previewWidth: cols * cellUnit + (cols - 1) * cellGap
                         readonly property real previewHeight: rows * cellUnit + (rows - 1) * cellGap
-                        width: previewWidth + 16
-                        height: previewHeight + 16 + 44
+                        width: Math.max(previewWidth + 16, choice.modelData.showSubName ? 128 : 112)
+                        height: previewHeight + 16 + Math.max(44, 28 + descriptionText.implicitHeight + 6)
                         readonly property bool blocked: !root.placementEnabled || !!entry.present
+                        readonly property string sizeValue: String(modelData.value ?? "")
+                        readonly property bool isDefaultSize: {
+                            const ds = choice.entry.defaultSize
+                            if (ds != null && typeof ds !== "string" && ds.length === 2)
+                                return (Number(ds[0]) + "x" + Number(ds[1])) === choice.sizeValue
+                            return false
+                        }
+                        readonly property string slotKey: WidgetPreviewCache.slotKeyFor(String(choice.entry.id ?? ""), choice.sizeValue)
+                        readonly property string desiredFileName: WidgetPreviewCache.fileNameFor(
+                            String(choice.entry.id ?? ""),
+                            String(choice.entry.revision ?? ""),
+                            choice.sizeValue,
+                            root.previewThemeKey
+                        )
+                        readonly property var cacheResolution: WidgetPreviewCache.resolve(choice.slotKey, choice.desiredFileName)
+                        readonly property bool hasExactCache: cacheResolution.status === "hit" && cacheResolution.exactUrl.length > 0
+                        readonly property bool hasFallbackCache: cacheResolution.status === "stale" && cacheResolution.fallbackUrl.length > 0
+                        property bool _renderFailed: false
+                        readonly property bool needsRender: root.visible && previewList.visible
+                            && !choice.hasExactCache && !choice._renderFailed && choice.desiredFileName.length > 0
+                        readonly property bool renderGranted: WidgetPreviewCache.isRenderGranted(choice.slotKey, choice.desiredFileName)
+                        function _syncRenderQueue() {
+                            if (choice.needsRender)
+                                WidgetPreviewCache.requestRender(choice.slotKey, choice.desiredFileName, choice.isDefaultSize)
+                            else
+                                WidgetPreviewCache.releaseRender(choice.slotKey)
+                        }
+                        onDesiredFileNameChanged: {
+                            choice._renderFailed = false
+                            choice._syncRenderQueue()
+                        }
+                        onNeedsRenderChanged: choice._syncRenderQueue()
+                        Component.onCompleted: choice._syncRenderQueue()
+                        Component.onDestruction: WidgetPreviewCache.releaseRender(choice.slotKey)
+
                         Rectangle {
                             anchors.fill: parent
                             radius: 10
@@ -279,30 +378,146 @@ Rectangle {
                             y: 8
                             width: choice.previewWidth
                             height: choice.previewHeight
-                            readonly property var widgetAppearance: ({
-                                isDark: AppearanceTokens.isDarkTheme,
-                                foreground: AppearanceTokens.surface.widgetForeground,
-                                transparent: AppearanceConfigService.widgetStyle === "glass"
-                                    && !AppearanceTokens.surface.paintInQml
-                            })
-                            Clock.Widget {
-                                id: previewWidget
+                            clip: true
+                            Image {
+                                id: cachedPreviewImage
                                 anchors.fill: parent
-                                data: clockSnapshot.getSnapshot(choice.modelData.span)
-                                widgetSize: choice.modelData.span
-                                appearance: previewBox.widgetAppearance
+                                z: 1
+                                source: choice.hasExactCache
+                                    ? choice.cacheResolution.exactUrl
+                                    : (choice.hasFallbackCache ? choice.cacheResolution.fallbackUrl : "")
+                                visible: source.toString().length > 0 && status === Image.Ready && !choice._renderFailed
+                                fillMode: Image.PreserveAspectFit
+                                smooth: true
+                                asynchronous: true
+                                cache: false
+                                onStatusChanged: {
+                                    if (status === Image.Ready && choice.hasExactCache) {
+                                        WidgetPreviewCache.touch(choice.slotKey)
+                                    } else if (status === Image.Error && source.toString().length > 0) {
+                                        const badFile = choice.hasExactCache
+                                            ? choice.cacheResolution.exactFileName
+                                            : choice.cacheResolution.fallbackFileName
+                                        if (badFile) WidgetPreviewCache.invalidateFile(choice.slotKey, badFile)
+                                    }
+                                }
                             }
                             Loader {
-                                anchors.fill: parent
-                                z: -1
-                                active: !!previewWidget.backgroundSpec
-                                    && !(AppearanceConfigService.widgetStyle === "glass"
-                                        && !AppearanceTokens.surface.paintInQml)
-                                sourceComponent: Rectangle {
-                                    radius: 14
-                                    gradient: Gradient {
-                                        GradientStop { position: 0; color: previewWidget.backgroundSpec.startColor }
-                                        GradientStop { position: 1; color: previewWidget.backgroundSpec.endColor }
+                                id: livePreviewLoader
+                                active: choice.renderGranted || choice._renderFailed
+                                x: 0
+                                y: (cachedPreviewImage.visible && !choice._renderFailed) ? (previewBox.height + 32) : 0
+                                width: previewBox.width
+                                height: previewBox.height
+                                sourceComponent: Item {
+                                    id: captureSurface
+                                    width: previewBox.width
+                                    height: previewBox.height
+                                    property int _captureToken: 0
+                                    readonly property string targetFile: choice.desiredFileName
+                                    readonly property var previewHost: previewCard.loadedContent ?? null
+                                    readonly property bool previewReady: Boolean(previewHost && previewHost.ready)
+                                    readonly property bool previewFailed: Boolean(previewHost && previewHost.failed)
+                                    readonly property bool shouldCapture: previewReady
+                                        && WidgetPreviewCache.dirReady
+                                        && !choice.hasExactCache
+                                        && !choice._renderFailed
+                                    onTargetFileChanged: {
+                                        _captureToken++
+                                        if (shouldCapture) captureTimer.restart()
+                                    }
+                                    onShouldCaptureChanged: {
+                                        if (shouldCapture) captureTimer.restart()
+                                        else captureTimer.stop()
+                                    }
+                                    DeskWidgetCard {
+                                        id: previewCard
+                                        x: 0
+                                        y: 0
+                                        width: choice.previewWidth / choice.previewScale
+                                        height: choice.previewHeight / choice.previewScale
+                                        transformOrigin: Item.TopLeft
+                                        scale: choice.previewScale
+                                        preview: true
+                                        readonly property var _bgSpec: previewCard.loadedContent ? (previewCard.loadedContent.backgroundSpec ?? null) : null
+                                        startColor: _bgSpec?.startColor ?? "#536783"
+                                        hasMidColor: _bgSpec?.midColor !== undefined
+                                            && _bgSpec?.midColor !== null
+                                            && String(_bgSpec.midColor).length > 0
+                                        midColor: hasMidColor ? _bgSpec.midColor : "transparent"
+                                        midPosition: _bgSpec?.midPosition !== undefined
+                                            ? Number(_bgSpec.midPosition) : 0.5
+                                        endColor: _bgSpec?.endColor ?? "#35465f"
+                                        gradientOrientation: _bgSpec?.orientation === "horizontal"
+                                            ? Gradient.Horizontal : Gradient.Vertical
+                                        showSurface: Boolean(_bgSpec)
+                                        materialSurfaceColor: AppearanceTokens.colors.layer1
+                                        materialSurfaceShape: choice.entry.style === "material" && previewCard.loadedContent
+                                            ? String(previewCard.loadedContent.surfaceShape || "roundedRect")
+                                            : "roundedRect"
+                                        contentComponent: Component {
+                                            WidgetPreviewHost {
+                                                packageId: String(choice.entry.id ?? "")
+                                                widgetEntry: String(choice.entry.widgetEntry ?? "")
+                                                snapshotEntry: String(choice.entry.snapshotEntry ?? "")
+                                                packageRevision: String(choice.entry.revision ?? "")
+                                                widgetSize: choice.modelData.span
+                                                appearance: WidgetHostService.widgetAppearance
+                                                onFailedChanged: {
+                                                    if (failed) {
+                                                        captureTimer.stop()
+                                                        choice._renderFailed = true
+                                                        WidgetPreviewCache.releaseRender(choice.slotKey)
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Timer {
+                                        id: captureTimer
+                                        interval: 80
+                                        repeat: false
+                                        running: captureSurface.shouldCapture && !captureSurface.previewFailed
+                                        onTriggered: {
+                                            if (!captureSurface.shouldCapture || captureSurface.previewFailed) return
+                                            const token = ++captureSurface._captureToken
+                                            const fileName = captureSurface.targetFile
+                                            const outPath = WidgetPreviewCache.filePathFor(fileName)
+                                            if (!outPath) {
+                                                WidgetPreviewCache.releaseRender(choice.slotKey)
+                                                return
+                                            }
+                                            const dpr = Math.max(1, Number(Screen.devicePixelRatio || 1))
+                                            const targetSize = Qt.size(
+                                                Math.max(1, Math.round(captureSurface.width * dpr)),
+                                                Math.max(1, Math.round(captureSurface.height * dpr))
+                                            )
+                                            const widgetId = String(choice.entry.id ?? "")
+                                            const packageId = String(choice.entry.packageId ?? choice.entry.id ?? "")
+                                            const sizeValue = choice.sizeValue
+                                            const isDefault = choice.isDefaultSize
+                                            const rev = String(choice.entry.revision ?? "")
+                                            const themeKey = root.previewThemeKey
+                                            const slotKey = choice.slotKey
+                                            const ok = captureSurface.grabToImage(function(result) {
+                                                if (token !== captureSurface._captureToken || fileName !== choice.desiredFileName)
+                                                    return
+                                                if (result && result.saveToFile(outPath)) {
+                                                    WidgetPreviewCache.commit({
+                                                        widgetId: widgetId,
+                                                        packageId: packageId,
+                                                        sizeValue: sizeValue,
+                                                        isDefaultSize: isDefault,
+                                                        fileName: fileName,
+                                                        revision: rev,
+                                                        themeKey: themeKey
+                                                    })
+                                                } else {
+                                                    WidgetPreviewCache.releaseRender(slotKey)
+                                                }
+                                            }, targetSize)
+                                            if (!ok) WidgetPreviewCache.releaseRender(slotKey)
+                                        }
                                     }
                                 }
                             }
@@ -316,7 +531,7 @@ Rectangle {
                         Rectangle {
                             id: addBadge
                             visible: !choice.blocked
-                            x: 4; y: 4
+                            x: Math.max(4, previewBox.x - 4); y: 4
                             z: 2
                             width: 22; height: 22
                             radius: 11
@@ -336,15 +551,17 @@ Rectangle {
                             }
                         }
                         Text {
-                            anchors { left: parent.left; right: parent.right; top: previewBox.bottom; topMargin: 10 }
+                            anchors { left: parent.left; right: parent.right; leftMargin: 4; rightMargin: 4; top: previewBox.bottom; topMargin: 10 }
                             text: choice.modelData.label
                             color: root.ink
                             horizontalAlignment: Text.AlignHCenter
+                            elide: Text.ElideRight
                             font { pixelSize: 11; weight: Font.DemiBold }
                         }
                         Text {
+                            id: descriptionText
                             anchors { left: parent.left; right: parent.right; top: previewBox.bottom; topMargin: 27; margins: 6 }
-                            text: choice.entry.present ? I18n.tr("Already on Desktop") : choice.entry.description
+                            text: choice.entry.present ? I18n.tr("Already on Desktop") : root.localized(choice.entry, "description")
                             textFormat: Text.PlainText
                             color: root.ink
                             opacity: 0.65
@@ -356,7 +573,7 @@ Rectangle {
                         }
                         activeFocusOnTab: !blocked
                         Accessible.role: blocked ? Accessible.StaticText : Accessible.Button
-                        Accessible.name: entry.name + ", " + modelData.label
+                        Accessible.name: root.localized(entry, "name") + ", " + modelData.label
                         Keys.onReturnPressed: if (!blocked) root.addRequested(entry, modelData.value)
                         Keys.onSpacePressed: if (!blocked) root.addRequested(entry, modelData.value)
                         MouseArea {
@@ -387,13 +604,13 @@ Rectangle {
             font.pixelSize: 13
         }
     }
-    // "Dock Widgets" category — folded in from the retired
-    // DockComponentEditor.qml. Reuses ConfigService.infoCardOrder/
-    // knownInfoCardIds/add|remove|moveInfoCard verbatim (the Dock's own
+    // "Dock Widgets" category — every Dock card is an installed package that
+    // declares containers: ["dock"], keyed by dockCardId. Reuses
+    // ConfigService.infoCardOrder/add|remove|moveInfoCard (the Dock's own
     // state, unchanged) behind this panel's own styling instead of that
     // popup's Material-token chrome, so it reads as part of this surface
     // rather than a second UI pasted in.
-    Item {
+    Flickable {
         id: dockWidgetsPanel
         objectName: "widget-gallery-dock-widgets"
         visible: root.selectedCategory === "dock"
@@ -401,151 +618,554 @@ Rectangle {
         y: previewList.y
         width: previewList.width
         height: previewList.height
+        clip: true
+        contentWidth: width
+        contentHeight: dockContentCol.implicitHeight + 16
+        boundsBehavior: Flickable.StopAtBounds
+        Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
 
-        readonly property var labels: ({
-            music: I18n.tr("Music"), weather: I18n.tr("Weather"),
-            clock: I18n.tr("Clock"), metrics: I18n.tr("System")
-        })
+        readonly property var dockPackageMap: {
+            const map = Object.create(null)
+            for (const entry of (root.catalog ?? [])) {
+                if (!WidgetRegistry.canExecute(entry) || !WidgetRegistry.matchesActiveStyle(entry))
+                    continue
+                if (!root.supportsContainer(entry, "dock"))
+                    continue
+                const cardId = String(entry.dockCardId || entry.id)
+                if (!map[cardId]) map[cardId] = entry
+            }
+            return map
+        }
         readonly property var displayIds: {
-            const active = ConfigService.infoCardOrder.slice()
-            for (const id of ConfigService.knownInfoCardIds)
+            const active = []
+            for (const id of ConfigService.infoCardOrder) {
+                if (!!dockPackageMap[id])
+                    active.push(id)
+            }
+            for (const id of Object.keys(dockPackageMap))
                 if (active.indexOf(id) < 0) active.push(id)
             return active
         }
 
-        Text {
-            id: dockWidgetsTitle
-            anchors { left: parent.left; top: parent.top }
-            text: I18n.tr("Dock Widgets")
-            color: root.ink
-            font { pixelSize: 13; weight: Font.DemiBold }
-        }
-        Text {
-            anchors { left: parent.left; right: parent.right; top: dockWidgetsTitle.bottom; topMargin: 4 }
-            text: I18n.tr("Tap to add or remove, drag to reorder.")
-            color: root.ink
-            opacity: 0.65
-            font.pixelSize: 11
-            wrapMode: Text.WordWrap
-        }
-
-        Flow {
-            id: dockCardFlow
-            anchors { left: parent.left; right: parent.right; top: parent.top; topMargin: 48 }
+        Column {
+            id: dockContentCol
+            width: dockWidgetsPanel.width - 10
             spacing: 12
 
-            Repeater {
-                model: dockWidgetsPanel.displayIds
-                delegate: Rectangle {
-                    id: dockCard
-                    required property string modelData
-                    required property int index
-                    readonly property bool active: ConfigService.infoCardOrder.indexOf(modelData) >= 0
-                    readonly property int activeIndex: ConfigService.infoCardOrder.indexOf(modelData)
-                    property real dragOffset: 0
-
-                    width: 96; height: 72
-                    radius: 14
-                    z: dockReorderDrag.active ? 10 : 0
-                    scale: dockReorderDrag.active ? 1.06 : 1
-                    transform: Translate { x: dockCard.dragOffset }
-                    color: active ? Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.10)
-                        : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.035)
-                    border.width: active ? 2 : 1
-                    border.color: active ? "#007aff" : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.16)
-                    opacity: active ? 1 : 0.62
-
-                    Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-                    Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
-
-                    Column {
-                        anchors.centerIn: parent
-                        spacing: 4
-                        BundledIcon {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            name: "dock.widget." + dockCard.modelData
-                            color: root.ink
-                            size: 22
-                        }
-                        Text {
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: dockWidgetsPanel.labels[dockCard.modelData]
-                            color: root.ink
-                            font { pixelSize: 11; weight: Font.DemiBold }
-                        }
-                    }
-                    Rectangle {
-                        anchors { top: parent.top; right: parent.right; margins: 5 }
-                        width: 20; height: 20; radius: 10
-                        color: dockCard.active ? "#ff453a" : "#007aff"
-                        BundledIcon {
-                            anchors.centerIn: parent
-                            name: dockCard.active ? "dock.widget.remove" : "dock.widget.add"
-                            color: "white"
-                            size: 15
-                        }
-                    }
-                    TapHandler {
-                        enabled: !dockReorderDrag.active
-                        onTapped: {
-                            if (dockCard.active) ConfigService.removeInfoCard(dockCard.modelData)
-                            else ConfigService.addInfoCard(dockCard.modelData, ConfigService.infoCardOrder.length)
-                        }
-                    }
-                    DragHandler {
-                        id: dockReorderDrag
-                        target: null
-                        enabled: dockCard.active
-                        xAxis.enabled: true
-                        yAxis.enabled: false
-                        onTranslationChanged: if (active) dockCard.dragOffset = translation.x
-                        onActiveChanged: {
-                            if (active) return
-                            if (Math.abs(dockCard.dragOffset) < 8) { dockCard.dragOffset = 0; return }
-                            const step = dockCard.width + dockCardFlow.spacing
-                            const delta = Math.round(dockCard.dragOffset / step)
-                            ConfigService.moveInfoCard(dockCard.modelData,
-                                Math.max(0, Math.min(ConfigService.infoCardOrder.length - 1,
-                                    dockCard.activeIndex + delta)))
-                            dockCard.dragOffset = 0
-                        }
-                    }
-                }
-            }
-        }
-
-        Row {
-            anchors { left: parent.left; right: parent.right; top: dockCardFlow.bottom; topMargin: 24 }
-            spacing: 12
             Column {
-                width: parent.width - autoRotateSwitch.width - 12
-                spacing: 1
+                width: parent.width
+                spacing: 4
                 Text {
-                    width: parent.width
-                    text: I18n.tr("Auto rotate")
+                    id: dockWidgetsTitle
+                    text: I18n.tr("Dock Widgets")
                     color: root.ink
                     font { pixelSize: 13; weight: Font.DemiBold }
                 }
                 Text {
                     width: parent.width
-                    text: I18n.tr("When off, hover and scroll wheel still switch pages")
+                    text: I18n.tr("Tap to add or remove, drag to reorder.")
                     color: root.ink
-                    opacity: 0.58
+                    opacity: 0.65
+                    font.pixelSize: 11
                     wrapMode: Text.WordWrap
-                    font.pixelSize: 10
                 }
             }
-            LiquidControls.LiquidGlassSwitch {
-                id: autoRotateSwitch
-                implicitWidth: 58
-                implicitHeight: 28
-                checked: ConfigService.infoCardAutoRotate
-                accentColor: "#007aff"
-                trackColor: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.18)
-                onToggled: enabled => ConfigService.updateInfoCardAutoRotate(enabled)
+
+            Flow {
+                id: dockCardFlow
+                width: parent.width
+                spacing: 12
+
+                Repeater {
+                    model: dockWidgetsPanel.displayIds
+                    delegate: Rectangle {
+                        id: dockCard
+                        required property string modelData
+                        required property int index
+                        readonly property var pkgEntry: dockWidgetsPanel.dockPackageMap[modelData] ?? null
+                        readonly property int units: pkgEntry
+                            ? Math.max(2, Math.min(4, Number(pkgEntry.dockUnits) || 4)) : 3
+                        readonly property bool active: ConfigService.infoCardOrder.indexOf(modelData) >= 0
+                        readonly property int activeIndex: ConfigService.infoCardOrder.indexOf(modelData)
+                        readonly property bool hasPopup: Boolean(pkgEntry
+                            && pkgEntry.hasPopup && String(pkgEntry.popupEntry || "").length > 0)
+                        property real dragOffset: 0
+
+                        width: Math.max(156, units * 46 + 24)
+                        height: 110
+                        radius: 16
+                        z: dockReorderDrag.active ? 10 : 0
+                        scale: dockReorderDrag.active ? 1.04 : 1
+                        transform: Translate { x: dockCard.dragOffset }
+                        color: active ? Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.10)
+                            : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.04)
+                        border.width: active ? 2 : 1
+                        border.color: active ? "#007aff" : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.16)
+                        opacity: active ? 1 : 0.72
+
+                        Behavior on scale { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+                        Behavior on opacity { NumberAnimation { duration: 140; easing.type: Easing.OutCubic } }
+
+                        // Live Dock strip preview slot
+                        Rectangle {
+                            id: dockSlotPreview
+                            anchors {
+                                left: parent.left; right: parent.right
+                                top: parent.top; margins: 8
+                            }
+                            height: 56
+                            radius: 14
+                            clip: true
+                            readonly property var spec: dockPreviewLoader.item
+                                ? dockPreviewLoader.item.backgroundSpec : null
+                            readonly property bool paintGradient: !AppearanceTokens.isMaterial
+                                && !!spec && !WidgetHostService.widgetAppearance.transparent
+                            color: paintGradient ? "transparent"
+                                : (AppearanceTokens.isMaterial
+                                    ? Qt.rgba(AppearanceTokens.colors.layer2.r,
+                                        AppearanceTokens.colors.layer2.g,
+                                        AppearanceTokens.colors.layer2.b, 0.82)
+                                    : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.08))
+                            gradient: paintGradient ? dockSlotGradient : null
+                            Gradient {
+                                id: dockSlotGradient
+                                orientation: dockSlotPreview.spec?.orientation === "horizontal"
+                                    ? Gradient.Horizontal : Gradient.Vertical
+                                GradientStop { position: 0; color: dockSlotPreview.spec?.startColor ?? "transparent" }
+                                GradientStop {
+                                    position: Math.max(0.01, Math.min(0.99,
+                                        dockSlotPreview.spec?.midPosition !== undefined
+                                            ? Number(dockSlotPreview.spec.midPosition) : 0.5))
+                                    color: {
+                                        const s = dockSlotPreview.spec
+                                        if (!s) return "transparent"
+                                        const m = s.midColor
+                                        if (m !== undefined && m !== null && String(m).length > 0) return m
+                                        const sc = Qt.color(String(s.startColor ?? "transparent"))
+                                        const ec = Qt.color(String(s.endColor ?? "transparent"))
+                                        return Qt.rgba((sc.r + ec.r) * 0.5, (sc.g + ec.g) * 0.5,
+                                            (sc.b + ec.b) * 0.5, (sc.a + ec.a) * 0.5)
+                                    }
+                                }
+                                GradientStop { position: 1; color: dockSlotPreview.spec?.endColor ?? "transparent" }
+                            }
+
+                            Loader {
+                                id: dockPreviewLoader
+                                anchors.fill: parent
+                                anchors.margins: 4
+                                active: root.visible && root.selectedCategory === "dock"
+                                    && Boolean(dockCard.pkgEntry)
+                                sourceComponent: Component {
+                                    WidgetPreviewHost {
+                                        packageId: String(dockCard.pkgEntry?.id ?? "")
+                                        widgetEntry: String(dockCard.pkgEntry?.widgetEntry ?? "")
+                                        snapshotEntry: String(dockCard.pkgEntry?.snapshotEntry ?? "")
+                                        packageRevision: String(dockCard.pkgEntry?.revision ?? "")
+                                        containerType: "dock"
+                                        containerOrientation: "horizontal"
+                                        widgetSize: [dockCard.units, 1]
+                                        appearance: WidgetHostService.widgetAppearance
+                                    }
+                                }
+                            }
+                        }
+
+                        // Title + optional Popup preview pill on bottom row
+                        Row {
+                            anchors {
+                                left: parent.left; right: parent.right
+                                bottom: parent.bottom; margins: 8; bottomMargin: 7
+                            }
+                            height: 26
+                            spacing: 6
+
+                            Text {
+                                width: Math.max(1, parent.width
+                                    - (popupPreviewBtn.visible ? popupPreviewBtn.width + 6 : 0))
+                                anchors.verticalCenter: parent.verticalCenter
+                                elide: Text.ElideRight
+                                text: dockCard.pkgEntry
+                                    ? (root.localized(dockCard.pkgEntry, "name") || dockCard.modelData)
+                                    : dockCard.modelData
+                                color: root.ink
+                                font { pixelSize: 11; weight: Font.DemiBold }
+                            }
+
+                            Rectangle {
+                                id: popupPreviewBtn
+                                visible: dockCard.hasPopup
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: popupBtnLabel.implicitWidth + 14
+                                height: 22
+                                radius: 11
+                                color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.12)
+                                Text {
+                                    id: popupBtnLabel
+                                    anchors.centerIn: parent
+                                    text: I18n.tr("Popup")
+                                    color: root.ink
+                                    font { pixelSize: 10; weight: Font.DemiBold }
+                                }
+                                MouseArea {
+                                    anchors.fill: parent
+                                    acceptedButtons: Qt.LeftButton
+                                    cursorShape: Qt.PointingHandCursor
+                                    onClicked: function(mouse) {
+                                        mouse.accepted = true
+                                        dockPopupPreview.pkgEntry = dockCard.pkgEntry
+                                        dockPopupPreview.units = dockCard.units
+                                        dockPopupPreview.open()
+                                    }
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            anchors { top: parent.top; right: parent.right; margins: 4 }
+                            width: 20; height: 20; radius: 10
+                            color: dockCard.active ? "#ff453a" : "#007aff"
+                            BundledIcon {
+                                anchors.centerIn: parent
+                                name: dockCard.active ? "dock.widget.remove" : "dock.widget.add"
+                                color: "white"
+                                size: 14
+                            }
+                        }
+
+                        TapHandler {
+                            enabled: !dockReorderDrag.active
+                            onTapped: function(eventPoint) {
+                                if (popupPreviewBtn.visible) {
+                                    const pt = popupPreviewBtn.mapFromItem(dockCard,
+                                        eventPoint.position.x, eventPoint.position.y)
+                                    if (popupPreviewBtn.contains(pt))
+                                        return
+                                }
+                                if (dockCard.active) ConfigService.removeInfoCard(dockCard.modelData)
+                                else ConfigService.addInfoCard(dockCard.modelData, ConfigService.infoCardOrder.length)
+                            }
+                        }
+                        DragHandler {
+                            id: dockReorderDrag
+                            target: null
+                            enabled: dockCard.active
+                            xAxis.enabled: true
+                            yAxis.enabled: false
+                            onTranslationChanged: if (active) dockCard.dragOffset = translation.x
+                            onActiveChanged: {
+                                if (active) return
+                                if (Math.abs(dockCard.dragOffset) < 8) { dockCard.dragOffset = 0; return }
+                                const step = dockCard.width + dockCardFlow.spacing
+                                const delta = Math.round(dockCard.dragOffset / step)
+                                ConfigService.moveInfoCard(dockCard.modelData,
+                                    Math.max(0, Math.min(ConfigService.infoCardOrder.length - 1,
+                                        dockCard.activeIndex + delta)))
+                                dockCard.dragOffset = 0
+                            }
+                        }
+                    }
+                }
+            }
+
+            Row {
+                width: parent.width
+                topPadding: 10
+                spacing: 12
+                Column {
+                    width: parent.width - autoRotateSwitch.width - 12
+                    spacing: 1
+                    Text {
+                        width: parent.width
+                        text: I18n.tr("Auto rotate")
+                        color: root.ink
+                        font { pixelSize: 13; weight: Font.DemiBold }
+                    }
+                    Text {
+                        width: parent.width
+                        text: I18n.tr("When off, hover and scroll wheel still switch pages")
+                        color: root.ink
+                        opacity: 0.58
+                        wrapMode: Text.WordWrap
+                        font.pixelSize: 10
+                    }
+                }
+                LiquidControls.LiquidGlassSwitch {
+                    id: autoRotateSwitch
+                    implicitWidth: 58
+                    implicitHeight: 28
+                    checked: ConfigService.infoCardAutoRotate
+                    accentColor: "#007aff"
+                    trackColor: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.18)
+                    onToggled: enabled => ConfigService.updateInfoCardAutoRotate(enabled)
+                }
+            }
+        }
+
+        Controls.Popup {
+            id: dockPopupPreview
+            property var pkgEntry: null
+            property int units: 4
+            readonly property real rawDesiredHeight: galleryPopupHost.preferredContentHeight > 0
+                ? galleryPopupHost.preferredContentHeight : 160
+            readonly property int clampedHeight: Math.round(
+                Math.max(72, Math.min(480, rawDesiredHeight)))
+            parent: Controls.Overlay.overlay
+            anchors.centerIn: parent
+            width: 300
+            height: clampedHeight
+            padding: 0
+            modal: true
+            focus: true
+            closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
+            background: Rectangle {
+                radius: 18
+                color: AppearanceTokens.isMaterial
+                    ? AppearanceTokens.colors.layer1
+                    : (ThemeService.isDark ? Qt.rgba(0.14, 0.16, 0.20, 0.94) : Qt.rgba(0.96, 0.97, 0.99, 0.96))
+                border.width: 1
+                border.color: AppearanceTokens.isMaterial
+                    ? AppearanceTokens.colors.outlineVariant
+                    : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.16)
+            }
+            contentItem: Flickable {
+                id: galleryPopupFlick
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                contentWidth: width
+                contentHeight: Math.max(height, Math.round(dockPopupPreview.rawDesiredHeight))
+                interactive: contentHeight > height + 1
+                WidgetPreviewHost {
+                    id: galleryPopupHost
+                    x: 0
+                    y: 0
+                    width: galleryPopupFlick.width
+                    height: galleryPopupFlick.contentHeight
+                    useImplicitHeight: true
+                    packageId: dockPopupPreview.opened && dockPopupPreview.pkgEntry
+                        ? String(dockPopupPreview.pkgEntry.id ?? "") : ""
+                    widgetEntry: dockPopupPreview.opened && dockPopupPreview.pkgEntry?.hasPopup
+                        ? String(dockPopupPreview.pkgEntry.popupEntry ?? "") : ""
+                    snapshotEntry: dockPopupPreview.opened && dockPopupPreview.pkgEntry
+                        ? String(dockPopupPreview.pkgEntry.snapshotEntry ?? "") : ""
+                    packageRevision: String(dockPopupPreview.pkgEntry?.revision ?? "")
+                    containerType: "dock"
+                    containerOrientation: "horizontal"
+                    widgetSize: [dockPopupPreview.units, 1]
+                    appearance: {
+                        const base = WidgetHostService.widgetAppearance
+                        return Object.assign({}, base, {
+                            foreground: ThemeService.foregroundColor,
+                            palette: AppearanceTokens.isMaterial ? (base.palette ?? ({})) : ({})
+                        })
+                    }
+                }
             }
         }
     }
+    Flickable {
+        id: unavailablePanel
+        objectName: "widget-gallery-unavailable"
+        visible: root.selectedCategory === "unavailable"
+        x: previewList.x
+        y: previewList.y
+        width: previewList.width
+        height: previewList.height
+        clip: true
+        contentWidth: width
+        contentHeight: unavailableColumn.implicitHeight + 16
+        boundsBehavior: Flickable.StopAtBounds
+        Controls.ScrollBar.vertical: Controls.ScrollBar { policy: Controls.ScrollBar.AsNeeded }
+
+        Column {
+            id: unavailableColumn
+            width: unavailablePanel.width - 10
+            spacing: 16
+
+            Column {
+                width: parent.width
+                spacing: 8
+                visible: root._trippedList.length > 0
+                Text {
+                    text: I18n.tr("Paused After Crash")
+                    color: root.ink
+                    font { pixelSize: 13; weight: Font.DemiBold }
+                }
+                Repeater {
+                    model: root._trippedList
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: unavailableColumn.width
+                        height: Math.max(54, trippedInfo.implicitHeight + 20)
+                        radius: 10
+                        color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.05)
+                        border.width: 1
+                        border.color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.12)
+
+                        Column {
+                            id: trippedInfo
+                            anchors { left: parent.left; right: reEnableBtn.left; verticalCenter: parent.verticalCenter; margins: 12 }
+                            spacing: 2
+                            Text {
+                                width: parent.width
+                                text: String(modelData.id ?? "")
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                font { pixelSize: 12; weight: Font.DemiBold }
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                text: I18n.tr("上次加载时导致桌面崩溃，已自动暂停")
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                opacity: 0.7
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                        Controls.Button {
+                            id: reEnableBtn
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 12 }
+                            width: 84; height: 28
+                            contentItem: Text {
+                                text: I18n.tr("Re-enable")
+                                color: "white"
+                                font { pixelSize: 11; weight: Font.DemiBold }
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                radius: 14
+                                color: reEnableBtn.down ? "#0062cc" : "#007aff"
+                            }
+                            onClicked: root.reEnableRequested(String(modelData.id ?? ""))
+                        }
+                    }
+                }
+            }
+
+            Column {
+                width: parent.width
+                spacing: 8
+                visible: root._invalidList.length > 0
+                Text {
+                    text: I18n.tr("Incompatible or Invalid Packages")
+                    color: root.ink
+                    font { pixelSize: 13; weight: Font.DemiBold }
+                }
+                Repeater {
+                    model: root._invalidList
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: unavailableColumn.width
+                        height: invalidInfo.implicitHeight + 20
+                        radius: 10
+                        color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.05)
+                        border.width: 1
+                        border.color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.12)
+
+                        Column {
+                            id: invalidInfo
+                            anchors { left: parent.left; right: parent.right; verticalCenter: parent.verticalCenter; margins: 12 }
+                            spacing: 3
+                            Text {
+                                width: parent.width
+                                text: String(modelData.id ?? "") + (modelData.code ? ("  [" + modelData.code + "]") : "")
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                font { pixelSize: 12; weight: Font.DemiBold }
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                text: WidgetDiagnostics.friendlyReason(modelData.code, modelData.reason)
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                opacity: 0.85
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+                            Text {
+                                width: parent.width
+                                visible: String(modelData.reason ?? "").length > 0 || String(modelData.path ?? "").length > 0
+                                text: String(modelData.reason ?? "") + (modelData.path ? ("\n" + modelData.path) : "")
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                opacity: 0.55
+                                font.pixelSize: 10
+                                wrapMode: Text.WrapAnywhere
+                            }
+                        }
+                    }
+                }
+            }
+
+            Column {
+                width: parent.width
+                spacing: 8
+                visible: root._missingList.length > 0
+                Text {
+                    text: I18n.tr("Unavailable Desktop Widgets")
+                    color: root.ink
+                    font { pixelSize: 13; weight: Font.DemiBold }
+                }
+                Repeater {
+                    model: root._missingList
+                    delegate: Rectangle {
+                        required property var modelData
+                        width: unavailableColumn.width
+                        height: Math.max(54, missingInfo.implicitHeight + 20)
+                        radius: 10
+                        color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.05)
+                        border.width: 1
+                        border.color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.12)
+
+                        Column {
+                            id: missingInfo
+                            anchors { left: parent.left; right: removeMissingBtn.left; verticalCenter: parent.verticalCenter; margins: 12 }
+                            spacing: 2
+                            Text {
+                                width: parent.width
+                                text: String(modelData.packageId ?? modelData.id ?? "") + "  (" + String(modelData.id ?? "") + ")"
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                font { pixelSize: 12; weight: Font.DemiBold }
+                                elide: Text.ElideRight
+                            }
+                            Text {
+                                width: parent.width
+                                text: String(modelData.summary ?? "")
+                                textFormat: Text.PlainText
+                                color: root.ink
+                                opacity: 0.7
+                                font.pixelSize: 11
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+                        Controls.Button {
+                            id: removeMissingBtn
+                            anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 12 }
+                            width: 92; height: 28
+                            contentItem: Text {
+                                text: I18n.tr("Remove")
+                                color: "white"
+                                font { pixelSize: 11; weight: Font.DemiBold }
+                                horizontalAlignment: Text.AlignHCenter
+                                verticalAlignment: Text.AlignVCenter
+                            }
+                            background: Rectangle {
+                                radius: 14
+                                color: removeMissingBtn.down ? "#d6352c" : "#ff453a"
+                            }
+                            onClicked: root.removeRetiredInstanceRequested(String(modelData.id ?? ""))
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     Item {
         id: footer
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
@@ -554,6 +1174,8 @@ Rectangle {
             anchors { left: parent.left; right: doneButton.left; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 14 }
             text: root.feedback || (root.selectedCategory === "dock"
                 ? I18n.tr("Tap a widget to add or remove it, drag to reorder.")
+                : root.selectedCategory === "unavailable"
+                    ? I18n.tr("Review paused or incompatible widgets, re-enable or clean up unused records.")
                 : root.entries.length > 0
                     ? (root.placementEnabled ? I18n.tr("Click the + on a widget to add it to the desktop.")
                         : I18n.tr("Adding widgets to the desktop is not available yet.")) : "")

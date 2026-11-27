@@ -7,10 +7,10 @@ SceneBounds 1.0 SceneBounds.qml
 DateProjection 1.0 DateProjection.qml
 GlassText 1.0 GlassText.qml
 ShellText 1.0 ShellText.qml
-MaterialFlower 1.0 MaterialFlower.qml
+MaterialShapeVisual 1.0 MaterialShapeVisual.qml
 WavyProgress 1.0 WavyProgress.qml
 MaterialCardSurface 1.0 MaterialCardSurface.qml
-FlowerBlurRegion 1.0 FlowerBlurRegion.qml
+ShapeBlurRegion 1.0 ShapeBlurRegion.qml
 RoundedBlurRegion 1.0 RoundedBlurRegion.qml
 KosRoundedBlurRegion 1.0 KosRoundedBlurRegion.qml
 SquircleMask 1.0 SquircleMask.qml

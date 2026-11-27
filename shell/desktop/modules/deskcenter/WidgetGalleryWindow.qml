@@ -70,6 +70,9 @@ PanelWindow {
         visible: root.visible
         placementEnabled: true
         catalog: WidgetGalleryService.catalog
+        invalidPackages: WidgetGalleryService.invalidPackages
+        trippedPackages: WidgetGalleryService.trippedPackages
+        missingInstances: WidgetGalleryService.missingInstances
         loading: WidgetGalleryService.loading
         feedback: WidgetGalleryService.feedback
         onVisibleChanged: if (visible) {
@@ -78,6 +81,8 @@ PanelWindow {
         }
         onDone: WidgetGalleryService.done()
         onAddRequested: (entry, size) => WidgetGalleryService.addRequested(entry, size)
+        onReEnableRequested: packageId => WidgetGalleryService.reEnableRequested(packageId)
+        onRemoveRetiredInstanceRequested: instanceId => WidgetGalleryService.removeRetiredInstanceRequested(instanceId)
     }
 
     // Legacy transport for compositors without the v8 declaration. Matches

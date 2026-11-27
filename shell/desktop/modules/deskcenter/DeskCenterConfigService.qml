@@ -5,12 +5,16 @@ import QtCore
 import Quickshell
 import qs.desktop.modules.common
 import "WidgetLayout.mjs" as WidgetLayout
+import "WidgetInstanceConfig.mjs" as WidgetInstanceConfig
 
 QtObject {
     id: service
 
+    signal instanceConfigChanged(string instanceId)
+
     property int revision: 0
     property var projectedPositions: ({})
+    property var _instanceConfigs: null
     readonly property var defaultSizes: ({
         clock: "small",
         weather: "medium",
@@ -39,6 +43,7 @@ QtObject {
         // Both live here because the desktop surface is recreated on every
         // login and must re-expand the placements from disk (R4).
         property string instancesJson: "{}"
+        property string instanceConfigsJson: "{}"
         property int instanceSeq: 1
         property bool desktopLyricsEnabled: true
         property real desktopLyricsX: 0.5
@@ -191,11 +196,13 @@ QtObject {
         return next
     }
 
-    // Removing a card also retires its saved position and span, so a later
-    // instance that happens to reuse the id cannot inherit them.
+    // Removing a card also retires its saved position, span, and per-instance
+    // settings, so a later instance cannot inherit stale state or leave orphan
+    // config entries behind.
     function removeInstance(output, instanceId) {
         const key = String(output)
         let changed = false
+        let configRemoved = false
         const all = parsedInstances()
         const list = Array.isArray(all[key]) ? all[key] : []
         const next = list.filter(record => record?.id !== instanceId)
@@ -218,11 +225,42 @@ QtObject {
             _settings.sizesJson = JSON.stringify(sizes)
             changed = true
         }
+        const removedCfg = WidgetInstanceConfig.removeInstanceConfig(_ensureInstanceConfigs(), instanceId)
+        if (removedCfg.changed) {
+            _instanceConfigs = removedCfg.map
+            _settings.instanceConfigsJson = JSON.stringify(removedCfg.map)
+            changed = true
+            configRemoved = true
+        }
         if (changed) {
             _settings.sync()
             revision++
         }
+        if (configRemoved)
+            instanceConfigChanged(String(instanceId))
         return changed
+    }
+
+    function _ensureInstanceConfigs() {
+        if (_instanceConfigs === null)
+            _instanceConfigs = WidgetInstanceConfig.parseConfigMap(_settings.instanceConfigsJson)
+        return _instanceConfigs
+    }
+
+    function instanceConfigFor(instanceId) {
+        return WidgetInstanceConfig.getInstanceConfig(_ensureInstanceConfigs(), String(instanceId ?? ""))
+    }
+
+    function saveInstanceConfig(instanceId, next) {
+        const id = String(instanceId ?? "")
+        const res = WidgetInstanceConfig.setInstanceConfig(_ensureInstanceConfigs(), id, next)
+        if (!res.ok) return false
+        _instanceConfigs = res.map
+        _settings.instanceConfigsJson = JSON.stringify(res.map)
+        _settings.sync()
+        revision++
+        instanceConfigChanged(id)
+        return true
     }
 
     function parsedInstances() {

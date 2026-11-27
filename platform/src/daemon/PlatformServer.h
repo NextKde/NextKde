@@ -27,6 +27,7 @@ namespace KosPlatform {
 class KeepAwakeLease;
 class KimpanelBridge;
 struct NmConnectRequest;
+namespace WidgetPackageIndex { class WidgetPackageWatcher; }
 
 class PlatformServer final : public QObject {
     Q_OBJECT
@@ -199,6 +200,7 @@ private:
     QSet<QLocalSocket *> m_windowSubscribers;
     QSet<QLocalSocket *> m_inputMethodSubscribers;
     KimpanelBridge *m_kimpanelBridge = nullptr;
+    WidgetPackageIndex::WidgetPackageWatcher *m_widgetPackageWatcher = nullptr;
     QHash<QLocalSocket *, KeepAwakeLease *> m_keepAwakeLeases;
     // A Shell can reconnect after Quickshell reloads while KWin has no new
     // window event to broadcast. Retain the authoritative last snapshot so a

@@ -332,7 +332,6 @@ Item {
 
     ContextMenu {
         id: menuPopup
-        scrimLevel: AppearanceTokens.bar.popupScrimLevel
         anchorItem: root.popupAnchorItem
         baseColor: ThemeService.backgroundColor
         foregroundColor: ThemeService.foregroundColor

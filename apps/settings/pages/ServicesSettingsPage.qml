@@ -13,10 +13,16 @@ GridLayout {
     signal sourcesOpened()
     // Keep delegate identity stable while per-app status queries finish.
     property var appIds: []
+    property var widgetIds: []
     function syncAppIds() {
         const ids = store && store.apps
             ? store.apps.map(app => app.id) : []
         if (JSON.stringify(ids) !== JSON.stringify(appIds)) appIds = ids
+    }
+    function syncWidgetIds() {
+        const ids = store && store.widgets
+            ? store.widgets.map(widget => widget.id) : []
+        if (JSON.stringify(ids) !== JSON.stringify(widgetIds)) widgetIds = ids
     }
     function ensureCatalogFresh() {
         if (visible && store && typeof store.ensureCatalogFresh === "function")
@@ -24,6 +30,7 @@ GridLayout {
     }
     onStoreChanged: {
         syncAppIds()
+        syncWidgetIds()
         Qt.callLater(page.ensureCatalogFresh)
     }
     property var colors
@@ -98,12 +105,12 @@ GridLayout {
             }
         }
         Repeater {
-            model: [I18n.tr("Apps"), I18n.tr("Services")]
+            model: [I18n.tr("Apps"), I18n.tr("Services"), I18n.tr("Plugins")]
             delegate: Basic.TabButton {
                 id: categoryTab
                 required property string modelData
                 text: modelData
-                width: 72
+                width: Math.max(72, implicitWidth + 16)
                 height: 38
                 Accessible.name: text
                 contentItem: Text {
@@ -146,7 +153,7 @@ GridLayout {
     }
 
     RowLayout {
-        visible: page.selectedCategory === 0
+        visible: page.selectedCategory === 0 || page.selectedCategory === 2
         Layout.columnSpan: 2
         Layout.fillWidth: true
         Text {
@@ -263,6 +270,8 @@ GridLayout {
                 onClicked: {
                     const error = releaseDialog.kind === "source"
                         ? page.store.selectSourceRelease(releaseDialog.targetId, releaseDialog.repository, releaseTagField.text)
+                        : releaseDialog.kind === "widget"
+                        ? page.store.selectWidgetRelease(releaseDialog.targetId, releaseDialog.repository, releaseTagField.text)
                         : page.store.selectAppRelease(releaseDialog.targetId, releaseDialog.repository, releaseTagField.text);
                     releaseError.text = page.catalogMessage(error);
                     if (!error) { page.pendingPlanRequest = null; planDialog.close(); releaseDialog.close(); }
@@ -272,7 +281,7 @@ GridLayout {
         }
     }
     RowLayout {
-        visible: page.selectedCategory === 0
+        visible: page.selectedCategory === 0 || page.selectedCategory === 2
         Layout.columnSpan: 2
         Layout.fillWidth: true
         Text {
@@ -294,9 +303,37 @@ GridLayout {
             onClicked: sourceDialog.open()
         }
     }
+    RowLayout {
+        visible: page.selectedCategory === 2
+        Layout.columnSpan: 2
+        Layout.fillWidth: true
+        Text {
+            objectName: "widgetCatalogSummary"
+            textFormat: Text.PlainText
+            Layout.fillWidth: true
+            text: page.store && page.store.widgetUpdateCount ? I18n.tr("%1 plugins have updates").arg(page.store.widgetUpdateCount) : I18n.tr("Plugins")
+            color: page.colors.primaryText
+            font.pixelSize: 13
+        }
+        Controls.SettingsTextButton {
+            objectName: "widgetCatalogRefresh"
+            label: page.store && page.store.catalogBusy ? I18n.tr("Checking…") : I18n.tr("Refresh")
+            colors: page.colors
+            enabled: !!page.store && !page.store.catalogBusy && !page.store.hasActiveMutation
+            onClicked: {
+                if (typeof page.store.refreshCatalog === "function") page.store.refreshCatalog();
+                if (typeof page.store.refreshWidgets === "function") page.store.refreshWidgets();
+            }
+        }
+        Controls.SettingsTextButton {
+            label: I18n.tr("Manage app sources")
+            colors: page.colors
+            onClicked: sourceDialog.open()
+        }
+    }
     Text {
         textFormat: Text.PlainText
-        visible: page.selectedCategory === 0 && text.length > 0
+        visible: (page.selectedCategory === 0 || page.selectedCategory === 2) && text.length > 0
         Layout.columnSpan: 2
         Layout.fillWidth: true
         text: page.catalogMessage(page.store ? (page.store.catalogError || (page.store.updateStatus || {}).error || "") : "")
@@ -458,6 +495,7 @@ GridLayout {
             page.sourcesOpened()
         })
         syncAppIds()
+        syncWidgetIds()
         Qt.callLater(page.ensureCatalogFresh)
         if (compatible)
             bridge.inspectSpatialService();
@@ -465,6 +503,7 @@ GridLayout {
         if (store) {
             if (typeof store.refreshApps === "function") store.refreshApps();
             else store.refresh();
+            if (typeof store.refreshWidgets === "function") store.refreshWidgets();
         }
     }
     Connections {
@@ -589,6 +628,7 @@ GridLayout {
         ignoreUnknownSignals: true
         function onChanged() {
             page.syncAppIds()
+            page.syncWidgetIds()
             if (!page.store || planDialog.visible || !page.pendingPlanRequest || !page.visible) return;
             const apps = page.store.apps || [];
             for (let i = 0; i < apps.length; ++i) {
@@ -1086,6 +1126,308 @@ GridLayout {
             }
         }
     }
+    Text {
+        objectName: "widgetCatalogEmpty"
+        textFormat: Text.PlainText
+        visible: page.selectedCategory === 2 && page.widgetIds.length === 0
+        Layout.columnSpan: 2
+        Layout.fillWidth: true
+        text: I18n.tr("No plugins are available in the configured sources yet.")
+        color: page.colors.secondaryText
+        font.pixelSize: 12
+        wrapMode: Text.Wrap
+    }
+
+    Repeater {
+        id: widgetEntries
+        model: page.widgetIds
+        delegate: Controls.ExtensionEntry {
+            id: widgetCard
+            visible: page.selectedCategory === 2
+            required property var modelData
+            readonly property var widget: {
+                const items = page.store && page.store.widgets ? page.store.widgets : []
+                return items.find(item => item.id === modelData) || ({ id: modelData, name: "" })
+            }
+            readonly property bool blocked: !!(page.store && page.store.anyBusy)
+            readonly property bool canUpdate: !!widget.installed && !!widget.managed && !!widget.updateAvailable
+            readonly property bool canInstall: !widget.installed && widget.available !== false && (widget.catalogApproved !== false || !!(page.store && page.store.testMode))
+            objectName: widget.id + "WidgetEntry"
+            Layout.fillWidth: true
+            Layout.preferredWidth: page.entryWidth
+            Layout.minimumWidth: 0
+            Layout.alignment: Qt.AlignTop
+            colors: page.colors
+            title: page.localText(widget.nameLocales, I18n.tr(widget.name || widget.id))
+            category: I18n.tr("Plugin")
+            description: (widget.updateAvailable ? I18n.tr("Update available") + " · " : "") + page.localText(widget.descriptionLocales, I18n.tr(widget.description || ""))
+            iconName: widget.iconName || "grid"
+            iconSource: widget.iconSource || ""
+            iconInset: 0
+            actionObjectName: widget.id + "WidgetAction"
+            actionText: widget.busy ? I18n.tr("Working…") : canUpdate ? I18n.tr("Update") : widget.installed ? I18n.tr("Installed") : I18n.tr("Install")
+            actionEnabled: !blocked && (canUpdate || canInstall)
+            actionAvailable: !!page.store && !page.store.hasActiveMutation && (canUpdate || canInstall)
+            onActivated: {
+                if (canUpdate) page.store.updateWidget(widget.id);
+                else if (canInstall) page.store.installWidget(widget.id);
+            }
+            onDetailsRequested: widgetDetailsDialog.open()
+            property Dialog detailsDialog: Dialog {
+                id: widgetDetailsDialog
+                objectName: widgetCard.widget.id + "WidgetDetailsDialog"
+                parent: Overlay.overlay
+                anchors.centerIn: parent
+                width: Math.min(520, parent ? parent.width - 32 : 520)
+                implicitHeight: header.implicitHeight + topPadding + widgetDetailsContent.childrenRect.height + 40
+                    + bottomPadding + footer.implicitHeight + spacing * 2
+                height: Math.min(implicitHeight, parent ? parent.height - 32 : implicitHeight)
+                modal: true
+                title: I18n.tr("%1: %2").arg(widgetCard.title).arg(I18n.tr("Details"))
+                closePolicy: Popup.CloseOnEscape
+                Connections {
+                    target: page
+                    function onVisibleChanged() {
+                        if (!page.visible) widgetDetailsDialog.close();
+                    }
+                }
+                header: Item {}
+                background: Rectangle {
+                    radius: 22
+                    color: page.colors.dark ? "#ed25282e" : "#f8f9fbfd"
+                    border.width: 1
+                    border.color: page.colors.dark ? "#62ffffff" : "#aaffffff"
+                }
+                footer: Item {
+                    implicitHeight: 58
+                    Controls.SettingsTextButton {
+                        objectName: widgetCard.widget.id + "WidgetDetailsClose"
+                        anchors {
+                            right: parent.right
+                            bottom: parent.bottom
+                            rightMargin: 24
+                            bottomMargin: 20
+                        }
+                        label: I18n.tr("Close")
+                        colors: page.colors
+                        implicitHeight: 30
+                        cornerRadius: 15
+                        onClicked: widgetDetailsDialog.close()
+                    }
+                }
+                contentItem: Flickable {
+                    implicitHeight: widgetDetailsContent.childrenRect.height + 40
+                    contentWidth: width
+                    contentHeight: widgetDetailsContent.childrenRect.height + 40
+                    clip: true
+                    boundsBehavior: Flickable.StopAtBounds
+                    ScrollBar.vertical: ScrollBar { policy: ScrollBar.AsNeeded }
+                    ColumnLayout {
+                        id: widgetDetailsContent
+                        readonly property color divider: Qt.rgba(page.colors.secondaryText.r,
+                            page.colors.secondaryText.g, page.colors.secondaryText.b, 0.16)
+                        x: 20
+                        y: 18
+                        width: parent.width - 40
+                        spacing: 0
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Layout.bottomMargin: 16
+                            spacing: 14
+                            Item {
+                                Layout.preferredWidth: 60
+                                Layout.preferredHeight: 60
+                                Image {
+                                    id: catalogWidgetIcon
+                                    anchors.centerIn: parent
+                                    width: parent.width / (1 - 2 * widgetCard.iconInset)
+                                    height: width
+                                    source: widgetCard.iconSource
+                                    sourceSize: Qt.size(132, 132)
+                                    fillMode: Image.PreserveAspectFit
+                                    smooth: true
+                                }
+                                Rectangle {
+                                    visible: catalogWidgetIcon.status !== Image.Ready
+                                    anchors.fill: parent
+                                    radius: 14
+                                    color: widgetCard.iconColor
+                                }
+                            }
+                            ColumnLayout {
+                                Layout.fillWidth: true
+                                Layout.minimumWidth: 0
+                                spacing: 3
+                                Text {
+                                    textFormat: Text.PlainText
+                                    Layout.fillWidth: true
+                                    text: widgetCard.title
+                                    color: page.colors.primaryText
+                                    font.pixelSize: 17
+                                    font.weight: Font.Bold
+                                    elide: Text.ElideRight
+                                }
+                                Text {
+                                    textFormat: Text.PlainText
+                                    Layout.fillWidth: true
+                                    text: widgetCard.description
+                                    color: page.colors.secondaryText
+                                    font.pixelSize: 12
+                                    wrapMode: Text.Wrap
+                                    maximumLineCount: 2
+                                    elide: Text.ElideRight
+                                }
+                            }
+                            Basic.Button {
+                                id: widgetDetailsAction
+                                Layout.alignment: Qt.AlignVCenter
+                                Layout.leftMargin: 12
+                                Layout.preferredWidth: Math.max(50, widgetDetailsActionLabel.implicitWidth + 20)
+                                implicitHeight: 24
+                                padding: 0
+                                objectName: widgetCard.widget.id + "WidgetDetailsAction"
+                                text: widgetCard.actionText
+                                enabled: widgetCard.actionEnabled
+                                hoverEnabled: true
+                                Accessible.name: widgetCard.title + ": " + text
+                                onClicked: {
+                                    if (widgetCard.canUpdate) page.store.updateWidget(widgetCard.widget.id);
+                                    else if (widgetCard.canInstall) page.store.installWidget(widgetCard.widget.id);
+                                }
+                                contentItem: Text {
+                                    textFormat: Text.PlainText
+                                    id: widgetDetailsActionLabel
+                                    text: widgetDetailsAction.text
+                                    color: widgetCard.actionAvailable ? "#0085ff" : page.colors.secondaryText
+                                    font.pixelSize: 11
+                                    font.weight: Font.DemiBold
+                                    horizontalAlignment: Text.AlignHCenter
+                                    verticalAlignment: Text.AlignVCenter
+                                }
+                                background: Rectangle {
+                                    radius: height / 2
+                                    color: widgetDetailsAction.down ? "#d4e3f5" : "#e6edf7"
+                                    border.width: widgetDetailsAction.visualFocus ? 2 : 0
+                                    border.color: "#0085ff"
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            implicitHeight: 1
+                            color: widgetDetailsContent.divider
+                        }
+
+                        Text {
+                            textFormat: Text.PlainText
+                            Layout.fillWidth: true
+                            Layout.topMargin: 14
+                            text: I18n.tr("STATUS")
+                            color: page.colors.secondaryText
+                            font.pixelSize: 10
+                            font.weight: Font.DemiBold
+                            font.letterSpacing: 0.6
+                        }
+                        Text {
+                            textFormat: Text.PlainText
+                            objectName: widgetCard.widget.id + "WidgetStatus"
+                            Layout.fillWidth: true
+                            Layout.topMargin: 5
+                            text: page.widgetStatusText(widgetCard.widget)
+                            color: page.colors.secondaryText
+                            font.pixelSize: 12
+                            lineHeight: 1.15
+                            wrapMode: Text.Wrap
+                        }
+                        Text {
+                            textFormat: Text.PlainText
+                            objectName: widgetCard.widget.id + "WidgetVersion"
+                            Layout.fillWidth: true
+                            Layout.topMargin: 6
+                            visible: !!widgetCard.widget.version || !!widgetCard.widget.latestVersion || !!widgetCard.widget.catalogVersion
+                            text: I18n.tr("Installed: %1 · Latest: %2").arg(widgetCard.widget.version || I18n.tr("Not installed")).arg(widgetCard.widget.latestVersion || widgetCard.widget.catalogVersion || I18n.tr("Not checked"))
+                            color: page.colors.secondaryText
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                        }
+
+                        Text {
+                            textFormat: Text.PlainText
+                            objectName: widgetCard.widget.id + "WidgetError"
+                            Layout.fillWidth: true
+                            Layout.topMargin: 12
+                            visible: (!!widgetCard.widget.code && widgetCard.widget.code !== "EXTERNALLY_MANAGED") || !!widgetCard.widget.invalidReason
+                            text: widgetCard.widget.code && widgetCard.widget.code !== "EXTERNALLY_MANAGED"
+                                ? page.appFailureText(widgetCard.widget)
+                                : String(widgetCard.widget.invalidReason || "")
+                            color: page.colors.primaryText
+                            font.pixelSize: 12
+                            wrapMode: Text.Wrap
+                        }
+
+                        Rectangle {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 16
+                            implicitHeight: 1
+                            color: widgetDetailsContent.divider
+                        }
+
+                        Flow {
+                            Layout.fillWidth: true
+                            Layout.topMargin: 12
+                            spacing: 8
+                            Controls.SettingsTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                objectName: widgetCard.widget.id + "WidgetUpdate"
+                                visible: widgetCard.canUpdate
+                                enabled: !widgetCard.blocked
+                                label: I18n.tr("Update")
+                                colors: page.colors
+                                onClicked: page.store.updateWidget(widgetCard.widget.id)
+                            }
+                            Controls.SettingsTextButton {
+                                visible: !!page.store && page.store.testMode && !!widgetCard.widget.catalogActive
+                                objectName: widgetCard.widget.id + "WidgetSelectRelease"
+                                label: I18n.tr("Plugin Release: %1").arg(widgetCard.widget.releaseTag || I18n.tr("Latest stable release"))
+                                colors: page.colors
+                                enabled: !widgetCard.blocked && !page.store.releasesBusy && !page.store.catalogBusy
+                                onClicked: page.chooseRelease("widget", widgetCard.widget.appId, widgetCard.widget.repositoryPath || String(widgetCard.widget.repository || "").replace("https://github.com/", ""), widgetCard.widget.releaseTag)
+                            }
+                            Controls.SettingsTextButton {
+                                implicitHeight: 28
+                                cornerRadius: 14
+                                label: I18n.tr("Repository")
+                                colors: page.colors
+                                onClicked: page.store.openWidgetRepository(widgetCard.widget.id)
+                            }
+                        }
+
+                        Controls.SettingsTextButton {
+                            implicitHeight: 28
+                            cornerRadius: 14
+                            objectName: widgetCard.widget.id + "WidgetActionSecondary"
+                            Layout.topMargin: 10
+                            visible: !!widgetCard.widget.busy || (!!widgetCard.widget.installed && !!widgetCard.widget.managed)
+                            enabled: widgetCard.widget.stage !== "cancelling" && (!!widgetCard.widget.busy || !widgetCard.blocked)
+                            label: widgetCard.widget.busy ? I18n.tr("Cancel") : I18n.tr("Uninstall")
+                            colors: page.colors
+                            onClicked: {
+                                if (widgetCard.widget.busy) page.store.cancelWidget(widgetCard.widget.id);
+                                else {
+                                    widgetUninstallDialog.widgetId = widgetCard.widget.id;
+                                    widgetUninstallDialog.widgetName = widgetCard.title;
+                                    widgetUninstallDialog.open();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
     Basic.Dialog {
         id: planDialog
         objectName: "flatpakPlanDialog"
@@ -1325,6 +1667,40 @@ GridLayout {
             wrapMode: Text.Wrap
         }
     }
+    Dialog {
+        id: widgetUninstallDialog
+        objectName: "widgetUninstallDialog"
+        property string widgetId: ""
+        property string widgetName: ""
+        parent: Overlay.overlay
+        anchors.centerIn: parent
+        width: Math.min(360, parent ? parent.width - 32 : 360)
+        modal: true
+        title: I18n.tr("Uninstall %1?").arg(widgetName)
+        header: Text {
+            textFormat: Text.PlainText
+            text: widgetUninstallDialog.title
+            color: page.colors.primaryText
+            font.pixelSize: 16
+            font.bold: true
+            padding: 16
+            wrapMode: Text.Wrap
+        }
+        background: Rectangle {
+            radius: 10
+            color: page.colors.card
+            border.color: page.colors.secondaryText
+            border.width: 1
+        }
+        standardButtons: Dialog.Ok | Dialog.Cancel
+        onAccepted: if (page.store) page.store.uninstallWidget(widgetId)
+        contentItem: Text {
+            textFormat: Text.PlainText
+            text: I18n.tr("The plugin will be removed from your user widget directory. Your desktop layout records remain safe.")
+            color: page.colors.primaryText
+            wrapMode: Text.Wrap
+        }
+    }
 
     function formatBytes(value) {
         if (value === undefined || value === null || value === "" || Number(value) < 0 || !isFinite(Number(value)))
@@ -1345,6 +1721,19 @@ GridLayout {
             total += Number(value);
         }
         return operations.length ? total : undefined;
+    }
+    function widgetStatusText(widget) {
+        if (!page.store.testMode && widget.catalogApproved === false)
+            return I18n.tr("No version has been approved in this catalog.");
+        if (widget.catalogActive === false)
+            return I18n.tr("This plugin is unavailable from its source. Installed copies are kept.");
+        if (widget.busy)
+            return page.appStage(widget.stage);
+        if (widget.installed && !widget.managed)
+            return I18n.tr("Installed outside Settings. Updates and removal stay with its installer.");
+        if (widget.installed)
+            return I18n.tr("Managed by Settings. Installed widget plugins appear automatically in the widget gallery.");
+        return I18n.tr("Install a widget plugin package from the catalogued GitHub Release.");
     }
     function appStage(stage) {
         switch (stage) {
@@ -1429,6 +1818,9 @@ GridLayout {
         case "RESULT_UNKNOWN": case "OUTPUT_LIMIT": return I18n.tr("Installation was interrupted or its result could not be confirmed. Check the log before retrying.");
         case "START_FAILED": return I18n.tr("The installer could not be started. Check that Python 3.9 or newer is installed.");
         case "PERMISSION_DENIED": return I18n.tr("The installation location is not writable. Run Settings as your normal desktop user.");
+        case "INVALID_PACKAGE": return I18n.tr("The plugin package failed compatibility or integrity validation. Nothing was installed.");
+        case "UNINSTALL_FAILED": return I18n.tr("The plugin could not be uninstalled.");
+        case "ALREADY_INSTALLED": return I18n.tr("This plugin is already installed.");
         default: return I18n.tr("The operation failed. View the log for details.");
         }
     }

@@ -22,14 +22,23 @@ QtObject {
         key: item.id, category: "builtin", categoryName: I18n.tr("Built-in"),
         present: !AppearanceConfigService.isDeskCenterWidgetHidden(item.id)
     }))
-    // Packages whose QML the host is willing to execute. Index discovery is
-    // deliberately not enough: anything under $XDG_DATA_HOME/kos/widgets is
-    // untrusted until the host maps it to a real view with its own data and
-    // input containment (WidgetGalleryPreviewPlan R2/R5). Keep this list in
-    // sync with DeskCenterWindow's resolveContentComponent/resolveSettingsComponent.
-    readonly property var executablePackages: ["org.nextkde.example.clock"]
-    function canExecute(packageId) {
-        return executablePackages.indexOf(String(packageId)) >= 0
+    // Under the in-process, user-audited trust model (WidgetGalleryPreviewPlan
+    // R2), any valid package indexed from `$XDG_DATA_HOME/kos/widgets/` with
+    // verified `Widget.qml` and `Snapshot.qml` entry paths is dynamically
+    // executable — no hardcoded allowlist.
+    function canExecute(entryOrId) {
+        if (!entryOrId || typeof entryOrId !== "object") return false
+        return entryOrId.available === true
+            && String(entryOrId.widgetEntry ?? "").length > 0
+            && String(entryOrId.snapshotEntry ?? "").length > 0
+    }
+    // Every widget package declares exactly one design family in metadata.json:
+    // "material" or "macos". Material shell style shows/runs only "material"
+    // packages; macOS shell style shows/runs only "macos" packages. Other-style
+    // instances stay parked on disk until the user switches back.
+    readonly property string activePackageStyle: AppearanceTokens.isMaterial ? "material" : "macos"
+    function matchesActiveStyle(entry) {
+        return String(entry?.style ?? "") === activePackageStyle
     }
     function title(id) {
         for (const item of builtins) if (item.id === id) return item.name

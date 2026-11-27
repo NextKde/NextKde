@@ -136,6 +136,17 @@ PlatformServer::PlatformServer(QObject *parent)
     // (and vice versa).
     m_dbusPool.setMaxThreadCount(2);
     initKimpanelBridge();
+    m_widgetPackageWatcher = new WidgetPackageIndex::WidgetPackageWatcher(this);
+    connect(m_widgetPackageWatcher, &WidgetPackageIndex::WidgetPackageWatcher::snapshotChanged,
+            this, [this](const QJsonObject &snapshot) {
+        const QJsonObject event{
+            {QStringLiteral("event"), QStringLiteral("widget-package.changed")},
+            {QStringLiteral("payload"), snapshot}
+        };
+        const QList<QLocalSocket *> sockets = m_buffers.keys();
+        for (QLocalSocket *socket : sockets)
+            sendEvent(socket, event);
+    });
 }
 
 PlatformServer::~PlatformServer()
@@ -573,6 +584,8 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
         return;
     }
     if (op == QStringLiteral("widget-package.snapshot")) {
+        if (m_widgetPackageWatcher)
+            m_widgetPackageWatcher->resyncWatches();
         respond(socket, request, true, WidgetPackageIndex::snapshot());
         return;
     }
@@ -581,6 +594,7 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
             {QStringLiteral("ready"), true},
             {QStringLiteral("capabilities"), QJsonArray{
                 QStringLiteral("widget-package.snapshot"),
+                QStringLiteral("widget-package.watch"),
                 QStringLiteral("input.clipboard-anchor"),
                 QStringLiteral("application.widget-snapshot"),
                 QStringLiteral("application.widget-open"),

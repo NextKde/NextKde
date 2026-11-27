@@ -18,7 +18,7 @@ Item {
     // them downward. Only the bottom dock hosts this component today.
     property bool dockHosted: false
 
-    // Dock hosts follow the other info cards (DockMusicPlayer contract):
+    // Dock hosts follow the other info cards (DockWidgetPopup contract):
     // hovering the card opens the dashboard after the shared short dwell, and
     // leaving closes it 260 ms later unless the pointer moved into the
     // popup itself. The Bar keeps the hover tooltip + click toggle instead.

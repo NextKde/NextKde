@@ -86,7 +86,13 @@ QVariantMap configuration()
         return {{"sources", AppCatalog::testMode() ? QVariantList{} : QVariantList{official()}}};
     return QJsonDocument::fromJson(bytes).object().toVariantMap();
 }
-QString cachePath(const QString& id) { return AppCatalog::stateDirectory() + (AppCatalog::testMode() ? "/test/catalogs/" : "/catalogs/") + id + ".json"; }
+QString cachePath(const QString& id, bool widgetCatalog = false)
+{
+    const QString folder = widgetCatalog
+        ? (AppCatalog::testMode() ? "/test/widget-catalogs/" : "/widget-catalogs/")
+        : (AppCatalog::testMode() ? "/test/catalogs/" : "/catalogs/");
+    return AppCatalog::stateDirectory() + folder + id + ".json";
+}
 QVariantMap bootstrap()
 {
     static const auto value = [] {
@@ -95,27 +101,30 @@ QVariantMap bootstrap()
     }();
     return value;
 }
-QString validate(const QVariantMap& catalog, const QString& source)
+QString validateCatalog(const QVariantMap& catalog, const QString& source, bool widgetCatalog)
 {
+    const QString listKey = widgetCatalog ? QStringLiteral("widgets") : QStringLiteral("apps");
     const auto sequence = catalog.value("sequence").toLongLong();
     if (!QList<int>{1, 2}.contains(catalog.value("schemaVersion").toInt()) || catalog.value("sourceId").toString() != source
         || sequence < 1 || sequence > 9007199254740991LL || catalog.value("sequence").toDouble() != double(sequence)
-        || catalog.value("apps").metaType().id() != QMetaType::QVariantList
-        || catalog.value("apps").toList().size() > 1000) return "Invalid catalog identity, sequence or applications";
+        || catalog.value(listKey).metaType().id() != QMetaType::QVariantList
+        || catalog.value(listKey).toList().size() > 1000) return "Invalid catalog identity, sequence or applications";
     const auto issued = QDateTime::fromString(catalog.value("issuedAt").toString(), Qt::ISODate);
     const auto expiry = QDateTime::fromString(catalog.value("expiresAt").toString(), Qt::ISODate);
     if (!issued.isValid() || !expiry.isValid() || expiry <= issued
         || issued > QDateTime::currentDateTimeUtc().addSecs(300)) return "Invalid catalog dates";
     QSet<QString> ids, keys;
-    for (const auto& item : catalog.value("apps").toList()) {
+    for (const auto& item : catalog.value(listKey).toList()) {
         const auto app = item.toMap();
         const auto id = app.value("appId").toString(), key = app.value("key").toString();
+        const auto format = app.value("format").toString();
         const auto status = app.value("status", "active").toString();
         const auto publisher = app.value("publisher").toMap();
         if (!appIdentifier(id) || !identifier(key) || ids.contains(id) || keys.contains(key)
             || !AppCatalog::githubRepository(app.value("repository").toString())
             || !matches("^[A-Za-z0-9][A-Za-z0-9._-]{0,180}\\.json$", app.value("manifest").toString())
-            || !matches("^[a-z][a-z0-9-]{0,30}$", app.value("format").toString())
+            || !matches("^[a-z][a-z0-9-]{0,30}$", format)
+            || (widgetCatalog && format != QLatin1String("qml-widget"))
             || !localizedText(app.value("name"), 120)
             || !localizedText(app.value("description"), 600)
             || !QStringList{"active", "withdrawn", "revoked"}.contains(status)) return "Invalid application entry";
@@ -133,16 +142,26 @@ QString validate(const QVariantMap& catalog, const QString& source)
             const auto bytes = QByteArray::fromBase64(release.value("manifest").toByteArray());
             const auto data = QJsonDocument::fromJson(bytes).object();
             const auto version = release.value("version").toString();
+            const bool expectedPayload = widgetCatalog
+                ? data.value("package").isObject()
+                : (format == QLatin1String("declarative-widget") ? data.value("plugin").isObject() : data.value("bundles").isObject());
             if (!matches("^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z.-]+)?$", version)
                 || release.value("tag").toString() != "v" + version || version.size() > 100
                 || bytes.isEmpty() || bytes.size() > 1024 * 1024
                 || data.value("schemaVersion").toInt() != 2 || data.value("appId").toString() != id
                 || data.value("version").toString() != version
-                || (app.value("format").toString() == "declarative-widget"
-                    ? !data.value("plugin").isObject() : !data.value("bundles").isObject())
+                || !expectedPayload
                 || (!publisher.isEmpty() && QByteArray::fromBase64(release.value("signature").toByteArray()).isEmpty()))
                 return "Invalid catalog release selection";
-            if (app.value("format").toString() == "declarative-widget") {
+            if (widgetCatalog) {
+                const auto package = data.value("package").toObject();
+                const auto size = package.value("size").toDouble();
+                if (data.size() != 4 || package.size() != 3 || !package.value("asset").isString()
+                    || !matches("^[A-Za-z0-9][A-Za-z0-9._-]{0,140}\\.(tar\\.gz|tgz|zip|koswidget)$", package.value("asset").toString())
+                    || !package.value("sha256").isString() || !matches("^[0-9a-f]{64}$", package.value("sha256").toString())
+                    || !package.value("size").isDouble() || size < 1 || size > 32.0 * 1024 * 1024 || size != qint64(size))
+                    return "Invalid widget plugin release descriptor";
+            } else if (format == QLatin1String("declarative-widget")) {
                 const auto plugin = data.value("plugin").toObject();
                 const auto size = plugin.value("size").toDouble();
                 if (data.size() != 4 || plugin.size() != 3 || !plugin.value("asset").isString()
@@ -165,25 +184,25 @@ QString validate(const QVariantMap& catalog, const QString& source)
     }
     return {};
 }
-QVariantMap cached(const QVariantMap& source)
+QVariantMap cachedCatalog(const QVariantMap& source, bool widgetCatalog = false)
 {
     const auto id = source.value("id").toString();
     if (!identifier(id)) return {};
-    const auto envelope = QJsonDocument::fromJson(read(cachePath(id), limit * 2)).object().toVariantMap();
+    const auto envelope = QJsonDocument::fromJson(read(cachePath(id, widgetCatalog), limit * 2)).object().toVariantMap();
     const auto bytes = QByteArray::fromBase64(envelope.value("catalog").toByteArray());
     const auto signature = QByteArray::fromBase64(envelope.value("signature").toByteArray());
     // Cache only successful verification for identical bytes, trust and process.
     // Expiration is evaluated by the caller on every read.
     static QMutex mutex;
     static QMap<QByteArray, QVariantMap> verified;
-    const auto digest = QCryptographicHash::hash(bytes + signature
+    const auto digest = QCryptographicHash::hash(QByteArray(widgetCatalog ? "w:" : "a:") + bytes + signature
         + QJsonDocument::fromVariant(source).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256);
     QMutexLocker lock(&mutex);
     if (verified.contains(digest)) return verified.value(digest);
     const auto object = QJsonDocument::fromJson(bytes).object().toVariantMap();
-    if (!validate(object, id).isEmpty() || !AppCatalog::verify(bytes, signature,
+    if (!validateCatalog(object, id, widgetCatalog).isEmpty() || !AppCatalog::verify(bytes, signature,
         QByteArray::fromBase64(source.value("publicKey").toByteArray()), source.value("fingerprint").toString())) return {};
-    if (verified.size() > 32) verified.clear();
+    if (verified.size() > 64) verified.clear();
     verified.insert(digest, object);
     return object;
 }
@@ -228,20 +247,25 @@ QString selectSourceRelease(const QString& id, const QString& repository, const 
     // The same source's signed sequence history is retained when changing tags.
     return save(configPath(), QJsonDocument::fromVariant(config).toJson()) ? QString() : "Cannot save sources";
 }
-QString selectAppRelease(const QString& appId, const QString& repository, const QString& tag)
+QString selectReleaseInternal(const QString& targetId, const QString& repository, const QString& tag, bool widgetCatalog)
 {
     QDir().mkpath(stateDirectory()); QLockFile context(stateDirectory() + "/context.lock"), lock(stateDirectory() + "/sources.lock");
     if (!context.tryLock(0) || !lock.tryLock(0)) return "BUSY";
     if (!testMode()) return "Release selection requires test mode";
     if (!tag.isEmpty() && !releaseTag(tag)) return "Invalid Release tag";
-    const auto app = find(appId);
-    if (!app.value("active").toBool() || app.value("repository") != repository) return "The source changed. Refresh and try again.";
-    auto config = configuration(); auto selections = config.value("appReleases").toMap();
-    selections[appId] = QVariantMap{{"repository", repository}, {"tag", tag},
+    const auto entry = widgetCatalog ? findWidget(targetId) : find(targetId);
+    if (!entry.value("active").toBool() || entry.value("repository") != repository) return "The source changed. Refresh and try again.";
+    const QString key = widgetCatalog ? QStringLiteral("widgetReleases") : QStringLiteral("appReleases");
+    auto config = configuration(); auto selections = config.value(key).toMap();
+    selections[targetId] = QVariantMap{{"repository", repository}, {"tag", tag},
         {"generation", QUuid::createUuid().toString(QUuid::WithoutBraces)}};
-    config["appReleases"] = selections;
+    config[key] = selections;
     return save(configPath(), QJsonDocument::fromVariant(config).toJson()) ? QString() : "Cannot save sources";
 }
+QString selectAppRelease(const QString& appId, const QString& repository, const QString& tag)
+{ return selectReleaseInternal(appId, repository, tag, false); }
+QString selectWidgetRelease(const QString& widgetId, const QString& repository, const QString& tag)
+{ return selectReleaseInternal(widgetId, repository, tag, true); }
 QVariantMap releaseChoices(const QString& repository)
 {
     if (!testMode() || !githubRepository(repository)) return {{"error", "Release selection requires test mode"}};
@@ -259,9 +283,9 @@ QVariantMap releaseChoices(const QString& repository)
     }
     return {{"releases", list}, {"error", error}};
 }
-QString validateUpdate(const QVariantMap& candidate, const QVariantMap& previous, const QString& sourceId)
+static QString validateCatalogUpdate(const QVariantMap& candidate, const QVariantMap& previous, const QString& sourceId, bool widgetCatalog)
 {
-    const auto error = validate(candidate, sourceId);
+    const auto error = validateCatalog(candidate, sourceId, widgetCatalog);
     if (!error.isEmpty()) return error;
     if (candidate.value("sequence").toLongLong() < previous.value("sequence").toLongLong()
         || (candidate.value("sequence") == previous.value("sequence") && candidate != previous))
@@ -270,20 +294,26 @@ QString validateUpdate(const QVariantMap& candidate, const QVariantMap& previous
         return "Catalog expired";
     return {};
 }
+QString validateUpdate(const QVariantMap& candidate, const QVariantMap& previous, const QString& sourceId)
+{ return validateCatalogUpdate(candidate, previous, sourceId, false); }
+QString validateWidgetUpdate(const QVariantMap& candidate, const QVariantMap& previous, const QString& sourceId)
+{ return validateCatalogUpdate(candidate, previous, sourceId, true); }
 QString stateDirectory()
 {
     const auto configured = qEnvironmentVariable("XDG_STATE_HOME");
     const auto root = QDir::isAbsolutePath(configured) ? configured : QDir::homePath() + "/.local/state";
     return root + "/kos-settings/app-catalog";
 }
+static bool isReceiptState(const QString& name)
+{ return name.startsWith("installed-") || name.startsWith("widget-installed-"); }
 QVariantMap readState(const QString& name)
 {
     if (!matches("^[A-Za-z0-9_.-]+$", name)) return {};
-    return QJsonDocument::fromJson(read(stateDirectory() + (testMode() && !name.startsWith("installed-") ? "/test/" : "/") + name + ".json", limit * 4)).object().toVariantMap();
+    return QJsonDocument::fromJson(read(stateDirectory() + (testMode() && !isReceiptState(name) ? "/test/" : "/") + name + ".json", limit * 4)).object().toVariantMap();
 }
 bool writeState(const QString& name, const QVariantMap& value)
 {
-    return matches("^[A-Za-z0-9_.-]+$", name) && save(stateDirectory() + (testMode() && !name.startsWith("installed-") ? "/test/" : "/") + name + ".json",
+    return matches("^[A-Za-z0-9_.-]+$", name) && save(stateDirectory() + (testMode() && !isReceiptState(name) ? "/test/" : "/") + name + ".json",
         QJsonDocument::fromVariant(value).toJson(QJsonDocument::Compact));
 }
 QVariantMap receipt(const QString& appId)
@@ -303,6 +333,23 @@ bool forgetInstallation(const QString& appId)
     QLockFile lock(stateDirectory() + "/receipt-" + appId + ".lock");
     if (!lock.tryLock(1000)) return false;
     const auto path = stateDirectory() + "/installed-" + appId + ".json";
+    return !QFile::exists(path) || QFile::remove(path);
+}
+QVariantMap widgetReceipt(const QString& widgetId)
+{ return appIdentifier(widgetId) ? readState("widget-installed-" + widgetId) : QVariantMap{}; }
+bool recordWidgetInstallation(const QString& widgetId, const QVariantMap& installation)
+{
+    if (!appIdentifier(widgetId) || !QDir().mkpath(stateDirectory())) return false;
+    QLockFile lock(stateDirectory() + "/widget-receipt-" + widgetId + ".lock");
+    if (!lock.tryLock(1000)) return false;
+    return writeState("widget-installed-" + widgetId, installation);
+}
+bool forgetWidgetInstallation(const QString& widgetId)
+{
+    if (!appIdentifier(widgetId) || !QDir().mkpath(stateDirectory())) return false;
+    QLockFile lock(stateDirectory() + "/widget-receipt-" + widgetId + ".lock");
+    if (!lock.tryLock(1000)) return false;
+    const auto path = stateDirectory() + "/widget-installed-" + widgetId + ".json";
     return !QFile::exists(path) || QFile::remove(path);
 }
 QString entryDigest(const QVariantMap& app)
@@ -390,22 +437,24 @@ static QString iconSourceIdentity(const QVariantMap& source)
     return QString::fromLatin1(QCryptographicHash::hash(
         QJsonDocument::fromVariant(source).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256).toHex());
 }
-static void rememberIcons(const QVariantMap& source, const QVariantMap& catalog)
+static void rememberIcons(const QVariantMap& source, const QVariantMap& catalog, bool widgetCatalog = false)
 {
-    const auto key = "last-icons-" + source.value("id").toString();
+    const auto id = source.value("id").toString();
+    const auto key = (widgetCatalog ? QStringLiteral("last-widget-icons-") : QStringLiteral("last-icons-")) + id;
     const auto identity = iconSourceIdentity(source);
     const auto previous = readState(key);
     const auto previousIcons = previous.value("source").toString() == identity
         ? previous.value("icons").toMap() : QVariantMap{};
     QVariantMap icons;
-    for (const auto& value : catalog.value("apps").toList()) {
-        const auto entry = value.toMap(); const auto id = entry.value("appId").toString();
+    const auto listKey = widgetCatalog ? QStringLiteral("widgets") : QStringLiteral("apps");
+    for (const auto& value : catalog.value(listKey).toList()) {
+        const auto entry = value.toMap(); const auto entryId = entry.value("appId").toString();
         const auto current = entry.value("icon").toMap();
         if (current.isEmpty()) continue;
-        if (!cachedIconFile(current).isEmpty()) icons[id] = current;
+        if (!cachedIconFile(current).isEmpty()) icons[entryId] = current;
         else {
-            const auto old = previousIcons.value(id).toMap();
-            if (!cachedIconFile(old).isEmpty()) icons[id] = old;
+            const auto old = previousIcons.value(entryId).toMap();
+            if (!cachedIconFile(old).isEmpty()) icons[entryId] = old;
         }
     }
     const QVariantMap next{{"source", identity}, {"icons", icons}};
@@ -419,7 +468,8 @@ QString iconFile(const QVariantMap& app)
     if (!current.isEmpty()) return current;
     const auto id = app.value("appId").toString(), sourceId = app.value("sourceId").toString();
     if (!appIdentifier(id) || !identifier(sourceId)) return {};
-    const auto history = readState("last-icons-" + sourceId);
+    const bool widgetCatalog = app.value("format").toString() == QLatin1String("qml-widget");
+    const auto history = readState((widgetCatalog ? QStringLiteral("last-widget-icons-") : QStringLiteral("last-icons-")) + sourceId);
     for (const auto& value : configuration().value("sources").toList()) {
         const auto source = value.toMap();
         if (source.value("id").toString() == sourceId && history.value("source").toString() == iconSourceIdentity(source))
@@ -429,13 +479,14 @@ QString iconFile(const QVariantMap& app)
     }
     return {};
 }
-static void cacheIcons(const QVariantMap& catalog, const QVariantMap& source, const Cancelled& cancelled)
+static void cacheIcons(const QVariantMap& catalog, const QVariantMap& source, const Cancelled& cancelled, bool widgetCatalog = false)
 {
-    const auto entries = catalog.value("apps").toList();
+    const auto listKey = widgetCatalog ? QStringLiteral("widgets") : QStringLiteral("apps");
+    const auto entries = catalog.value(listKey).toList();
     if (entries.isEmpty()) return;
-    rememberIcons(source, catalog);
+    rememberIcons(source, catalog, widgetCatalog);
     const auto repository = source.value("repository").toString();
-    const auto cursorKey = "icon-cursor-" + catalog.value("sourceId").toString();
+    const auto cursorKey = (widgetCatalog ? QStringLiteral("widget-icon-cursor-") : QStringLiteral("icon-cursor-")) + catalog.value("sourceId").toString();
     const int start = qMax(0, readState(cursorKey).value("next").toInt()) % entries.size();
     int next = start;
     QElapsedTimer budget; budget.start();
@@ -458,7 +509,7 @@ static void cacheIcons(const QVariantMap& catalog, const QVariantMap& source, co
     }
     // Continue after a slow/broken image on the next pass instead of starving later apps.
     writeState(cursorKey, {{"next", next}});
-    rememberIcons(source, catalog);
+    rememberIcons(source, catalog, widgetCatalog);
 }
 
 bool verify(const QByteArray& bytes, const QByteArray& signature, const QByteArray& keys, const QString& fingerprint)
@@ -495,7 +546,7 @@ QVariantList sources()
     for (const auto& item : configuration().value("sources").toList()) {
         auto source = item.toMap();
         if (!identifier(source.value("id").toString())) continue;
-        const auto catalog = cached(source);
+        const auto catalog = cachedCatalog(source, false);
         source["sequence"] = catalog.value("sequence", 0);
         source["expiresAt"] = catalog.value("expiresAt");
         source["error"] = readState("source-" + source.value("id").toString()).value("error");
@@ -504,44 +555,49 @@ QVariantList sources()
     }
     return result;
 }
-QVariantList apps()
+static QVariantList resolveCatalogEntries(bool widgetCatalog)
 {
+    const QString listKey = widgetCatalog ? QStringLiteral("widgets") : QStringLiteral("apps");
+    const QString selectionKey = widgetCatalog ? QStringLiteral("widgetReleases") : QStringLiteral("appReleases");
+    const QString receiptGlob = widgetCatalog ? QStringLiteral("widget-installed-*.json") : QStringLiteral("installed-*.json");
+    const auto config = configuration();
     QMap<QString, QVariantMap> entries;
-    for (const auto& item : configuration().value("sources").toList()) {
+    for (const auto& item : config.value("sources").toList()) {
         const auto source = item.toMap();
-        auto catalog = cached(source);
+        const auto id = source.value("id").toString();
+        auto catalog = cachedCatalog(source, widgetCatalog);
         bool seed = false;
-        if (!testMode() && catalog.isEmpty() && source == official() && !QFileInfo::exists(cachePath("nextkde"))) {
+        if (!widgetCatalog && !testMode() && catalog.isEmpty() && source == official() && !QFileInfo::exists(cachePath("nextkde", false))) {
             catalog = bootstrap(); seed = true;
         }
-        const auto envelope = QJsonDocument::fromJson(read(cachePath(source.value("id").toString()), limit * 2)).object();
+        const auto envelope = QJsonDocument::fromJson(read(cachePath(id, widgetCatalog), limit * 2)).object();
         const bool selected = !testMode() || envelope.value("releaseTag").toString() == source.value("releaseTag").toString();
         const bool fresh = selected && (seed || QDateTime::fromString(catalog.value("expiresAt").toString(), Qt::ISODate) > QDateTime::currentDateTimeUtc());
-        for (const auto& value : catalog.value("apps").toList()) {
-            auto app = value.toMap();
-            const auto id = app.value("appId").toString();
-            app["sourceId"] = source.value("id");
-            app["testMode"] = testMode();
-            if (testMode()) app["catalogReleaseTag"] = source.value("releaseTag").toString();
-            app.remove("releaseTag"); app.remove("releaseSelection");
-            const auto selection = configuration().value("appReleases").toMap().value(id).toMap();
-            if (testMode() && selection.value("repository") == app.value("repository")) {
-                app["releaseTag"] = selection.value("tag");
-                app["releaseSelection"] = selection.value("generation");
+        for (const auto& value : catalog.value(listKey).toList()) {
+            auto entry = value.toMap();
+            const auto entryId = entry.value("appId").toString();
+            entry["sourceId"] = source.value("id");
+            entry["testMode"] = testMode();
+            if (testMode()) entry["catalogReleaseTag"] = source.value("releaseTag").toString();
+            entry.remove("releaseTag"); entry.remove("releaseSelection");
+            const auto selection = config.value(selectionKey).toMap().value(entryId).toMap();
+            if (testMode() && selection.value("repository") == entry.value("repository")) {
+                entry["releaseTag"] = selection.value("tag");
+                entry["releaseSelection"] = selection.value("generation");
             }
-            app["active"] = fresh && app.value("status", "active").toString() == "active";
-            if (!fresh) app["error"] = selected ? "Catalog expired" : "Refresh the selected catalog Release";
-            if (entries.contains(id)) {
-                app["active"] = false; app["conflict"] = true;
-                app["error"] = "Conflicting application ID in multiple sources";
+            entry["active"] = fresh && entry.value("status", "active").toString() == "active";
+            if (!fresh) entry["error"] = selected ? "Catalog expired" : "Refresh the selected catalog Release";
+            if (entries.contains(entryId)) {
+                entry["active"] = false; entry["conflict"] = true;
+                entry["error"] = "Conflicting application ID in multiple sources";
             }
-            entries[id] = app;
+            entries[entryId] = entry;
         }
     }
-    // Receipts keep installed apps removable after withdrawal or source removal.
+    // Receipts keep installed apps/widgets removable after withdrawal or source removal.
     // They never grant permission to install or update from a deleted source.
     const QDir directory(stateDirectory());
-    for (const auto& name : directory.entryList({"installed-*.json"}, QDir::Files)) {
+    for (const auto& name : directory.entryList({receiptGlob}, QDir::Files)) {
         const auto record = readState(name.chopped(5));
         const auto old = record.value("entry").toMap();
         const auto id = old.value("appId").toString();
@@ -556,25 +612,31 @@ QVariantList apps()
             entries[id] = inactive;
         }
     }
-    // Preserve legacy signed installations when an initial catalog removes them.
-    for (const auto& item : (testMode() ? QVariantList{} : bootstrap().value("apps").toList())) {
-        auto app = item.toMap(); const auto id = app.value("appId").toString();
-        if (!entries.contains(id)) { app["sourceId"] = "nextkde"; app["active"] = false; app["status"] = "withdrawn"; entries[id] = app; }
+    if (!widgetCatalog) {
+        // Preserve legacy signed installations when an initial catalog removes them.
+        for (const auto& item : (testMode() ? QVariantList{} : bootstrap().value("apps").toList())) {
+            auto app = item.toMap(); const auto id = app.value("appId").toString();
+            if (!entries.contains(id)) { app["sourceId"] = "nextkde"; app["active"] = false; app["status"] = "withdrawn"; entries[id] = app; }
+        }
     }
     QVariantList result;
     for (const auto& entry : entries) result.append(entry);
     return result;
 }
-QVariantMap find(const QString& id)
+static QVariantMap findCatalogEntry(const QVariantList& list, const QString& id)
 {
     QVariantMap match;
-    for (const auto& value : apps()) {
-        const auto app = value.toMap();
-        if (app.value("appId").toString() == id) return app;
-        if (app.value("key").toString() == id) { if (!match.isEmpty()) return {}; match = app; }
+    for (const auto& value : list) {
+        const auto entry = value.toMap();
+        if (entry.value("appId").toString() == id) return entry;
+        if (entry.value("key").toString() == id) { if (!match.isEmpty()) return {}; match = entry; }
     }
     return match;
 }
+QVariantList apps() { return resolveCatalogEntries(false); }
+QVariantList widgets() { return resolveCatalogEntries(true); }
+QVariantMap find(const QString& id) { return findCatalogEntry(apps(), id); }
+QVariantMap findWidget(const QString& id) { return findCatalogEntry(widgets(), id); }
 QString addSource(const QString& id, const QString& repository, const QString& fingerprint, const QString& publicKeyFile)
 {
     if (!identifier(id) || !githubRepository(repository) || !matches("^[0-9A-F]{40}([0-9A-F]{24})?$", fingerprint))
@@ -589,7 +651,8 @@ QString addSource(const QString& id, const QString& repository, const QString& f
     for (const auto& value : list) if (value.toMap().value("id").toString() == id) return "Source ID already exists";
     // Old signed snapshots remain a rollback floor when the same source is re-added.
     const QVariantMap proposed{{"id", id}, {"repository", repository}, {"fingerprint", fingerprint}, {"publicKey", keys.toBase64()}};
-    if (QFileInfo::exists(cachePath(id)) && cached(proposed).isEmpty())
+    if ((QFileInfo::exists(cachePath(id, false)) && cachedCatalog(proposed, false).isEmpty())
+        || (QFileInfo::exists(cachePath(id, true)) && cachedCatalog(proposed, true).isEmpty()))
         return "Source history does not verify with this key; use a new source ID";
     list.append(proposed);
     config["sources"] = list;
@@ -620,7 +683,7 @@ QString refresh(const Cancelled& cancelled, bool ifNeeded)
     // Developer test sources and selected Releases only change on explicit refresh.
     if (ifNeeded && testMode()) return {};
     QDir().mkpath(stateDirectory()); QLockFile context(stateDirectory() + "/context.lock"), lock(stateDirectory() + "/sources.lock");
-    if (!context.tryLock(0) || !lock.tryLock(0)) return "Source refresh is already running";
+    if (!context.tryLock(1000) || !lock.tryLock(0)) return "Source refresh is already running";
     if (ifNeeded && testMode()) return {};
     QStringList errors;
     for (const auto& item : configuration().value("sources").toList()) {
@@ -628,7 +691,8 @@ QString refresh(const Cancelled& cancelled, bool ifNeeded)
         const auto source = item.toMap(); const auto id = source.value("id").toString();
         const auto repository = source.value("repository").toString();
         if (!identifier(id) || !githubRepository(repository)) { errors.append("Invalid source configuration"); continue; }
-        const auto previous = cached(source);
+        const auto previous = cachedCatalog(source, false);
+        const auto previousWidgets = cachedCatalog(source, true);
         auto state = readState("source-" + id);
         if (ifNeeded) {
             const auto now = QDateTime::currentDateTimeUtc();
@@ -637,7 +701,8 @@ QString refresh(const Cancelled& cancelled, bool ifNeeded)
             state["pageAttempt"] = now.toString(Qt::ISODate);
             writeState("source-" + id, state);
             if (!needsRefresh(previous, state, now)) {
-                cacheIcons(previous, source, cancelled);
+                cacheIcons(previous, source, cancelled, false);
+                if (!previousWidgets.isEmpty()) cacheIcons(previousWidgets, source, cancelled, true);
                 continue;
             }
         }
@@ -649,31 +714,53 @@ QString refresh(const Cancelled& cancelled, bool ifNeeded)
         if (error.isEmpty() && (release.value("draft").toBool(true) || (release.value("prerelease").toBool(true) && (!testMode() || source.value("releaseTag").toString().isEmpty()))
             || (!source.value("releaseTag").toString().isEmpty() && testMode() && tag != source.value("releaseTag").toString())
             || !matches("^[A-Za-z0-9][A-Za-z0-9._-]{0,100}$", tag))) error = "Expected a published stable GitHub Release";
-        const auto attachment = [&](const QString& name, qint64 maximum) -> QByteArray {
-            if (!error.isEmpty()) return {};
+        const auto hasAssetNamed = [&](const QString& name) {
+            for (const auto& value : release.value("assets").toArray())
+                if (value.toObject().value("name").toString() == name) return true;
+            return false;
+        };
+        const auto attachment = [&](const QString& name, qint64 maximum, QString* targetError) -> QByteArray {
+            if (!targetError->isEmpty()) return {};
             const auto expected = "https://github.com/" + repository + "/releases/download/" + tag + '/' + name;
             int count = 0;
             for (const auto& value : release.value("assets").toArray()) {
                 const auto asset = value.toObject();
                 if (asset.value("name").toString() == name && asset.value("browser_download_url").toString() == expected) ++count;
             }
-            if (count != 1) { error = "Missing unique catalog release attachment"; return {}; }
-            return fetch(QUrl(expected), repository, maximum, &error, cancelled);
+            if (count != 1) { *targetError = "Missing unique catalog release attachment"; return {}; }
+            return fetch(QUrl(expected), repository, maximum, targetError, cancelled);
         };
-        const auto bytes = attachment("catalog.json", limit);
-        const auto signature = attachment("catalog.json.sig", 65536);
+        const auto bytes = attachment("catalog.json", limit, &error);
+        const auto signature = attachment("catalog.json.sig", 65536, &error);
         auto catalog = QJsonDocument::fromJson(bytes).object().toVariantMap();
         if (error.isEmpty() && !verify(bytes, signature, QByteArray::fromBase64(source.value("publicKey").toByteArray()), source.value("fingerprint").toString())) error = "Catalog signature is invalid";
-        if (error.isEmpty() && QFileInfo::exists(cachePath(id)) && previous.isEmpty()) error = "Previous catalog cannot be verified; refusing to reset rollback history";
+        if (error.isEmpty() && QFileInfo::exists(cachePath(id, false)) && previous.isEmpty()) error = "Previous catalog cannot be verified; refusing to reset rollback history";
         if (error.isEmpty()) error = validateUpdate(catalog, previous, id);
         // Persist each ready old image before readers see the new icon digests.
         // The signed catalog itself still advances independently of artwork.
-        if (error.isEmpty()) rememberIcons(source, previous);
-        if (error.isEmpty() && !save(cachePath(id), QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", signature.toBase64()}, {"releaseTag", source.value("releaseTag").toString()}}).toJson())) error = "Cannot save catalog";
-        if (error.isEmpty()) cacheIcons(catalog, source, cancelled);
+        if (error.isEmpty()) rememberIcons(source, previous, false);
+        if (error.isEmpty() && !save(cachePath(id, false), QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", signature.toBase64()}, {"releaseTag", source.value("releaseTag").toString()}}).toJson())) error = "Cannot save catalog";
+        if (error.isEmpty()) cacheIcons(catalog, source, cancelled, false);
         else if (QDateTime::fromString(previous.value("expiresAt").toString(), Qt::ISODate) > QDateTime::currentDateTimeUtc())
-            cacheIcons(previous, source, cancelled);
+            cacheIcons(previous, source, cancelled, false);
+
+        QString widgetError;
+        if (error.isEmpty() && (hasAssetNamed("widgets.json") || hasAssetNamed("widgets.json.sig"))) {
+            const auto widgetBytes = attachment("widgets.json", limit, &widgetError);
+            const auto widgetSignature = attachment("widgets.json.sig", 65536, &widgetError);
+            const auto widgetCatalog = QJsonDocument::fromJson(widgetBytes).object().toVariantMap();
+            if (widgetError.isEmpty() && !verify(widgetBytes, widgetSignature, QByteArray::fromBase64(source.value("publicKey").toByteArray()), source.value("fingerprint").toString())) widgetError = "Catalog signature is invalid";
+            if (widgetError.isEmpty() && QFileInfo::exists(cachePath(id, true)) && previousWidgets.isEmpty()) widgetError = "Previous catalog cannot be verified; refusing to reset rollback history";
+            if (widgetError.isEmpty()) widgetError = validateWidgetUpdate(widgetCatalog, previousWidgets, id);
+            if (widgetError.isEmpty()) rememberIcons(source, previousWidgets, true);
+            if (widgetError.isEmpty() && !save(cachePath(id, true), QJsonDocument::fromVariant(QVariantMap{{"catalog", widgetBytes.toBase64()}, {"signature", widgetSignature.toBase64()}, {"releaseTag", source.value("releaseTag").toString()}}).toJson())) widgetError = "Cannot save catalog";
+            if (widgetError.isEmpty()) cacheIcons(widgetCatalog, source, cancelled, true);
+            else if (QDateTime::fromString(previousWidgets.value("expiresAt").toString(), Qt::ISODate) > QDateTime::currentDateTimeUtc())
+                cacheIcons(previousWidgets, source, cancelled, true);
+        }
+
         state["error"] = error;
+        state["widgetError"] = widgetError;
         state["lastChecked"] = QDateTime::currentDateTimeUtc().toString(Qt::ISODate);
         if (error.isEmpty()) {
             state["lastSuccess"] = state["lastChecked"];
@@ -681,6 +768,7 @@ QString refresh(const Cancelled& cancelled, bool ifNeeded)
         }
         writeState("source-" + id, state);
         if (!error.isEmpty()) errors.append(id + ": " + error);
+        if (!widgetError.isEmpty()) errors.append(id + " (widgets): " + widgetError);
     }
     return errors.join('\n');
 }

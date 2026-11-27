@@ -17,11 +17,15 @@ QString contextToken();
 QString setTestMode(bool enabled);
 QString selectSourceRelease(const QString& id, const QString& repository, const QString& tag);
 QString selectAppRelease(const QString& appId, const QString& repository, const QString& tag);
+QString selectWidgetRelease(const QString& widgetId, const QString& repository, const QString& tag);
 QVariantMap releaseChoices(const QString& repository);
 bool releaseTag(const QString& tag);
 QString validateUpdate(const QVariantMap& candidate, const QVariantMap& previous, const QString& sourceId);
+QString validateWidgetUpdate(const QVariantMap& candidate, const QVariantMap& previous, const QString& sourceId);
 QVariantList apps();
 QVariantMap find(const QString& id);
+QVariantList widgets();
+QVariantMap findWidget(const QString& id);
 QVariantList sources();
 bool needsRefresh(const QVariantMap& catalog, const QVariantMap& state, const QDateTime& now);
 QString refresh(const Cancelled& cancelled = [] { return false; }, bool ifNeeded = false);
@@ -39,6 +43,9 @@ bool writeState(const QString& name, const QVariantMap& value);
 QVariantMap receipt(const QString& appId);
 bool recordInstallation(const QString& appId, const QVariantMap& installation);
 bool forgetInstallation(const QString& appId);
+QVariantMap widgetReceipt(const QString& widgetId);
+bool recordWidgetInstallation(const QString& widgetId, const QVariantMap& installation);
+bool forgetWidgetInstallation(const QString& widgetId);
 QString stateDirectory();
 // Presentation only: current verified image, or this app/source's retained image
 // until its replacement is ready. Does not affect catalog or package authority.

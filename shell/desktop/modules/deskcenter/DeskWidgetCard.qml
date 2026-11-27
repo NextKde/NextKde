@@ -28,13 +28,29 @@ Item {
     // Gallery copies paint a bounded thumbnail; they never publish compositor
     // surface shapes or blur regions into the desktop window.
     property bool preview: false
-    // Host declaration: this card's surface outline is MaterialFlower's flower
-    // silhouette instead of the rounded rectangle every other card uses. It is a
-    // request, not a form of its own -- the tonal backend paints the same paint
-    // in a different shape, same colour, same opacity.
-    property bool flowerShapedSurface: false
+    // Material widgets may select a host-owned panel silhouette (e.g.
+    // "roundedRect", "pill", "circle", "flower", "cookie", "clover",
+    // "slantedOval", "arch") by publishing `surfaceShape` on Widget.qml.
+    // Colour, opacity and compositor blur remain host-owned across every card.
+    property string materialSurfaceShape: "roundedRect"
     property color startColor: "transparent"
+    property bool hasMidColor: false
+    property color midColor: "transparent"
+    property real midPosition: 0.5
     property color endColor: "transparent"
+    property int gradientOrientation: Gradient.Vertical
+    // motion-exception: Ambient backgroundSpec crossfade avoids abrupt palette jumps on track/state changes.
+    property int backgroundTransitionDuration: 560
+    property bool _backgroundReady: false
+    readonly property color _resolvedMidColor: hasMidColor
+        ? midColor
+        : Qt.rgba(
+            (startColor.r + endColor.r) * 0.5,
+            (startColor.g + endColor.g) * 0.5,
+            (startColor.b + endColor.b) * 0.5,
+            (startColor.a + endColor.a) * 0.5
+        )
+    Component.onCompleted: _backgroundReady = true
     property bool showSurface: true
     property color materialSurfaceColor: AppearanceTokens.surface.widgetFill
     // Widgets normally honour the colour-artwork style. A host that must keep
@@ -49,9 +65,9 @@ Item {
     // the shell style, which is what keeps both forms in one component.
     readonly property var surface: AppearanceTokens.surface
     readonly property bool tonalSurface: root.surface.paintInQml
-    // A shape request only means something to the backend that paints the card.
-    readonly property bool shapedSurface:
-        root.flowerShapedSurface && root.tonalSurface
+    readonly property string effectiveMaterialShape: root.tonalSurface
+        ? (root.materialSurfaceShape || "roundedRect")
+        : "roundedRect"
 
     // `Item.clip` below only clips to a rectangle. Colour-artwork widgets can
     // contain their own full-bleed header or artwork, so mask their composed
@@ -89,7 +105,7 @@ Item {
                 radius: root.radius
                 fillColor: root.materialSurfaceColor
                 fillOpacity: AppearanceTokens.surface.widgetOpacity
-                flowerShaped: root.shapedSurface
+                shapeType: root.effectiveMaterialShape
             }
         }
 
@@ -112,18 +128,29 @@ Item {
         Loader {
             id: surfaceBackend
             anchors.fill: parent
-            // The tonal form always has a surface; the glass form only owns one when
-            // the card is not drawing colour artwork of its own.
+            // The tonal form draws MaterialCardSurface with the widget's declared
+            // `surfaceShape` (defaulting to roundedRect); the glass form only owns
+            // one when the card is not drawing colour artwork of its own.
             sourceComponent: root.preview ? null : root.tonalSurface
                 ? tonalSurfaceComponent
                 : (root.usesColorArtwork ? null : glassSurfaceComponent)
         }
 
+        MaterialShapeVisual {
+            anchors.fill: parent
+            visible: root.preview && root.tonalSurface
+            shapeType: root.effectiveMaterialShape
+            radius: root.radius
+            fillColor: root.materialSurfaceColor
+            fillOpacity: AppearanceTokens.surface.widgetOpacity
+            inset: 1
+        }
+
         Rectangle {
             anchors.fill: parent
             radius: root.radius
-            visible: root.preview && (!root.usesColorArtwork || root.tonalSurface)
-            color: root.tonalSurface ? root.materialSurfaceColor : AppearanceTokens.colors.layer1
+            visible: root.preview && !root.tonalSurface && !root.usesColorArtwork
+            color: AppearanceTokens.colors.layer1
             border.width: 1
             border.color: AppearanceTokens.colors.outlineVariant
         }
@@ -133,21 +160,32 @@ Item {
             radius: root.radius
             visible: root.usesColorArtwork && !root.tonalSurface
             gradient: Gradient {
-                GradientStop { position: 0; color: root.startColor }
-                GradientStop { position: 1; color: root.endColor }
+                orientation: root.gradientOrientation
+                GradientStop {
+                    position: 0
+                    color: root.startColor
+                    Behavior on color {
+                        enabled: root._backgroundReady && !root.preview && root.backgroundTransitionDuration > 0
+                        ColorAnimation { duration: root.backgroundTransitionDuration; easing.type: Easing.InOutCubic }
+                    }
+                }
+                GradientStop {
+                    position: Math.max(0.01, Math.min(0.99, root.midPosition))
+                    color: root._resolvedMidColor
+                    Behavior on color {
+                        enabled: root._backgroundReady && !root.preview && root.backgroundTransitionDuration > 0
+                        ColorAnimation { duration: root.backgroundTransitionDuration; easing.type: Easing.InOutCubic }
+                    }
+                }
+                GradientStop {
+                    position: 1
+                    color: root.endColor
+                    Behavior on color {
+                        enabled: root._backgroundReady && !root.preview && root.backgroundTransitionDuration > 0
+                        ColorAnimation { duration: root.backgroundTransitionDuration; easing.type: Easing.InOutCubic }
+                    }
+                }
             }
-        }
-
-        // A broad, low-contrast bloom makes colour cards feel like widgets rather
-        // than rectangular panels, while never running beneath the text itself.
-        Rectangle {
-            visible: root.showSurface && root.usesColorArtwork && !root.tonalSurface
-            width: parent.width * 0.78
-            height: width
-            radius: width / 2
-            x: parent.width * 0.48
-            y: -height * 0.44
-            color: Qt.rgba(1, 1, 1, 0.1)
         }
 
         Loader {
@@ -187,5 +225,5 @@ Item {
     // into the same running content instance instead of creating a second,
     // out-of-sync one -- a package's settings must edit the live instance's
     // data service, not a throwaway copy.
-    readonly property Item loadedContent: contentLoader.item
+    readonly property var loadedContent: contentLoader.item
 }

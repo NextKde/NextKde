@@ -28,6 +28,9 @@ QtObject {
     property string requestedCategory: "all"
 
     property var catalog: []
+    property var invalidPackages: []
+    property var trippedPackages: []
+    property var missingInstances: []
     property bool loading: false
     property string feedback: ""
 
@@ -46,6 +49,8 @@ QtObject {
     // single click/tap on its (+) badge, resolved locally by
     // DeskCenterWindow's own addGalleryWidget() auto-placement.
     signal addRequested(var entry, string size)
+    signal reEnableRequested(string packageId)
+    signal removeRetiredInstanceRequested(string instanceId)
     signal done()
 
     function show(screen = null, category = "all") {

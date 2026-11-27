@@ -22,7 +22,7 @@ QtObject {
     // the card's actual instance id once the content is loaded.
     property string instanceId: widgetId
     property var data: ({ timeText: "--:--", dateText: "" })
-    property var widgetSize: [2, 2]
+    property var widgetSize: [1, 1]
     property string error: ""
     readonly property var packageInfo: WidgetPackageService.packages.find(item => item.id === widgetId) ?? null
     readonly property bool available: packageInfo !== null

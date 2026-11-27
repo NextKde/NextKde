@@ -67,7 +67,7 @@ QtObject {
         if (_hasLiveLyrics) return metadataString("kos:nextLyric")
         return _lyricLines[_lyricIndex + 1]?.text ?? ""
     }
-    // MPRIS position is lazy (DockMusicPopup pokes it on the same terms):
+    // MPRIS position is lazy (the Dock music popup pokes it on the same terms):
     // poll the player only while timed lyrics are enabled on the desktop,
     // at line-switch granularity, never while the shell is idle.
     property Timer lyricPositionTimer: Timer {

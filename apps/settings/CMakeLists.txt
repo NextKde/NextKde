@@ -76,6 +76,9 @@ qt_add_executable(kos-settings
     src/AppStore.h
     src/IndependentApps.cpp
     src/IndependentApps.h
+    src/WidgetPackages.cpp
+    src/WidgetPackages.h
+    ../../platform/src/daemon/WidgetPackageIndex.cpp
     src/SettingsBridge.h
     src/SettingsBridge.cpp
     src/SettingsBridgeDesktop.cpp
@@ -104,7 +107,8 @@ target_compile_definitions(kos-settings PRIVATE
     KOS_GTK_MODULE_BUILD_PATH="$<TARGET_FILE:kos-gtk-window-controls>"
     KOS_SETTINGS_BUILD_DIR="${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(kos-settings PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include)
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../services/ai/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../platform/src/daemon)
 
 add_dependencies(kos-settings kos-apps kos-app-update-agent)
 target_link_libraries(kos-settings PRIVATE
@@ -216,12 +220,33 @@ if(BUILD_TESTING)
     endif()
     # Native KMusic controller was removed; catalogue behavior is covered by independent-apps.
 
-    add_executable(kos-independent-apps-test tests/store/independent.cpp src/AppStore.cpp src/IndependentApps.cpp)
-    target_include_directories(kos-independent-apps-test PRIVATE src)
+    add_executable(kos-independent-apps-test
+        tests/store/independent.cpp
+        src/AppStore.cpp
+        src/IndependentApps.cpp
+        src/WidgetPackages.cpp
+        ../../platform/src/daemon/WidgetPackageIndex.cpp)
+    target_include_directories(kos-independent-apps-test PRIVATE
+        src
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../platform/src/daemon)
     target_link_libraries(kos-independent-apps-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
         Qt6::Test Qt6::Concurrent KF6::KIOGui KF6::Service kos-flatpak-client)
     add_test(NAME kos-settings.independent-apps COMMAND kos-independent-apps-test)
     set_tests_properties(kos-settings.independent-apps PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 30)
+
+    add_executable(kos-widget-store-test
+        tests/store/widget_store.cpp
+        src/WidgetPackages.cpp
+        src/WidgetPackages.h
+        ../../platform/src/daemon/WidgetPackageIndex.cpp)
+    target_include_directories(kos-widget-store-test PRIVATE
+        src
+        ${CMAKE_CURRENT_SOURCE_DIR}/../../platform/src/daemon)
+    target_link_libraries(kos-widget-store-test PRIVATE Qt6::Core Qt6::Gui Qt6::Network
+        Qt6::Test Qt6::Concurrent kos-app-catalog)
+    add_test(NAME kos-settings.widget-store COMMAND kos-widget-store-test)
+    set_tests_properties(kos-settings.widget-store PROPERTIES
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/../.. LABELS logic TIMEOUT 30)
 
     add_executable(kos-settings-backend-test

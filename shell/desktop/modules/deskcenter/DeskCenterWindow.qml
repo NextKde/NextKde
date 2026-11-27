@@ -16,7 +16,8 @@ import qs.desktop.modules.stage
 import "../../../Kos/Ui"
 import "WidgetLayout.mjs" as WidgetLayout
 import "DesktopGridMetrics.mjs" as DesktopGridMetrics
-import "bundled-clock" as Clock
+import "WidgetGalleryDiagnostics.mjs" as WidgetDiagnostics
+import "WidgetLocalization.mjs" as WidgetLocalization
 
 // iPadOS-inspired desktop widgets. Stays on the Bottom layer: Plasma's desktop
 // surface shares the Desktop/Background layer and would cover it if moved down.
@@ -187,12 +188,20 @@ PanelWindow {
     // ID) stays a separate field (widget.packageId below) only used to
     // resolve which package a given instance renders.
     //
-    // Persisted instance records whose package is not executable right now
-    // stay parked here instead of being re-rendered or forgotten: an upgrade
-    // or a later package deployment can still bring them back (R7), and the
-    // next save writes them back out untouched.
+    // Persisted instance records whose package is not executable right now, or
+    // whose declared package style ("material" / "macos") does not match the
+    // active desktop style, stay parked here instead of being re-rendered or
+    // forgotten: switching desktop style back or deploying the package restores
+    // them automatically, and the next save writes them back out untouched.
     property var _retiredInstanceRecords: []
-    property bool _instancesRestored: false
+    property string _restoredOutput: ""
+    readonly property var unavailableInstances: WidgetDiagnostics.collectUnavailableDesktopInstances(
+        root._retiredInstanceRecords,
+        root.widgetCatalog,
+        WidgetRegistry.activePackageStyle,
+        WidgetPackageService.invalidPackages,
+        WidgetCrashGuard.trippedPackages
+    )
 
     function persistInstances() {
         const records = []
@@ -203,42 +212,88 @@ PanelWindow {
             root._retiredInstanceRecords.filter(record => liveIds.indexOf(record.id) < 0)))
     }
 
-    // Re-expand the placements saved for this output. Only packages the host
-    // actually maps to a view may render, so anything else is parked rather
-    // than handed to a Loader. Runs once the package catalog has arrived;
-    // before that there is nothing to match records against.
-    function restoreInstances() {
-        if (root._instancesRestored || !root.desktopOutput) return
+    // Re-expand or re-partition placements for this output. Only packages that
+    // the host maps to a view AND whose declared style matches
+    // WidgetRegistry.activePackageStyle may render; everything else stays
+    // parked in _retiredInstanceRecords so switching styles never loses placed
+    // widgets.
+    function syncInstances() {
+        if (!root.desktopOutput) return
         const catalog = root.widgetCatalog
-        if (!Array.isArray(catalog) || catalog.length === 0) return
-        const stored = DeskCenterConfigService.instancesForOutput(root.desktopOutput)
+        if (!catalog || typeof catalog.length !== "number" || catalog.length === 0) return
+        let allRecords
+        if (root._restoredOutput !== root.desktopOutput) {
+            allRecords = DeskCenterConfigService.instancesForOutput(root.desktopOutput)
+        } else {
+            allRecords = []
+            const seen = ({})
+            for (const widget of root.widgetInstances) {
+                if (!widget.packageId || seen[widget.id]) continue
+                seen[widget.id] = true
+                allRecords.push({ id: widget.id, packageId: widget.packageId })
+            }
+            for (const record of root._retiredInstanceRecords) {
+                if (!record?.id || !record?.packageId || seen[record.id]) continue
+                seen[record.id] = true
+                allRecords.push({ id: record.id, packageId: record.packageId })
+            }
+        }
         const instances = []
         const retired = []
-        for (const record of stored) {
+        const savedSizes = DeskCenterConfigService.parsedSizes()
+        for (const record of allRecords) {
             const entry = catalog.find(item => item.id === record.packageId)
-            if (!entry || !root.resolveContentComponent({ packageId: record.packageId })) {
+            if (!entry || !WidgetRegistry.canExecute(entry)
+                || !WidgetRegistry.matchesActiveStyle(entry)
+                || WidgetCrashGuard.isBlocked(entry.id, entry.revision)) {
                 retired.push(record)
                 continue
+            }
+            if (savedSizes[record.id] !== undefined) {
+                const currentSpan = DeskCenterConfigService.spanFor(record.id)
+                const resolved = WidgetLayout.resolveDeclaredSpan(
+                    currentSpan[0], currentSpan[1], entry.sizes, entry.defaultSize)
+                if (resolved.changed)
+                    DeskCenterConfigService.setSpan(record.id, resolved.span[0], resolved.span[1])
+            } else {
+                const resolved = WidgetLayout.resolveDeclaredSpan(
+                    0, 0, entry.sizes, entry.defaultSize)
+                if (resolved.changed)
+                    DeskCenterConfigService.setSpan(record.id, resolved.span[0], resolved.span[1])
             }
             instances.push(Object.assign({}, entry, { id: record.id, packageId: record.packageId }))
         }
         root._retiredInstanceRecords = retired
         root.widgetInstances = instances
-        root._instancesRestored = true
+        root._restoredOutput = root.desktopOutput
     }
 
-    onDesktopOutputChanged: restoreInstances()
-    onWidgetCatalogChanged: restoreInstances()
+    onDesktopOutputChanged: syncInstances()
+    onWidgetCatalogChanged: syncInstances()
+    Connections {
+        target: WidgetRegistry
+        function onActivePackageStyleChanged() {
+            if (widgetContextMenu.visible) widgetContextMenu.hide()
+            root.activeDragCard = null
+            root.syncInstances()
+        }
+    }
+    Connections {
+        target: WidgetCrashGuard
+        function onRevisionChanged() {
+            root.syncInstances()
+        }
+    }
     Component.onCompleted: {
         WidgetPackageService.refresh()
-        restoreInstances()
+        syncInstances()
     }
 
     function addGalleryWidget(entry, size, requestedPosition) {
-        // Defense in depth: the gallery only publishes executable packages,
-        // but a stale/manipulated catalog entry must still not create a card
-        // that can never render.
-        if (!WidgetRegistry.canExecute(entry.id)) return
+        // Defense in depth: the gallery only publishes executable packages for
+        // the active desktop style, but a stale/manipulated catalog entry must
+        // still not create a card that can never render.
+        if (!WidgetRegistry.canExecute(entry) || !WidgetRegistry.matchesActiveStyle(entry)) return
         const span = WidgetLayout.namedGallerySpan(size)
         const instanceId = entry.id + "#" + DeskCenterConfigService.allocateInstanceSeq()
         let position = requestedPosition
@@ -272,15 +327,48 @@ PanelWindow {
         // Removes the instance record together with its saved position/span.
         DeskCenterConfigService.removeInstance(root.desktopOutput, id)
     }
+    function buildWidgetMenuItems(widget) {
+        if (!widget) return []
+        const items = [
+            {
+                label: WidgetLocalization.localizedField(widget, "name", I18n.language) || I18n.tr("Widget"),
+                enabled: false
+            },
+            { separator: true }
+        ]
+        const sizes = widget.sizes ?? []
+        for (let i = 0; i < sizes.length; ++i) {
+            const span = WidgetLayout.namedGallerySpan(sizes[i])
+            items.push({
+                label: root.sizeName(span),
+                cmd: "resize",
+                span: span,
+                checkable: true,
+                checked: widget.columns === span[0] && widget.rows === span[1]
+            })
+        }
+        if (sizes.length > 0)
+            items.push({ separator: true })
+        if (!root.editMode)
+            items.push({ label: I18n.tr("Edit Widgets"), cmd: "edit" })
+        items.push({ label: I18n.tr("Remove Widget"), cmd: "remove" })
+        return items
+    }
     function showWidgetMenu(id, point) {
         contextWidgetId = id
-        widgetContextMenu.x = Math.max(8, Math.min(point.x, root.width - widgetContextMenu.width - 8))
-        widgetContextMenu.y = Math.max(8, Math.min(point.y, root.height - widgetContextMenu.height - 8))
-        widgetContextMenu.open()
+        const widget = root.contextWidget
+        if (!widget) return
+        widgetContextMenu.setItems(buildWidgetMenuItems(widget))
+        const pt = point && point.x !== undefined ? point : Qt.point(root.width / 2, root.height / 2)
+        widgetContextAnchor.x = Math.max(4, Math.min(pt.x, root.width - 8))
+        widgetContextAnchor.y = Math.max(4, Math.min(pt.y, root.height - 8))
+        widgetContextMenu.show()
     }
     // Edit mode and the gallery are one state now: there is no toolbar step
     // in between, and no way to be "in edit mode" with the gallery closed.
     function enterWidgetEditMode() {
+        if (widgetContextMenu.visible) widgetContextMenu.hide()
+        WidgetPackageService.refresh()
         desktopFileGrid.clearDesktopSelection()
         desktopFileGrid.activateKeyboard()
         root.widgetFeedback = ""
@@ -289,6 +377,7 @@ PanelWindow {
     }
 
     function leaveWidgetEditMode() {
+        if (widgetContextMenu.visible) widgetContextMenu.hide()
         root.activeDragCard = null
         WidgetGalleryService.hide()
         root.editMode = false
@@ -299,7 +388,8 @@ PanelWindow {
     // separate window (WidgetGalleryWindow), so the context menu here needs
     // its own copy rather than reaching across windows for it.
     function sizeName(size) {
-        if (Array.isArray(size)) return size[0] + "×" + size[1]
+        if (size != null && typeof size !== "string" && size.length === 2)
+            return Number(size[0]) + "×" + Number(size[1])
         return I18n.tr(size === "small" ? "Small" : size === "large" ? "Large" : "Medium")
     }
 
@@ -335,7 +425,8 @@ PanelWindow {
     }
     // Package metadata feeds the gallery. Runtime instances are restored from
     // deskcenter-widgets.ini per output (R4) and grown by the gallery's add
-    // requests; only packages on WidgetRegistry's execution allowlist render.
+    // requests; any valid package indexed on disk for the active desktop style
+    // runs dynamically through WidgetPackageHost.
     property var widgetCatalog: WidgetPackageService.packages
     property var widgetInstances: []
     readonly property var widgetDefinitions: {
@@ -353,78 +444,6 @@ PanelWindow {
                 row: position?.row ?? widget.row
             })
         })
-    }
-
-    // Resolves which content view a placed widget instance renders. Catalog
-    // entries (root.widgetCatalog, sourced from the platform daemon's JSON
-    // package index) never carry a QML Component themselves, so this is the
-    // one seam that maps a package ID to the actual view -- today that is
-    // only the bundled SDK example; see docs/plugins/WidgetGalleryPreviewPlan
-    // .zh-CN.md R10 for the rest of the real third-party host wiring this
-    // still needs (per-package data authorization, isolation, etc.).
-    function resolveContentComponent(def) {
-        if (def.packageId === "org.nextkde.example.clock") return clockWidgetContent
-        return null
-    }
-    Component {
-        id: clockWidgetContent
-        Item {
-            id: clockHost
-            anchors.fill: parent
-            // Exposed so the settings affordance below can edit the exact
-            // running instance's config instead of creating a second,
-            // out-of-sync ClockWidgetDataService.
-            readonly property var dataService: clockData
-            // Forwarded up so the card delegate (widgetCardComponent below)
-            // can feed the component's own backgroundSpec into the card's
-            // startColor/endColor instead of the legacy static gradient --
-            // see WidgetSDK.zh-CN.md section 4.
-            readonly property var backgroundSpec: clockWidget.backgroundSpec
-            ClockWidgetDataService { id: clockData }
-            Clock.Widget {
-                id: clockWidget
-                anchors.fill: parent
-                data: clockData.data
-                widgetSize: DeskCenterConfigService.spanFor(clockData.instanceId)
-                appearance: ({
-                    isDark: AppearanceTokens.isDarkTheme,
-                    foreground: AppearanceTokens.surface.widgetForeground,
-                    // "Transparent mode" in this Shell is the glass card
-                    // finish: the host already suppresses backgroundSpec for
-                    // it (usesColorArtwork below gates on the same flag), but
-                    // the component itself gets told too, so content that
-                    // wants to adapt beyond just losing its background (e.g.
-                    // dialing back its own internal fills) can.
-                    transparent: AppearanceConfigService.widgetStyle === "glass"
-                })
-            }
-        }
-    }
-
-    // A package's optional Settings.qml (SDK draft, WidgetSDK.zh-CN.md
-    // section 6) -- same per-package seam as resolveContentComponent above,
-    // wired only for the bundled example. Returns null when the package has
-    // no settings surface, which hides the gear affordance entirely.
-    function resolveSettingsComponent(def) {
-        if (def.packageId === "org.nextkde.example.clock") return clockSettingsContent
-        return null
-    }
-    Component {
-        id: clockSettingsContent
-        Controls.Popup {
-            id: settingsPopup
-            // Set by the Loader right after creation (see widgetCardComponent
-            // below); this Component is declared at window scope so it has no
-            // compile-time visibility into any one card's ids.
-            property var dataService: null
-            modal: false
-            focus: true
-            closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutsideParent
-            contentItem: Clock.Settings {
-                data: ({ format24h: settingsPopup.dataService?.format24h ?? true })
-                onApply: next => settingsPopup.dataService?.setFormat24h(next.format24h)
-            }
-        }
     }
 
     FontMetrics { id: desktopFileFontMetrics }
@@ -589,6 +608,21 @@ PanelWindow {
     Binding {
         target: WidgetGalleryService
         when: root.isGalleryHost
+        property: "invalidPackages"; value: WidgetPackageService.invalidPackages
+    }
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "trippedPackages"; value: WidgetCrashGuard.trippedPackages
+    }
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
+        property: "missingInstances"; value: root.unavailableInstances
+    }
+    Binding {
+        target: WidgetGalleryService
+        when: root.isGalleryHost
         property: "loading"; value: WidgetPackageService.loading
     }
     Binding {
@@ -599,40 +633,53 @@ PanelWindow {
     Connections {
         target: WidgetGalleryService
         enabled: root.isGalleryHost
+        function onOpenChanged() {
+            if (WidgetGalleryService.open) WidgetPackageService.refresh()
+        }
         function onDone() { root.leaveWidgetEditMode() }
         function onAddRequested(entry, size) { root.addGalleryWidget(entry, size, null) }
+        function onReEnableRequested(packageId) {
+            WidgetCrashGuard.reEnable(packageId)
+            WidgetPackageService.refresh()
+        }
+        function onRemoveRetiredInstanceRequested(instanceId) {
+            root.removeWidget(instanceId)
+        }
     }
 
-    Controls.Menu {
+    ContextMenu {
         id: widgetContextMenu
-        width: 220
-        Controls.MenuItem {
-            text: root.contextWidget?.name ?? I18n.tr("Widget")
-            enabled: false
+        capsuleReveal: true
+        capsuleSourceWidth: 137
+        anchorItem: widgetContextAnchor
+        position: "bottom"
+        placeBelow: true
+        baseColor: ThemeService.backgroundColor
+        foregroundColor: ThemeService.foregroundColor
+        onAction: function(cmd, item) {
+            const id = root.contextWidgetId
+            if (cmd === "resize" && item?.span)
+                root.resizeNamedWidget(id, item.span)
+            else if (cmd === "edit")
+                root.enterWidgetEditMode()
+            else if (cmd === "remove")
+                root.removeWidget(id)
         }
-        Controls.MenuSeparator {}
-        Instantiator {
-            model: root.contextWidget?.sizes ?? []
-            onObjectAdded: (index, object) => widgetContextMenu.insertItem(index + 2, object)
-            onObjectRemoved: (index, object) => widgetContextMenu.removeItem(object)
-            delegate: Controls.MenuItem {
-                // Package sizes arrive as [cols, rows] pairs, not the legacy
-                // named strings ("small"/"2x2"/...) this menu was written
-                // for. A `string`-typed required property force-coerces an
-                // array value to e.g. "2,2", which namedGallerySpan() below
-                // cannot parse, so every package widget silently resized to
-                // 1x1. Both sizeName() and namedGallerySpan() already accept
-                // either shape -- only the property's declared type was wrong.
-                required property var modelData
-                text: root.sizeName(modelData)
-                checkable: true
-                checked: {
-                    const target = WidgetLayout.namedGallerySpan(modelData)
-                    return root.contextWidget?.columns === target[0] && root.contextWidget?.rows === target[1]
-                }
-                onTriggered: root.resizeNamedWidget(root.contextWidgetId, modelData)
-            }
-        }
+    }
+
+    Item {
+        id: widgetContextAnchor
+        opacity: 0
+        width: 4
+        height: 4
+    }
+
+    MouseArea {
+        anchors.fill: parent
+        z: 999
+        enabled: widgetContextMenu.visible
+        acceptedButtons: Qt.LeftButton | Qt.RightButton
+        onPressed: widgetContextMenu.hide()
     }
 
     Rectangle {
@@ -731,16 +778,6 @@ PanelWindow {
             objectName: "desktop-widget-" + widgetId
             readonly property var modelData:
                 root.widgetDefinitions.find(widget => widget.id === widgetId) ?? {id: widgetId}
-            // Each placed instance of a package (e.g. two clocks at
-            // different sizes) shares the same Clock.Widget Component but
-            // needs its own settings/size key -- resolveContentComponent is
-            // keyed by packageId, not this card's instance id, so poke the
-            // instance id onto the loaded content's data service once it
-            // exists. See ClockWidgetDataService's instanceId property.
-            onLoadedContentChanged: {
-                if (card.loadedContent && card.loadedContent.dataService)
-                    card.loadedContent.dataService.instanceId = card.widgetId
-            }
             property real dragOffsetX: 0
             property real dragOffsetY: 0
             readonly property var placement: root.placementFor(modelData.id)
@@ -779,10 +816,22 @@ PanelWindow {
             // AppearanceConfigService.widgetStyle === "color", so a
             // component's backgroundSpec never fights the user's
             // transparent-card setting.
-            startColor: loadedContent?.backgroundSpec?.startColor ?? modelData.startColor ?? "#536783"
-            endColor: loadedContent?.backgroundSpec?.endColor ?? modelData.endColor ?? "#35465f"
-            showSurface: loadedContent?.backgroundSpec ? true : (modelData.surface ?? false)
+            readonly property var _bgSpec: card.loadedContent ? (card.loadedContent.backgroundSpec ?? null) : null
+            startColor: _bgSpec?.startColor ?? modelData.startColor ?? "#536783"
+            hasMidColor: _bgSpec?.midColor !== undefined
+                && _bgSpec?.midColor !== null
+                && String(_bgSpec.midColor).length > 0
+            midColor: hasMidColor ? _bgSpec.midColor : "transparent"
+            midPosition: _bgSpec?.midPosition !== undefined
+                ? Number(_bgSpec.midPosition) : 0.5
+            endColor: _bgSpec?.endColor ?? modelData.endColor ?? "#35465f"
+            gradientOrientation: _bgSpec?.orientation === "horizontal"
+                ? Gradient.Horizontal : Gradient.Vertical
+            showSurface: _bgSpec ? true : (modelData.surface ?? false)
             materialSurfaceColor: AppearanceTokens.colors.layer1
+            materialSurfaceShape: modelData.style === "material" && card.loadedContent
+                ? String(card.loadedContent.surfaceShape || "roundedRect")
+                : "roundedRect"
             // SurfaceShape listens to Item geometry and scale changes, not
             // Translate.x/y. Move the anchor itself so the native glass and
             // the QML content publish the same position on every drag frame.
@@ -914,6 +963,9 @@ PanelWindow {
             TapHandler {
                 acceptedButtons: Qt.RightButton
                 gesturePolicy: TapHandler.ReleaseWithinBounds
+                grabPermissions: PointerHandler.CanTakeOverFromItems
+                    | PointerHandler.CanTakeOverFromHandlersOfSameType
+                    | PointerHandler.CanTakeOverFromHandlersOfDifferentType
                 onTapped: eventPoint => root.showWidgetMenu(card.widgetId,
                     card.mapToItem(desktopCoordinates, eventPoint.position.x, eventPoint.position.y))
             }
@@ -1001,10 +1053,14 @@ PanelWindow {
                 }
             }
 
+            readonly property bool hasPackageSettings:
+                Boolean(card.modelData.hasSettings)
+                && String(card.modelData.settingsEntry ?? "").length > 0
+
             Rectangle {
                 id: settingsAffordance
                 z: 80
-                visible: root.editMode && root.resolveSettingsComponent(card.modelData) !== null
+                visible: root.editMode && card.hasPackageSettings
                 anchors { top: parent.top; right: parent.right; margins: 8 }
                 width: 26; height: 26; radius: 13
                 color: AppearanceTokens.surface.pick(Qt.rgba(0, 0, 0, 0.4), Qt.rgba(1, 1, 1, 0.25))
@@ -1022,12 +1078,91 @@ PanelWindow {
                 }
             }
 
+            Component {
+                id: packageSettingsPopup
+                Controls.Popup {
+                    id: settingsPopup
+                    modal: false
+                    focus: true
+                    closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutsideParent
+                    contentItem: Item {
+                        id: settingsContainer
+                        property Item loadedSettings: null
+                        property var loadedComponent: null
+                        property bool shadowsData: false
+                        property string errorMessage: ""
+                        implicitWidth: loadedSettings ? Math.max(160, loadedSettings.implicitWidth) : 240
+                        implicitHeight: loadedSettings ? Math.max(80, loadedSettings.implicitHeight)
+                            : Math.max(80, settingsErrorText.implicitHeight + 24)
+                        readonly property var liveSettings: card.loadedContent?.settingsData ?? ({})
+                        onLiveSettingsChanged: {
+                            if (!loadedSettings) return
+                            if ("settings" in loadedSettings) loadedSettings.settings = liveSettings
+                            if (shadowsData) loadedSettings.data = liveSettings
+                        }
+                        Component.onCompleted: {
+                            const entry = String(card.modelData.settingsEntry ?? "")
+                            if (entry.length === 0) return
+                            const base = entry.startsWith("file://") ? entry : ("file://" + entry)
+                            const rev = String(card.modelData.revision ?? "")
+                            const url = rev.length > 0 ? (base + "?rev=" + encodeURIComponent(rev)) : base
+                            const comp = Qt.createComponent(url)
+                            loadedComponent = comp
+                            if (comp.status === Component.Error) {
+                                errorMessage = String(comp.errorString() ?? "").trim() || "Settings QML error"
+                                return
+                            }
+                            const props = {
+                                settings: liveSettings,
+                                appearance: WidgetHostService.widgetAppearance
+                            }
+                            let obj = comp.createObject(settingsContainer, props)
+                            if (!obj) {
+                                const err = String(comp.errorString() ?? "").trim()
+                                if (err.indexOf("Required property data") >= 0) {
+                                    obj = comp.createObject(settingsContainer, Object.assign({}, props, {
+                                        data: liveSettings
+                                    }))
+                                }
+                            }
+                            if (!obj) {
+                                errorMessage = String(comp.errorString() ?? "").trim() || "Failed to load Settings.qml"
+                                return
+                            }
+                            loadedSettings = obj
+                            shadowsData = Object.prototype.toString.call(obj.data) !== "[object QML List]"
+                            if (shadowsData) obj.data = liveSettings
+                            if ("appearance" in obj)
+                                obj.appearance = Qt.binding(() => WidgetHostService.widgetAppearance)
+                            if (obj.apply !== undefined && typeof obj.apply.connect === "function") {
+                                obj.apply.connect(next => {
+                                    card.loadedContent?.applySettings(next)
+                                })
+                            }
+                        }
+                        Component.onDestruction: {
+                            if (loadedSettings) { loadedSettings.destroy(); loadedSettings = null }
+                            if (loadedComponent) { loadedComponent.destroy(); loadedComponent = null }
+                        }
+                        Text {
+                            id: settingsErrorText
+                            anchors.centerIn: parent
+                            width: Math.max(1, parent.width - 24)
+                            visible: settingsContainer.errorMessage.length > 0
+                            text: settingsContainer.errorMessage
+                            color: AppearanceTokens.surface.widgetForeground
+                            font.pixelSize: 11
+                            wrapMode: Text.Wrap
+                        }
+                    }
+                }
+            }
+
             Loader {
                 id: settingsPopupLoader
                 active: false
-                sourceComponent: root.resolveSettingsComponent(card.modelData)
+                sourceComponent: card.hasPackageSettings ? packageSettingsPopup : null
                 onLoaded: {
-                    item.dataService = card.loadedContent?.dataService ?? null
                     item.parent = Controls.Overlay.overlay
                     const target = card.mapToItem(Controls.Overlay.overlay,
                         card.width - item.implicitWidth - 8, 36)
@@ -1041,7 +1176,7 @@ PanelWindow {
             WidgetResizeHandle {
                 id: resizeHandle
                 z: 80
-                visible: root.editMode
+                visible: root.editMode && !(card.modelData.sizes && card.modelData.sizes.length <= 1)
                 anchors { right: parent.right; bottom: parent.bottom; margins: 5 }
                 cellSize: root.cellSize
                 gap: root.gap
@@ -1078,13 +1213,31 @@ PanelWindow {
                 scale: springReadoutScale.value
                 Text {
                     id: resizePreview
+                    anchors.centerIn: parent
                     text: resizeHandle.previewColumns + " × " + resizeHandle.previewRows
                     color: "white"
                     font { pixelSize: 13; weight: Font.DemiBold }
                 }
             }
 
-            contentComponent: root.resolveContentComponent(modelData)
+            Component {
+                id: packageHostContent
+                WidgetPackageHost {
+                    anchors.fill: parent
+                    packageId: String(card.modelData.packageId ?? card.modelData.id ?? "")
+                    instanceId: card.widgetId
+                    widgetEntry: String(card.modelData.widgetEntry ?? "")
+                    settingsEntry: String(card.modelData.settingsEntry ?? "")
+                    packageRevision: String(card.modelData.revision ?? "")
+                    hasSettings: Boolean(card.modelData.hasSettings)
+                    hostActive: root.visible && ScreenLifecycle.outputAvailable && !ScreenLifecycle.sessionLocked
+                    widgetSize: [card.displayColumns, card.displayRows]
+                    appearance: WidgetHostService.widgetAppearance
+                }
+            }
+
+            contentComponent: String(card.modelData.widgetEntry ?? "").length > 0
+                ? packageHostContent : null
             contentEnabled: !root.editMode
         }
     }

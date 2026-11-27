@@ -1,124 +1,39 @@
 import Quickshell
 import QtQuick
+import "MaterialShapeGeometry.mjs" as ShapeGeom
 
-// A blur region shaped like MaterialFlower's outline — the flower silhouette.
-//
-// Why scanlines instead of ellipses: Quickshell's `RegionShape.Ellipse` is
-// axis-aligned and the twelve lobes are distributed radially, so no set of
-// axis-aligned ellipses reproduces them, and `Intersection` cannot build a sine
-// lobe out of circles either; a single inscribed circle would blur far less
-// than the flower. `Region.regions` is a readonly list too, so JS cannot push a
-// computed rectangle list into it — the slots below are therefore declared
-// statically and each one binds to a precomputed band.
-//
-// Geometry is the same polar curve MaterialFlower draws:
-//     r(theta) = R * (1 - amplitude + amplitude * sin(lobes * theta))
-// and bands are produced by a scanline fill of that polygon. The fixed
-// two-slots-per-row layout assumes a scanline meets at most two intervals,
-// which holds while the silhouette stays close to a circle (12 lobes,
-// amplitude 0.075): the centre always stays solid because the smallest radius
-// is R * (1 - 2*amplitude), so a scanline can only dip out of the shape
-// between neighbouring lobes. Deeper lobes could produce a third interval;
-// the fill drops it and warns rather than pretending to be exact. The region
-// is the flower's own content area, so the frost edge lands on the outline
-// that is actually drawn and never spills past it.
-//
-// Coordinates are surface coordinates, exactly like RoundedBlurRegion: `item`
-// must be the positioned wrapper whose x/y are the card's surface position.
+// Generalized scanline blur region for polygon expressive shapes
+// (flower, cookie, clover, slantedOval, arch) backed by MaterialShapeGeometry.mjs.
 Region {
     id: root
 
     required property Item item
-    property int lobes: 12
-    property real amplitude: 0.075
-    // Rows in the scanline fill. More rows means a finer stair on the lobes;
-    // 32 keeps the region under 64 rectangles, which KWin handles comfortably.
-    // Clamped to 32: the slot declarations below are fixed at 64 (32 rows x 2),
-    // and a larger count would silently truncate.
-    property int sliceCount: 32
-    readonly property int rows: Math.max(1, Math.min(32, sliceCount))
-    // Set false to publish nothing (the component is kept alive but yields an
-    // empty region).
+    property string shapeType: "flower"
     property bool active: true
-    // One-shot flag for the interval guard in `bands`; written during binding
-    // evaluation but never read by it, so it cannot loop.
-    property bool _intervalOverflowWarned: false
+    property int sliceCount: 32
+    property real inset: 2
 
-    readonly property real outlineInset: 1
-    // MaterialFlower is centred in its parent and 18px smaller than the card's
-    // short side. The region has to reproduce that exactly, or the blur edge
-    // will not sit on the outline that is actually drawn.
-    property real inset: 18
-    readonly property real radius: Math.max(0,
-        (Math.min(item.width, item.height) - inset) / 2 - outlineInset)
+    readonly property int rows: Math.max(1, Math.min(32, sliceCount))
+    property SceneBounds bounds: SceneBounds { item: root.item }
+    readonly property rect itemRect: bounds.rect
 
-    // The flower outline in surface coordinates.
-    function outline() {
-        const points = []
-        const count = 240
-        const cx = item.x + item.width / 2
-        const cy = item.y + item.height / 2
-        for (let index = 0; index <= count; ++index) {
-            const angle = index / count * Math.PI * 2
-            const ripple = 1 - amplitude + amplitude * Math.sin(angle * lobes)
-            points.push(Qt.point(cx + Math.cos(angle) * radius * ripple,
-                cy + Math.sin(angle) * radius * ripple))
-        }
-        return points
-    }
-
-    // Scanline fill: rows x 2 slots, empty slots are null.
     readonly property var bands: {
-        if (!active || radius <= 0)
+        const canonical = ShapeGeom.normalizeShape(root.shapeType)
+        if (!root.active || !ShapeGeom.isPolygonShape(canonical)
+                || itemRect.width <= 4 || itemRect.height <= 4) {
             return []
-        const points = outline()
-        const step = radius * 2 / rows
-        const top = item.y + item.height / 2 - radius
-        const out = []
-        for (let row = 0; row < rows; ++row) {
-            const scanY = top + (row + 0.5) * step
-            const crossings = []
-            for (let index = 0; index < points.length - 1; ++index) {
-                const a = points[index]
-                const b = points[index + 1]
-                if ((a.y <= scanY) !== (b.y <= scanY)) {
-                    const t = (scanY - a.y) / (b.y - a.y)
-                    crossings.push(a.x + t * (b.x - a.x))
-                }
-            }
-            crossings.sort(function (left, right) { return left - right })
-            if (crossings.length > 4 && !root._intervalOverflowWarned) {
-                root._intervalOverflowWarned = true
-                console.warn("[FlowerBlurRegion] a scanline met more than two "
-                    + "intervals; the two-slots-per-row layout only holds for "
-                    + "shallow lobes (12 lobes, amplitude <= 0.075). Dropping "
-                    + "the extras.")
-            }
-            out.push(band(crossings, 0, scanY - step / 2, step))
-            out.push(band(crossings, 1, scanY - step / 2, step))
         }
-        return out
+        const pts = ShapeGeom.outlinePoints(canonical,
+            itemRect.x, itemRect.y, itemRect.width, itemRect.height, root.inset)
+        return ShapeGeom.scanlineBands(pts, root.rows)
     }
 
-    function band(crossings, index, y, height) {
-        const left = crossings[index * 2]
-        const right = crossings[index * 2 + 1]
-        if (left === undefined || right === undefined || right - left <= 0)
-            return null
-        return { x: left, y: y, width: right - left, height: height }
-    }
-
-    // Read one field of one slot, rounded to the integer the region wants.
     function slot(index, field) {
         const entry = root.bands[index]
-        if (!entry)
-            return 0
+        if (!entry) return 0
         return Math.round(entry[field])
     }
 
-    // Two slots per scanline row. `Region.regions` is a readonly list, so these
-    // have to be declared; the count must stay at 32 rows x 2. `rows` is
-    // clamped to that, and slots past the end of `bands` yield empty regions.
     Region { x: root.slot(0, "x"); y: root.slot(0, "y"); width: root.slot(0, "width"); height: root.slot(0, "height") }
     Region { x: root.slot(1, "x"); y: root.slot(1, "y"); width: root.slot(1, "width"); height: root.slot(1, "height") }
     Region { x: root.slot(2, "x"); y: root.slot(2, "y"); width: root.slot(2, "width"); height: root.slot(2, "height") }
