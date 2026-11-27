@@ -32,6 +32,46 @@
       "style": "material",
       "widgetEntry": "material/Widget.qml",
       "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.music.material.cookie",
+      "name": "Music · Cookie",
+      "description": "1×1 cookie-shaped playback card.",
+      "i18n": {
+        "en": {
+          "name": "Music · Cookie",
+          "description": "1×1 cookie-shaped playback card."
+        },
+        "zh-CN": {
+          "name": "音乐控制 · 饼干",
+          "description": "1×1 饼干轮廓播放控制卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/CookieWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.music.material.clover",
+      "name": "Music · Clover",
+      "description": "1×1 clover-shaped playback card.",
+      "i18n": {
+        "en": {
+          "name": "Music · Clover",
+          "description": "1×1 clover-shaped playback card."
+        },
+        "zh-CN": {
+          "name": "音乐控制 · 四叶草",
+          "description": "1×1 四叶草轮廓播放控制卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/CloverWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
     }
   ]
 }

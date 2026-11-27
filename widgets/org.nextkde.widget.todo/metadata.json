@@ -32,6 +32,46 @@
       "style": "material",
       "widgetEntry": "material/Widget.qml",
       "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.todo.material.arch",
+      "name": "To-Do · Arch",
+      "description": "1×1 arch-shaped reminders card.",
+      "i18n": {
+        "en": {
+          "name": "To-Do · Arch",
+          "description": "1×1 arch-shaped reminders card."
+        },
+        "zh-CN": {
+          "name": "待办 · 拱门",
+          "description": "1×1 拱门轮廓待办卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/ArchWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.todo.material.clover",
+      "name": "To-Do · Clover",
+      "description": "1×1 clover-shaped reminders card.",
+      "i18n": {
+        "en": {
+          "name": "To-Do · Clover",
+          "description": "1×1 clover-shaped reminders card."
+        },
+        "zh-CN": {
+          "name": "待办 · 四叶草",
+          "description": "1×1 四叶草轮廓待办卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/CloverWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
     }
   ]
 }

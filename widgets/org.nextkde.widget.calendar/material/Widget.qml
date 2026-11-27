@@ -12,8 +12,9 @@ Item {
     readonly property int spanRows: (widgetSize && widgetSize.length >= 2) ? Number(widgetSize[1]) : 1
     readonly property bool compact: spanCols <= 1
     readonly property bool tall: spanRows >= 2
-    // 1x1 uses host-owned arch silhouette; 2x1 / 2x2 use unified roundedRect.
-    readonly property string surfaceShape: compact ? "arch" : "roundedRect"
+    // 1x1 defaults to standard roundedRect; expressive wrappers pass shapeOverride.
+    property string shapeOverride: ""
+    readonly property string surfaceShape: compact ? (shapeOverride || "roundedRect") : "roundedRect"
 
     readonly property bool liveMode: Boolean(host && !host.isPreview)
     readonly property var pimData: liveMode ? (host.pim ?? snapshot) : snapshot

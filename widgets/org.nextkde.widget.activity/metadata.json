@@ -32,6 +32,46 @@
       "style": "material",
       "widgetEntry": "material/Widget.qml",
       "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.activity.material.arch",
+      "name": "Activity · Arch",
+      "description": "1×1 arch-shaped activity card.",
+      "i18n": {
+        "en": {
+          "name": "Activity · Arch",
+          "description": "1×1 arch-shaped activity card."
+        },
+        "zh-CN": {
+          "name": "活动时长 · 拱门",
+          "description": "1×1 拱门轮廓活动时长卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/ArchWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.activity.material.cookie",
+      "name": "Activity · Cookie",
+      "description": "1×1 cookie-shaped activity card.",
+      "i18n": {
+        "en": {
+          "name": "Activity · Cookie",
+          "description": "1×1 cookie-shaped activity card."
+        },
+        "zh-CN": {
+          "name": "活动时长 · 饼干",
+          "description": "1×1 饼干轮廓活动时长卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/CookieWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
     }
   ]
 }

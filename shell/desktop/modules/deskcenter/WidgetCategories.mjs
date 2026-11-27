@@ -159,6 +159,18 @@ export function groupEntriesByPackage(entries, choicesById, localizedFn, transla
                 });
             }
         }
+        items.sort((a, b) => {
+            const aCols = Number(a.span?.[0] ?? 0);
+            const aRows = Number(a.span?.[1] ?? 0);
+            const bCols = Number(b.span?.[0] ?? 0);
+            const bRows = Number(b.span?.[1] ?? 0);
+            const aArea = aCols * aRows;
+            const bArea = bCols * bRows;
+            if (aArea !== bArea) return aArea - bArea;
+            if (aRows !== bRows) return aRows - bRows;
+            if (aCols !== bCols) return aCols - bCols;
+            return 0;
+        });
         if (items.length > 0)
             out.push({ packageId: group.packageId, title, items });
     }

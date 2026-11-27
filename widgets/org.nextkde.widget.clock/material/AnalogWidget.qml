@@ -14,7 +14,8 @@ Item {
     readonly property bool liveMode: Boolean(host && !host.isPreview)
     readonly property var clockData: liveMode ? (host.clock ?? snapshot) : snapshot
     readonly property bool format24h: host?.settings?.format24h !== false
-    readonly property string surfaceShape: inDock ? "roundedRect" : "flower"
+    property string shapeOverride: ""
+    readonly property string surfaceShape: inDock ? "roundedRect" : (shapeOverride || "roundedRect")
 
     readonly property var pal: appearance?.palette ?? ({})
     readonly property color onSurface: pal.onSurface ?? appearance?.foreground ?? "#1e293b"
@@ -25,7 +26,7 @@ Item {
 
     Shared.ClockContent {
         anchors.fill: parent
-        anchors.margins: root.inDock ? 0 : 8
+        anchors.margins: root.inDock ? 0 : (root.surfaceShape === "roundedRect" ? 4 : 8)
         widgetSize: root.widgetSize
         appearance: root.appearance
         clockData: root.clockData

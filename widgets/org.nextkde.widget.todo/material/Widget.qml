@@ -11,7 +11,8 @@ Item {
 
     readonly property int spanCols: (widgetSize && widgetSize.length >= 2) ? Number(widgetSize[0]) : 2
     readonly property bool compact: spanCols <= 1
-    readonly property string surfaceShape: compact ? "arch" : "roundedRect"
+    property string shapeOverride: ""
+    readonly property string surfaceShape: compact ? (shapeOverride || "roundedRect") : "roundedRect"
 
     readonly property bool liveMode: Boolean(host && !host.isPreview)
     readonly property var pimData: liveMode ? (host.pim ?? snapshot) : snapshot
@@ -21,10 +22,10 @@ Item {
 
     Shared.TodoContent {
         anchors.fill: parent
-        anchors.topMargin: root.compact ? 16 : 0
-        anchors.leftMargin: root.compact ? 10 : 0
-        anchors.rightMargin: root.compact ? 10 : 0
-        anchors.bottomMargin: root.compact ? 4 : 0
+        anchors.topMargin: root.compact ? (root.surfaceShape === "arch" ? 16 : root.surfaceShape === "clover" ? 12 : 0) : 0
+        anchors.leftMargin: root.compact ? (root.surfaceShape === "arch" ? 10 : root.surfaceShape === "clover" ? 12 : 0) : 0
+        anchors.rightMargin: root.compact ? (root.surfaceShape === "arch" ? 10 : root.surfaceShape === "clover" ? 12 : 0) : 0
+        anchors.bottomMargin: root.compact ? (root.surfaceShape === "arch" ? 4 : root.surfaceShape === "clover" ? 12 : 0) : 0
         widgetSize: root.widgetSize
         appearance: root.appearance
         pimData: root.pimData

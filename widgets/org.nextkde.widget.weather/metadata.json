@@ -32,6 +32,46 @@
       "style": "material",
       "widgetEntry": "material/Widget.qml",
       "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.weather.material.slanted",
+      "name": "Weather · Slanted Oval",
+      "description": "1×1 slanted oval weather card.",
+      "i18n": {
+        "en": {
+          "name": "Weather · Slanted Oval",
+          "description": "1×1 slanted oval weather card."
+        },
+        "zh-CN": {
+          "name": "天气 · 斜椭圆",
+          "description": "1×1 斜椭圆轮廓天气卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/SlantedWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.weather.material.flower",
+      "name": "Weather · Flower",
+      "description": "1×1 flower-shaped weather card.",
+      "i18n": {
+        "en": {
+          "name": "Weather · Flower",
+          "description": "1×1 flower-shaped weather card."
+        },
+        "zh-CN": {
+          "name": "天气 · 花瓣",
+          "description": "1×1 花瓣轮廓天气卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/FlowerWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
     }
   ]
 }

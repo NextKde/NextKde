@@ -32,6 +32,46 @@
       "style": "material",
       "widgetEntry": "material/Widget.qml",
       "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.system.material.cookie",
+      "name": "System · Cookie",
+      "description": "1×1 cookie-shaped system monitor.",
+      "i18n": {
+        "en": {
+          "name": "System · Cookie",
+          "description": "1×1 cookie-shaped system monitor."
+        },
+        "zh-CN": {
+          "name": "系统监控 · 饼干",
+          "description": "1×1 饼干轮廓系统监控卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/CookieWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.system.material.circle",
+      "name": "System · Circle",
+      "description": "1×1 circular system monitor.",
+      "i18n": {
+        "en": {
+          "name": "System · Circle",
+          "description": "1×1 circular system monitor."
+        },
+        "zh-CN": {
+          "name": "系统监控 · 圆形",
+          "description": "1×1 圆形轮廓系统监控卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/CircleWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
     }
   ]
 }

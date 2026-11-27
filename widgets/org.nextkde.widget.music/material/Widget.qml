@@ -12,8 +12,9 @@ Item {
 
     readonly property int spanCols: (widgetSize && widgetSize.length >= 2) ? Number(widgetSize[0]) : 2
     readonly property bool compactSquare: spanCols <= 1
-    // 1x1 uses host-owned 8-lobed cookie silhouette; 2x1 uses unified roundedRect.
-    readonly property string surfaceShape: compactSquare ? "cookie" : "roundedRect"
+    // 1x1 defaults to standard roundedRect; expressive wrappers pass shapeOverride.
+    property string shapeOverride: ""
+    readonly property string surfaceShape: compactSquare ? (shapeOverride || "roundedRect") : "roundedRect"
 
     readonly property bool liveMode: Boolean(host && !host.isPreview)
     readonly property var mediaData: liveMode ? (host.media ?? snapshot) : snapshot

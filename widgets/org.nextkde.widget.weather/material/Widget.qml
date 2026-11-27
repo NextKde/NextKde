@@ -11,8 +11,9 @@ Item {
 
     readonly property int spanCols: (widgetSize && widgetSize.length >= 2) ? Number(widgetSize[0]) : 2
     readonly property bool compact: spanCols <= 1
-    // 1x1 uses host-owned slantedOval silhouette; 2x1 and 3x1 keep standard roundedRect.
-    readonly property string surfaceShape: compact ? "slantedOval" : "roundedRect"
+    // 1x1 defaults to standard roundedRect; expressive wrappers pass shapeOverride.
+    property string shapeOverride: ""
+    readonly property string surfaceShape: compact ? (shapeOverride || "roundedRect") : "roundedRect"
 
     readonly property bool liveMode: Boolean(host && !host.isPreview)
     readonly property var weatherData: liveMode ? (host.weather ?? snapshot) : snapshot

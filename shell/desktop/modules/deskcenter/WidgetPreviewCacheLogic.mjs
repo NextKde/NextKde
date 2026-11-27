@@ -1,4 +1,4 @@
-export const CACHE_FORMAT_VERSION = 6;
+export const CACHE_FORMAT_VERSION = 7;
 export const DEFAULT_MAX_ENTRIES = 200;
 export const DEFAULT_MAX_CONCURRENT = 2;
 

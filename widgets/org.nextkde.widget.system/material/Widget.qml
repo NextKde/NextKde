@@ -11,7 +11,8 @@ Item {
 
     readonly property int spanCols: (widgetSize && widgetSize.length >= 2) ? Number(widgetSize[0]) : 2
     readonly property bool compact: spanCols <= 1
-    readonly property string surfaceShape: compact ? "cookie" : "roundedRect"
+    property string shapeOverride: ""
+    readonly property string surfaceShape: compact ? (shapeOverride || "roundedRect") : "roundedRect"
 
     readonly property bool liveMode: Boolean(host && !host.isPreview)
     readonly property var systemData: liveMode ? (host.system ?? snapshot) : snapshot
@@ -21,7 +22,7 @@ Item {
 
     Shared.SystemContent {
         anchors.fill: parent
-        anchors.margins: root.compact ? 8 : 0
+        anchors.margins: (root.compact && root.surfaceShape !== "roundedRect") ? 8 : 0
         widgetSize: root.widgetSize
         appearance: root.appearance
         systemData: root.systemData

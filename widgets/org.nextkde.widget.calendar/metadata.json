@@ -32,6 +32,46 @@
       "style": "material",
       "widgetEntry": "material/Widget.qml",
       "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.calendar.material.arch",
+      "name": "Calendar · Arch",
+      "description": "1×1 arch-shaped calendar card.",
+      "i18n": {
+        "en": {
+          "name": "Calendar · Arch",
+          "description": "1×1 arch-shaped calendar card."
+        },
+        "zh-CN": {
+          "name": "日历 · 拱门",
+          "description": "1×1 拱门轮廓日历卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/ArchWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.calendar.material.circle",
+      "name": "Calendar · Circle",
+      "description": "1×1 circular calendar card.",
+      "i18n": {
+        "en": {
+          "name": "Calendar · Circle",
+          "description": "1×1 circular calendar card."
+        },
+        "zh-CN": {
+          "name": "日历 · 圆形",
+          "description": "1×1 圆形轮廓日历卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/CircleWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
     }
   ]
 }
