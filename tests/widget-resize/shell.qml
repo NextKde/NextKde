@@ -145,7 +145,7 @@ ShellRoot {
                     check(retained && retained.item === card,
                         card.modelData.id + " retains its instance across layout saves")
                     check(card.visible, card.modelData.id + " remains visible")
-                    if (card.moving) continue
+                    if (card.pointerHeld) continue
                     check(card.x >= 0 && card.y >= 0, "card stays in screen")
                     check(card.x + card.width <= desktop.width + 1, "card stays inside right edge")
                     check(card.y + card.height <= desktop.height - desktop.bottomInset + 1, "card stays above dock")
@@ -234,14 +234,14 @@ ShellRoot {
                         return
                     }
                     if (stage === 7) {
-                        check(card.moving, "card body starts position drag")
+                        check(card.pointerHeld, "card body starts position drag")
                         dragGeometryChanges = 0
                         events.mouseMove(desktop.contentItem, releasePoint.x, releasePoint.y, 20, Qt.LeftButton, Qt.NoModifier)
                         stage = 8
                         return
                     }
                     if (stage === 8) {
-                        check(card.moving && dragGeometryChanges > 0,
+                        check(card.pointerHeld && dragGeometryChanges > 0,
                             "continued drag updates native glass anchor geometry after lift finishes")
                         const step = desktop.cellSize + desktop.gap
                         check(Math.abs(card.x - (desktop.leftInset + card.placement.column * step + card.dragOffsetX)) < 1
