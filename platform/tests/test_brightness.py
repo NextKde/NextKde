@@ -83,6 +83,7 @@ with tempfile.TemporaryDirectory(prefix='kos-brightness-', dir='/tmp') as direct
     env = dict(os.environ, BRIGHTNESS_FIXTURE=str(root), HOME=str(root),
                XDG_RUNTIME_DIR=str(root / 'runtime'), XDG_CONFIG_HOME=str(root / 'config'),
                XDG_STATE_HOME=str(root / 'state'), KOS_PLATFORM_SOCKET=str(root / 'runtime/socket'),
+               XDG_SEAT='seat0',
                PATH=str(root / 'bin') + os.pathsep + os.environ['PATH'],
                QT_QPA_PLATFORM='offscreen', DISPLAY='', WAYLAND_DISPLAY='',
                DBUS_SYSTEM_BUS_ADDRESS=os.environ['DBUS_SESSION_BUS_ADDRESS'])
@@ -165,6 +166,35 @@ with tempfile.TemporaryDirectory(prefix='kos-brightness-', dir='/tmp') as direct
                 assert receive('legacy')['ok']
                 assert (root / 'legacy').read_text() == 'legacy\n'
                 assert ['solid-set', 600] not in trace()
+
+                (root / 'legacy').unlink()
+                seat1_socket = root / 'runtime/socket-seat1'
+                seat1_env = dict(env, XDG_SEAT='seat1', KOS_PLATFORM_SOCKET=str(seat1_socket))
+                processes.append(subprocess.Popen([sys.argv[1], 'daemon'], env=seat1_env, stdout=log, stderr=log))
+                wait_for(seat1_socket.exists)
+                with socket.socket(socket.AF_UNIX) as seat1_client:
+                    seat1_client.settimeout(10)
+                    seat1_client.connect(str(seat1_socket))
+                    seat1_stream = seat1_client.makefile('r')
+                    for req_id, op, payload in (
+                        ('seat1-get', 'display.brightness.get', {}),
+                        ('seat1-set', 'display.brightness.set', {'percent': 50}),
+                    ):
+                        seat1_client.sendall((json.dumps(
+                            dict(version=1, requestId=req_id, operation=op, payload=payload)
+                        ) + '\n').encode())
+                        while True:
+                            line = seat1_stream.readline()
+                            assert line, 'seat1 daemon disconnected'
+                            resp = json.loads(line)
+                            if 'requestId' in resp:
+                                assert resp['requestId'] == req_id, resp
+                                if req_id == 'seat1-get':
+                                    assert resp['ok'] and resp['result'] == {'available': False}, resp
+                                else:
+                                    assert not resp['ok'] and resp['error']['code'] == 'brightness-unavailable', resp
+                                break
+                assert not (root / 'legacy').exists()
                 print('Brightness: targeting, parallel writes, partial failure, timeout, fallbacks and clamping passed')
         finally:
             for process in reversed(processes):
