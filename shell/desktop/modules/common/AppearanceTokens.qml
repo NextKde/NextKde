@@ -415,14 +415,11 @@ QtObject {
         readonly property string form: tokens.isWindows12 ? "taskbar"
             : tokens.isMaterial ? "navigationDock" : "floatingDock"
         readonly property string position: "bottom"
-        // Pill radius as a fraction of the Dock's height, so the cap keeps its
-        // shape as the Dock grows. 0.5 is the ceiling that still means
-        // something -- the cap becomes a half circle -- and both glass
-        // styles are pinned to it; Windows 12 stays a taskbar, where a
-        // full-round cap would be out of place.
-        readonly property real radiusRatio: tokens.isWindows12 ? 0.20 : 0.50
-        readonly property real horizontalPaddingRatio: tokens.isWindows12 ? 0.24
-            : tokens.isMaterial ? 0.32 : 0.40
+        // Rounded-rect radius as a fraction of the Dock's height, paired with
+        // balanced end padding so inner cards share concentric corner geometry.
+        readonly property real radiusRatio: tokens.isWindows12 ? 0.20 : 0.45
+        readonly property real horizontalPaddingRatio: tokens.isWindows12 ? 0.14
+            : tokens.isMaterial ? 0.16 : 0.18
         readonly property real verticalPaddingRatio: tokens.isWindows12 ? 0.12
             : tokens.isMaterial ? 0.16 : 0.20
         readonly property real itemSpacingRatio: tokens.isWindows12 ? 0.07

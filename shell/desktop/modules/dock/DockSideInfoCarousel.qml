@@ -1,14 +1,13 @@
 import QtQuick
-import QtQuick.Effects
-import Quickshell
-import "../../../shared/qml/i18n"
 import qs.desktop.modules.common
-import qs.desktop.modules.weather
-import "../../../Kos/Ui"
+import qs.desktop.modules.deskcenter
+import "DockInfoCardOrder.mjs" as DockInfoCardOrder
 
 // Readable one-line information carousel for a left/right Dock. Its parent
 // Row is rotated by 90 degrees; the inner panel rotates back so the screen
 // text remains horizontal while the card occupies two icon lengths vertically.
+// Cards are installed widget packages (see DockInfoCarousel); a package adapts
+// to this form through `host.orientation === "vertical"`.
 Item {
     id: carousel
     signal editRequested()
@@ -23,42 +22,60 @@ Item {
         }
     }
 
-    readonly property int musicPage: 0
-    readonly property int weatherPage: 1
-    readonly property int clockPage: 2
-    readonly property int temperaturePage: 3
-    property var cardOrder: ["music", "weather", "clock", "metrics"]
-    readonly property var pageOrder: {
-        const pages = []
-        for (const id of cardOrder) {
-            const candidate = pageForId(id)
-            if (candidate >= 0 && pages.indexOf(candidate) < 0)
-                pages.push(candidate)
+    property var cardOrder: []
+    property var dockPackages: []
+    property var hiddenCards: ({})
+
+    function cardIdOf(pkg) { return DockInfoCardOrder.cardIdOf(pkg) }
+
+    function packageForId(id) {
+        return (dockPackages || []).find(p => carousel.cardIdOf(p) === id) ?? null
+    }
+
+    function setCardHidden(id, hidden) {
+        if (Boolean(hiddenCards[id]) === hidden)
+            return
+        const next = Object.assign({}, hiddenCards)
+        if (hidden) next[id] = true
+        else delete next[id]
+        hiddenCards = next
+    }
+
+    readonly property var orderedCardIds: {
+        const ids = []
+        for (const rawId of (cardOrder || [])) {
+            const id = String(rawId)
+            if (ids.indexOf(id) >= 0) continue
+            if (carousel.packageForId(id) !== null)
+                ids.push(id)
         }
-        return pages
+        return ids
     }
 
     property int iconSize: 44
     property int dockHeight: 60
+    property real edgePadding: Math.round(iconSize * 0.18)
+    property string dockEdge: "left"
     required property real cornerRadius
     property real widthUnits: 2
-    property bool showClock: false
-    property bool showTemperature: true
     property bool expanded: false
     property bool autoRotate: true
-    readonly property bool hasMusic: MediaService.hasPlayer
-    readonly property bool hasWeather: WeatherService.available
-    readonly property var player: MediaService.activePlayer
-    readonly property url artworkSource: {
-        const revision = MediaService.metadataRevision
-        return player?.trackArtUrl ? player.trackArtUrl
-            : BundledIcons.source("media.coverFallback")
-    }
-    readonly property bool monochrome: IconAppearanceService.mode !== "color"
-    readonly property int availablePageCount: availablePages().length
+    readonly property int availablePageCount: availableIds().length
     readonly property real cardSpacing: Math.max(4, Math.round(iconSize * 0.14))
     readonly property real collapsedWidth: iconSize * widthUnits + iconSize * 0.2
-    property int page: clockPage
+    readonly property real outerInset: Math.max(0, (dockHeight - height) / 2)
+    readonly property real concentricInset: (outerInset + edgePadding) / 2
+    readonly property real cardRadius: cornerRadius > 0
+        ? Math.max(Math.round(iconSize * 0.16), Math.min(height / 2, Math.round(cornerRadius - concentricInset)))
+        : Math.max(6, Math.round(iconSize * 0.18))
+    readonly property real contentSideMargin: 3
+    readonly property real contentEndMargin: {
+        const r = cardRadius
+        const s = contentSideMargin
+        if (r <= s) return Math.max(6, s)
+        return Math.max(6, Math.ceil(r - Math.sqrt(Math.max(0, r * r - (r - s) * (r - s)))))
+    }
+    property string activeCardId: ""
 
     width: expanded
         ? availablePageCount * collapsedWidth
@@ -67,193 +84,68 @@ Item {
     height: iconSize * 1.2
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
-    SystemClock {
-        id: clock
-        precision: SystemClock.Minutes
+    function cardVisibleId(id) {
+        return (orderedCardIds || []).indexOf(id) >= 0 && !hiddenCards[id]
     }
 
-    function pageForId(id) {
-        if (id === "music") return musicPage
-        if (id === "weather") return weatherPage
-        if (id === "clock") return clockPage
-        if (id === "metrics" || id === "temperature") return temperaturePage
-        return -1
-    }
-
-    function pageAvailable(candidate) {
-        if ((pageOrder || []).indexOf(candidate) < 0)
-            return false
-        if (candidate === musicPage)
-            return hasMusic
-        if (candidate === weatherPage)
-            return hasWeather
-        if (candidate === clockPage)
-            return showClock
-        return candidate === temperaturePage && showTemperature
-    }
-
-    function availablePages() {
-        const pages = []
-        for (const candidate of (pageOrder || [])) {
-            if (pageAvailable(candidate))
-                pages.push(candidate)
+    function availableIds() {
+        const ids = []
+        for (const id of (orderedCardIds || [])) {
+            if (cardVisibleId(id)) ids.push(id)
         }
-        return pages
+        return ids
     }
 
     function ensureValidPage() {
-        if (pageAvailable(page))
+        if (cardVisibleId(activeCardId))
             return
-        const pages = availablePages()
-        page = pages.length > 0 ? pages[0] : clockPage
+        const ids = availableIds()
+        activeCardId = ids.length > 0 ? ids[0] : ""
     }
 
     function switchPage(direction) {
-        const pages = availablePages()
-        if (pages.length < 2)
+        const ids = availableIds()
+        if (ids.length < 2)
             return
-        let index = pages.indexOf(page)
+        let index = ids.indexOf(activeCardId)
         if (index < 0)
             index = 0
         const step = Math.trunc(direction)
-        page = pages[((index + step) % pages.length + pages.length) % pages.length]
-    }
-
-    function pageText(candidate) {
-        if (candidate === musicPage)
-            return I18n.tr("Music")
-        if (candidate === weatherPage)
-            return WeatherService.temperature
-        if (candidate === temperaturePage) {
-            const value = MetricsService.currentMilliC >= 0
-                ? Math.round(MetricsService.currentMilliC / 1000) + "°" : "--°"
-            return value
-        }
-        return Qt.formatDateTime(clock.date, "HH:mm")
-    }
-
-    // Keep the side card on the exact same page-owned palette as the bottom
-    // carousel. Only its compact icon/text layout is different.
-    function artworkTint(color, alpha) {
-        if (monochrome) {
-            const luminance = color.r * 0.2126 + color.g * 0.7152
-                + color.b * 0.0722
-            return Qt.rgba(luminance, luminance, luminance, alpha)
-        }
-        return Qt.rgba(color.r, color.g, color.b, alpha)
-    }
-
-    function weatherStart(code, day) {
-        if (code === 0) return day ? Qt.rgba(0.18, 0.54, 0.94, 0.58) : Qt.rgba(0.10, 0.15, 0.38, 0.66)
-        if (code === 1 || code === 2) return Qt.rgba(0.36, 0.58, 0.76, 0.56)
-        if (code === 3) return Qt.rgba(0.35, 0.43, 0.52, 0.62)
-        if (code === 45 || code === 48) return Qt.rgba(0.38, 0.45, 0.49, 0.60)
-        if (code >= 51 && code <= 67) return Qt.rgba(0.20, 0.35, 0.49, 0.64)
-        if (code >= 71 && code <= 86) return Qt.rgba(0.54, 0.68, 0.78, 0.58)
-        if (code >= 95) return Qt.rgba(0.24, 0.23, 0.40, 0.70)
-        return Qt.rgba(0.32, 0.44, 0.58, 0.58)
-    }
-
-    function weatherEnd(code, day) {
-        if (code === 0) return day ? Qt.rgba(1.0, 0.72, 0.30, 0.42) : Qt.rgba(0.36, 0.42, 0.70, 0.38)
-        if (code === 1 || code === 2) return Qt.rgba(0.88, 0.90, 0.91, 0.46)
-        if (code === 3) return Qt.rgba(0.92, 0.94, 0.95, 0.48)
-        if (code === 45 || code === 48) return Qt.rgba(0.82, 0.85, 0.85, 0.44)
-        if (code >= 51 && code <= 67) return Qt.rgba(0.58, 0.68, 0.73, 0.40)
-        if (code >= 71 && code <= 86) return Qt.rgba(0.94, 0.98, 1.0, 0.50)
-        if (code >= 95) return Qt.rgba(0.57, 0.54, 0.72, 0.46)
-        return Qt.rgba(0.76, 0.82, 0.86, 0.42)
-    }
-
-    function ambientColor(source, alpha) {
-        const neutral = ThemeService.isDark ? 0.035 : 0.90
-        const colorWeight = ThemeService.isDark ? 0.54 : 0.20
-        const color = WallpaperColorSource.ready
-            ? source : ThemeService.backgroundColor
-        return IconAppearanceService.styledColor(Qt.rgba(
-            neutral + (color.r - neutral) * colorWeight,
-            neutral + (color.g - neutral) * colorWeight,
-            neutral + (color.b - neutral) * colorWeight, alpha))
-    }
-
-    function thermalColor(cool, warm, alpha) {
-        const currentC = MetricsService.currentMilliC >= 0
-            ? Math.round(MetricsService.currentMilliC / 1000) : -1
-        const value = currentC >= 0 ? Math.max(0, Math.min(1,
-            (currentC - 35) / 55)) : 0.25
-        return IconAppearanceService.styledColor(Qt.rgba(
-            cool.r + (warm.r - cool.r) * value,
-            cool.g + (warm.g - cool.g) * value,
-            cool.b + (warm.b - cool.b) * value, alpha))
-    }
-
-    function backgroundStart(candidate) {
-        if (candidate === musicPage)
-            return artworkTint(artworkPalette.primary, 0.82)
-        if (candidate === weatherPage)
-            return IconAppearanceService.styledColor(weatherStart(
-                WeatherService.weatherCode, WeatherService.isDay))
-        if (candidate === temperaturePage)
-            return thermalColor(Qt.rgba(0.16, 0.38, 0.62, 1),
-                Qt.rgba(0.68, 0.22, 0.18, 1), 0.68)
-        return ambientColor(WallpaperColorSource.primary, 0.74)
-    }
-
-    function backgroundMiddle(candidate) {
-        if (candidate === musicPage)
-            return artworkTint(artworkPalette.secondary, 0.64)
-        if (candidate === clockPage)
-            return ambientColor(Qt.rgba(
-                (WallpaperColorSource.primary.r + WallpaperColorSource.secondary.r) / 2,
-                (WallpaperColorSource.primary.g + WallpaperColorSource.secondary.g) / 2,
-                (WallpaperColorSource.primary.b + WallpaperColorSource.secondary.b) / 2, 1), 0.66)
-        return backgroundStart(candidate)
-    }
-
-    function backgroundEnd(candidate) {
-        if (candidate === musicPage)
-            return artworkTint(artworkPalette.primary, 0.38)
-        if (candidate === weatherPage)
-            return IconAppearanceService.styledColor(weatherEnd(
-                WeatherService.weatherCode, WeatherService.isDay))
-        if (candidate === temperaturePage)
-            return thermalColor(Qt.rgba(0.20, 0.56, 0.68, 1),
-                Qt.rgba(0.96, 0.52, 0.18, 1), 0.54)
-        return ambientColor(WallpaperColorSource.secondary, 0.58)
+        activeCardId = ids[((index + step) % ids.length + ids.length) % ids.length]
     }
 
     Component.onCompleted: ensureValidPage()
-    onHasMusicChanged: ensureValidPage()
-    onHasWeatherChanged: ensureValidPage()
-    onShowClockChanged: ensureValidPage()
-    onShowTemperatureChanged: ensureValidPage()
     onCardOrderChanged: ensureValidPage()
-
-    ArtworkColorSource {
-        id: artworkPalette
-        source: carousel.artworkSource
-    }
+    onDockPackagesChanged: ensureValidPage()
+    onOrderedCardIdsChanged: ensureValidPage()
+    onAvailablePageCountChanged: ensureValidPage()
+    onHiddenCardsChanged: ensureValidPage()
 
     Timer {
         interval: 30000
         running: carousel.visible && carousel.autoRotate && !carousel.expanded
             && carousel.availablePageCount > 1
         repeat: true
-        onTriggered: {
-            carousel.switchPage(1)
-        }
+        onTriggered: carousel.switchPage(1)
     }
 
     property real wheelRemainder: 0
     property bool wheelUsesPixels: false
     property int wheelSteps: 0
+    property double lastWheelSwitchMs: 0
     FrameAnimation {
         running: carousel.wheelSteps !== 0
         onTriggered: {
             const steps = carousel.wheelSteps
             carousel.wheelSteps = 0
-            if (!carousel.expanded)
-                carousel.switchPage(steps)
+            carousel.wheelRemainder = 0
+            if (steps === 0 || carousel.expanded)
+                return
+            const now = Date.now()
+            if (now - carousel.lastWheelSwitchMs < 140)
+                return
+            carousel.lastWheelSwitchMs = now
+            carousel.switchPage(steps > 0 ? 1 : -1)
         }
     }
 
@@ -283,7 +175,86 @@ Item {
     TapHandler {
         acceptedButtons: Qt.RightButton
         gesturePolicy: TapHandler.ReleaseWithinBounds
+        grabPermissions: PointerHandler.CanTakeOverFromItems
+            | PointerHandler.CanTakeOverFromHandlersOfSameType
+            | PointerHandler.CanTakeOverFromHandlersOfDifferentType
         onTapped: carousel.editRequested()
+    }
+
+    property bool slotHovered: false
+    property Item hoveredAnchorItem: null
+    property var hoveredPackage: null
+
+    function midGradientColor(spec) {
+        if (!spec) return "transparent"
+        const mid = spec.midColor
+        if (mid !== undefined && mid !== null && String(mid).length > 0)
+            return mid
+        const s = Qt.color(String(spec.startColor ?? "transparent"))
+        const e = Qt.color(String(spec.endColor ?? "transparent"))
+        return Qt.rgba((s.r + e.r) * 0.5, (s.g + e.g) * 0.5, (s.b + e.b) * 0.5, (s.a + e.a) * 0.5)
+    }
+
+    function handlePackageHover(hovered, anchorItem, pkg) {
+        if (hovered) {
+            carousel.slotHovered = true
+            if (pkg && pkg.hasPopup && String(pkg.popupEntry || "").length > 0) {
+                sidePopupCloseDelay.stop()
+                carousel.hoveredAnchorItem = anchorItem
+                carousel.hoveredPackage = pkg
+                if (sideWidgetPopup.visible)
+                    DockModelService.openDockPopup(sideWidgetPopup)
+                else if (!sidePopupOpenDelay.running)
+                    sidePopupOpenDelay.start()
+            } else {
+                sidePopupOpenDelay.stop()
+                if (sideWidgetPopup.visible)
+                    sideWidgetPopup.requestClose()
+            }
+        } else if (carousel.hoveredAnchorItem === anchorItem || !anchorItem) {
+            carousel.slotHovered = false
+            if (!sideWidgetPopup.pointerInside) {
+                sidePopupOpenDelay.stop()
+                sidePopupCloseDelay.restart()
+            }
+        }
+    }
+
+    Timer {
+        id: sidePopupOpenDelay
+        interval: DockAnimation.infoPopupOpenDelay
+        repeat: false
+        onTriggered: {
+            if (carousel.slotHovered && carousel.hoveredPackage && carousel.hoveredAnchorItem)
+                DockModelService.openDockPopup(sideWidgetPopup)
+        }
+    }
+
+    Timer {
+        id: sidePopupCloseDelay
+        interval: 260
+        repeat: false
+        onTriggered: {
+            if (!carousel.slotHovered && !sideWidgetPopup.pointerInside && sideWidgetPopup.visible)
+                sideWidgetPopup.requestClose()
+        }
+    }
+
+    DockWidgetPopup {
+        id: sideWidgetPopup
+        anchorItem: carousel.hoveredAnchorItem
+        dockEdge: carousel.dockEdge
+        packageEntry: carousel.hoveredPackage
+        onPointerInsideChanged: {
+            if (pointerInside) {
+                sidePopupCloseDelay.stop()
+                if (!sideWidgetPopup.requestedOpen && sideWidgetPopup.packageEntry)
+                    DockModelService.openDockPopup(sideWidgetPopup)
+            } else if (!carousel.slotHovered) {
+                sidePopupCloseDelay.restart()
+            }
+        }
+        onVisibleChanged: if (!visible) DockModelService.releaseDockPopup(sideWidgetPopup)
     }
 
     Row {
@@ -291,14 +262,19 @@ Item {
         spacing: carousel.expanded ? carousel.cardSpacing : 0
 
         Repeater {
-            model: carousel.expanded ? carousel.availablePages() : [carousel.page]
+            model: carousel.orderedCardIds
 
             delegate: Item {
                 id: sideSlot
-                required property int modelData
+                required property string modelData
+                readonly property var packageEntry: carousel.packageForId(modelData)
                 width: carousel.collapsedWidth
                 height: carousel.height
-
+                // Every ordered card stays instantiated so its `dockVisible`
+                // keeps the carousel's visibility current; only the shown ones
+                // take part in the Row layout.
+                visible: carousel.cardVisibleId(modelData)
+                    && (carousel.expanded || carousel.activeCardId === modelData)
                 Item {
                     id: readablePanel
                     anchors.centerIn: parent
@@ -308,79 +284,66 @@ Item {
 
                     Rectangle {
                         anchors.fill: parent
-                        radius: carousel.cornerRadius
-                        gradient: Gradient {
-                            orientation: Gradient.Horizontal
-                            GradientStop { position: 0.0; color: carousel.backgroundStart(sideSlot.modelData) }
-                            GradientStop { position: 0.52; color: carousel.backgroundMiddle(sideSlot.modelData) }
-                            GradientStop { position: 1.0; color: carousel.backgroundEnd(sideSlot.modelData) }
-                        }
-                    }
-
-                    Column {
-                        anchors.centerIn: parent
-                        width: parent.width
-                        height: parent.height * 0.62
-                        spacing: 0
-
-                        Item {
-                            width: parent.width
-                            height: parent.height * 0.50
-
-                            BundledIcon {
-                                anchors.centerIn: parent
-                                visible: sideSlot.modelData === carousel.musicPage
-                                name: "media.fallback"
-                                color: "white"
-                                size: Math.max(10,
-                                    Math.round(carousel.iconSize * 0.54))
+                        visible: sideSlot.packageEntry !== null
+                        radius: carousel.cardRadius
+                        clip: true
+                        readonly property var spec: sidePkgHost.backgroundSpec
+                        readonly property bool paintGradient: !AppearanceTokens.isMaterial
+                            && !!spec && !WidgetHostService.widgetAppearance.transparent
+                        color: paintGradient ? "transparent"
+                            : (AppearanceTokens.isMaterial
+                                ? Qt.rgba(AppearanceTokens.colors.layer2.r,
+                                    AppearanceTokens.colors.layer2.g,
+                                    AppearanceTokens.colors.layer2.b, 0.72)
+                                : Qt.rgba(1, 1, 1, AppearanceTokens.isDarkTheme ? 0.08 : 0.16))
+                        gradient: paintGradient ? sidePkgGradient : null
+                        Gradient {
+                            id: sidePkgGradient
+                            orientation: sidePkgHost.backgroundSpec?.orientation === "horizontal"
+                                ? Gradient.Horizontal : Gradient.Vertical
+                            GradientStop { position: 0; color: sidePkgHost.backgroundSpec?.startColor ?? "transparent" }
+                            GradientStop {
+                                position: Math.max(0.01, Math.min(0.99,
+                                    sidePkgHost.backgroundSpec?.midPosition !== undefined
+                                        ? Number(sidePkgHost.backgroundSpec.midPosition) : 0.5))
+                                color: carousel.midGradientColor(sidePkgHost.backgroundSpec)
                             }
-                            Text {
-                                anchors.centerIn: parent
-                                visible: sideSlot.modelData === carousel.weatherPage
-                                text: WeatherService.conditionSymbol(
-                                    WeatherService.weatherCode, WeatherService.isDay)
-                                color: "white"
-                                font.pixelSize: Math.max(10,
-                                    Math.round(carousel.iconSize * 0.54))
-                            }
-                            DockMetricGlyph {
-                                width: Math.max(10, Math.round(carousel.iconSize * 0.48))
-                                height: width
-                                anchors.centerIn: parent
-                                visible: sideSlot.modelData === carousel.clockPage
-                                kind: "clock"
-                                glyphColor: "white"
-                            }
-                            DockMetricGlyph {
-                                width: Math.max(10, Math.round(carousel.iconSize * 0.52))
-                                height: width
-                                anchors.centerIn: parent
-                                visible: sideSlot.modelData === carousel.temperaturePage
-                                kind: "temperature"
-                                glyphColor: "white"
-                            }
+                            GradientStop { position: 1; color: sidePkgHost.backgroundSpec?.endColor ?? "transparent" }
                         }
 
-                        Text {
-                            width: parent.width - carousel.iconSize * 0.12
-                            height: parent.height * 0.50
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            text: carousel.pageText(sideSlot.modelData)
-                            color: "white"
-                            horizontalAlignment: Text.AlignHCenter
-                            verticalAlignment: Text.AlignVCenter
-                            fontSizeMode: Text.HorizontalFit
-                            minimumPixelSize: 5
-                            font {
-                                family: AppearanceTokens.typography.displayFamily
-                                pixelSize: Math.max(8,
-                                    Math.round(carousel.iconSize * 0.42))
-                                weight: Font.DemiBold
-                            }
+                        HoverHandler {
+                            enabled: sideSlot.packageEntry !== null
+                            onHoveredChanged: carousel.handlePackageHover(
+                                hovered, readablePanel, sideSlot.packageEntry)
+                        }
+
+                        WidgetPackageHost {
+                            id: sidePkgHost
+                            anchors.fill: parent
+                            anchors.leftMargin: carousel.contentSideMargin
+                            anchors.rightMargin: carousel.contentSideMargin
+                            anchors.topMargin: carousel.contentEndMargin
+                            anchors.bottomMargin: carousel.contentEndMargin
+                            packageId: String(sideSlot.packageEntry?.id ?? "")
+                            instanceId: "dock:" + String(sideSlot.packageEntry?.id ?? "")
+                            widgetEntry: String(sideSlot.packageEntry?.widgetEntry ?? "")
+                            settingsEntry: String(sideSlot.packageEntry?.settingsEntry ?? "")
+                            packageRevision: String(sideSlot.packageEntry?.revision ?? "")
+                            hasSettings: Boolean(sideSlot.packageEntry?.hasSettings)
+                            containerType: "dock"
+                            containerOrientation: "vertical"
+                            hostActive: carousel.visible && (carousel.expanded || carousel.activeCardId === sideSlot.modelData)
+                            widgetSize: [1, 2]
+                            appearance: WidgetHostService.widgetAppearance
                         }
                     }
                 }
+
+                readonly property bool packageVisible: sidePkgHost.widgetItem
+                    && sidePkgHost.widgetItem.dockVisible !== undefined
+                    ? Boolean(sidePkgHost.widgetItem.dockVisible) : true
+                onPackageVisibleChanged: carousel.setCardHidden(modelData, !packageVisible)
+                Component.onCompleted: carousel.setCardHidden(modelData, !packageVisible)
             }
         }
     }

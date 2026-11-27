@@ -5,6 +5,7 @@ import Quickshell.Io
 import qs.desktop.modules.common
 import qs.desktop.modules.platform
 import "DockItems.mjs" as DockItems
+import "DockInfoCardOrder.mjs" as DockInfoCardOrder
 
 // ────────────────────────────────────────────────────────────────
 // DockConfigService — Persistent JSON configuration.
@@ -289,14 +290,10 @@ QtObject {
     // the row so nothing rotates any more.
     property string infoCardMode: "carousel"
     property bool infoCardAutoRotate: true
-    readonly property var knownInfoCardIds: ["music", "weather", "clock", "metrics"]
-    // One ordered list is the whole component model. Zero items hides the
+    // One ordered list of Dock widget card ids (installed packages that declare
+    // containers: ["dock"]) is the whole component model. Zero items hides the
     // region, one is naturally fixed, and multiple items rotate or expand.
-    property var infoCardOrder: ["music", "weather", "clock", "metrics"]
-    readonly property bool infoCardMusic: infoCardOrder.indexOf("music") >= 0
-    readonly property bool infoCardWeather: infoCardOrder.indexOf("weather") >= 0
-    readonly property bool infoCardClock: infoCardOrder.indexOf("clock") >= 0
-    readonly property bool infoCardMetrics: infoCardOrder.indexOf("metrics") >= 0
+    property var infoCardOrder: DockInfoCardOrder.DEFAULT_INFO_CARD_ORDER.slice()
     readonly property bool infoClockSeconds: true
     readonly property bool infoClockDate: true
     readonly property bool infoClockSolar: true
@@ -331,15 +328,7 @@ QtObject {
     }
 
     function normalizedInfoCardOrder(rawOrder) {
-        const input = Array.isArray(rawOrder) ? rawOrder : []
-        const result = []
-        for (const rawId of input) {
-            const id = String(rawId) === "temperature" ? "metrics" : String(rawId)
-            if (knownInfoCardIds.indexOf(id) < 0 || result.indexOf(id) >= 0)
-                continue
-            result.push(id)
-        }
-        return result
+        return DockInfoCardOrder.normalizeInfoCardOrder(rawOrder)
     }
 
     function updateInfoCardOrder(rawOrder) {
@@ -352,8 +341,8 @@ QtObject {
     }
 
     function addInfoCard(rawId, rawIndex) {
-        const id = String(rawId) === "temperature" ? "metrics" : String(rawId)
-        if (knownInfoCardIds.indexOf(id) < 0 || infoCardOrder.indexOf(id) >= 0)
+        const id = DockInfoCardOrder.migrateInfoCardId(rawId)
+        if (!DockInfoCardOrder.isValidInfoCardId(id) || infoCardOrder.indexOf(id) >= 0)
             return false
         const next = infoCardOrder.slice()
         const index = Math.max(0, Math.min(next.length,
@@ -690,7 +679,7 @@ QtObject {
         } else if (obj.widgetMode === "fixed" && obj.fixedWidget !== undefined) {
             svc.infoCardOrder = normalizedInfoCardOrder([obj.fixedWidget])
         } else if (obj.enabledWidgets && typeof obj.enabledWidgets === "object") {
-            svc.infoCardOrder = normalizedInfoCardOrder(knownInfoCardIds.filter(id => {
+            svc.infoCardOrder = normalizedInfoCardOrder(["music", "weather", "clock", "metrics"].filter(id => {
                 const legacyId = id === "metrics" ? "temperature" : id
                 return Boolean(obj.enabledWidgets[legacyId])
             }))

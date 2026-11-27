@@ -1,0 +1,30 @@
+{
+  "id": "org.nextkde.dock.music",
+  "name": "Music",
+  "description": "Now-playing card for the Dock.",
+  "category": "media",
+  "i18n": {
+    "en": { "name": "Music", "description": "Now-playing card for the Dock." },
+    "zh-CN": { "name": "音乐", "description": "Dock 上的正在播放卡片，悬停展开完整播放控制。" }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "containers": ["dock"],
+  "dockUnits": 4,
+  "widgets": [
+    {
+      "id": "org.nextkde.dock.music.macos",
+      "dockCardId": "org.nextkde.dock.music",
+      "style": "macos",
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.dock.music.material",
+      "dockCardId": "org.nextkde.dock.music",
+      "style": "material",
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}
