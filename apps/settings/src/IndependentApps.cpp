@@ -41,6 +41,9 @@ void IndependentApps::syncCatalog()
     QVariantList next;
     for (const auto& value : AppCatalog::apps()) {
         const auto entry = value.toMap();
+        // Declarative / QML widget packages belong to WidgetPackages, not Flatpak.
+        const auto format = entry.value("format").toString();
+        if (format == QLatin1String("declarative-widget") || format == QLatin1String("qml-widget")) continue;
         const auto appId = entry.value("appId").toString();
         const auto key = entry.value("key").toString();
         const auto id = entry.value("sourceId").toString() == "nextkde" ? key : appId;

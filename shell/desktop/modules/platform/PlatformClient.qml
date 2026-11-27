@@ -48,6 +48,7 @@ JsonlClient {
     readOperations: ({
         "session.visibility": true,
         "application.widget-snapshot": true,
+        "widget-package.snapshot": true,
         "appmenu.active": true,
         "appmenu.layout": true,
         "audio.applications": true,

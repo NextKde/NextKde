@@ -114,6 +114,12 @@ stdenv.mkDerivation {
     mkdir -p $out/share/kos/settings
     cp apps/settings/*.qml $out/share/kos/settings/
     cp -r apps/settings/icons $out/share/kos/settings/
+
+    # --- Official default widget packages ---
+    if [ -d widgets ]; then
+      mkdir -p $out/share/kos/default-widgets
+      cp -r widgets/. $out/share/kos/default-widgets/
+    fi
     mkdir -p $out/qml/Kos
     ln -s ${kos-spatial3d}/lib/qt6/qml/Kos/Spatial3D $out/qml/Kos/Spatial3D
     ln -s ${kos-surface-shape}/lib/qt6/qml/Kos/SurfaceShape $out/qml/Kos/SurfaceShape

@@ -1,0 +1,63 @@
+{
+  "id": "org.nextkde.example.clock",
+  "name": "Clock",
+  "description": "1×1 analog and digital clocks for desktop and Dock.",
+  "category": "clock",
+  "categoryName": "Clock",
+  "i18n": {
+    "en": {
+      "name": "Clock",
+      "description": "1×1 analog and digital clocks for desktop and Dock.",
+      "categoryName": "Clock"
+    },
+    "zh-CN": {
+      "name": "时钟",
+      "description": "1×1 指针与数字时钟，支持桌面与 Dock。",
+      "categoryName": "时钟"
+    }
+  },
+  "version": "0.2.0",
+  "sdkVersion": 1,
+  "style": "macos",
+  "containers": ["desktop", "dock"],
+  "dockUnits": 3,
+  "sizes": [[1, 1]],
+  "defaultSize": [1, 1],
+  "widgets": [
+    {
+      "id": "org.nextkde.example.clock.analog",
+      "name": "Analog Clock",
+      "description": "1×1 analog dial clock.",
+      "i18n": {
+        "en": {
+          "name": "Analog Clock",
+          "description": "1×1 analog dial clock."
+        },
+        "zh-CN": {
+          "name": "指针时钟",
+          "description": "1×1 指针表盘时钟。"
+        }
+      },
+      "widgetEntry": "AnalogWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.example.clock",
+      "name": "Digital Clock",
+      "description": "1×1 perimeter-seconds digital clock.",
+      "i18n": {
+        "en": {
+          "name": "Digital Clock",
+          "description": "1×1 perimeter-seconds digital clock."
+        },
+        "zh-CN": {
+          "name": "数字时钟",
+          "description": "1×1 环形秒针数字时钟。"
+        }
+      },
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml",
+      "settingsEntry": "Settings.qml"
+    }
+  ]
+}

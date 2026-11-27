@@ -45,12 +45,48 @@ class CatalogTest : public QObject {
                 {"name", QVariantMap{{"en", "Notes"}}}, {"description", QVariantMap{{"en", "A notes app"}}}, {"repository", "Example/Notes"},
                 {"manifest", "flatpak-release.json"}, {"status", "active"}}}}};
     }
+    QVariantMap widgetCatalog(int sequence = 1, const QByteArray& pkgSha256 = QByteArray(64, 'a'), qint64 pkgSize = 1024) const
+    {
+        const auto now = QDateTime::currentDateTimeUtc();
+        const QByteArray manifestBytes = QJsonDocument(QJsonObject{
+            {"schemaVersion", 2},
+            {"appId", "org.example.ClockWidget"},
+            {"version", "1.0.0"},
+            {"package", QJsonObject{
+                {"asset", "clock-widget-1.0.0.tar.gz"},
+                {"sha256", QString::fromLatin1(pkgSha256)},
+                {"size", pkgSize}
+            }}
+        }).toJson(QJsonDocument::Compact);
+        return {{"schemaVersion", 2}, {"sourceId", "fixture"}, {"sequence", sequence},
+            {"issuedAt", now.addSecs(-60).toString(Qt::ISODate)}, {"expiresAt", now.addDays(1).toString(Qt::ISODate)},
+            {"widgets", QVariantList{QVariantMap{
+                {"appId", "org.example.ClockWidget"}, {"key", "clock-widget"}, {"format", "qml-widget"},
+                {"name", QVariantMap{{"en", "Clock Widget"}}},
+                {"description", QVariantMap{{"en", "A widget plugin"}}},
+                {"repository", "Example/ClockWidget"},
+                {"manifest", "widget-release.json"},
+                {"status", "active"},
+                {"release", QVariantMap{
+                    {"version", "1.0.0"},
+                    {"tag", "v1.0.0"},
+                    {"manifest", manifestBytes.toBase64()}
+                }}
+            }}}};
+    }
     QByteArray signature(const QByteArray& bytes) { return gpg({"--armor", "--detach-sign", "--output", "-"}, bytes); }
     bool snapshot(const QVariantMap& value)
     {
         const auto bytes = QJsonDocument::fromVariant(value).toJson();
         const auto sig = signature(bytes);
         return !sig.isEmpty() && write(AppCatalog::stateDirectory() + (AppCatalog::testMode() ? "/test/catalogs/fixture.json" : "/catalogs/fixture.json"),
+            QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", sig.toBase64()}}).toJson());
+    }
+    bool widgetSnapshot(const QVariantMap& value)
+    {
+        const auto bytes = QJsonDocument::fromVariant(value).toJson();
+        const auto sig = signature(bytes);
+        return !sig.isEmpty() && write(AppCatalog::stateDirectory() + (AppCatalog::testMode() ? "/test/widget-catalogs/fixture.json" : "/widget-catalogs/fixture.json"),
             QJsonDocument::fromVariant(QVariantMap{{"catalog", bytes.toBase64()}, {"signature", sig.toBase64()}}).toJson());
     }
 private slots:
@@ -419,6 +455,68 @@ private slots:
         QCOMPARE(AppCatalog::sources().first().toMap().value("sequence").toInt(), 1);
         QCOMPARE(AppCatalog::selectSourceRelease("fixture", "Example/test-catalog", "catalog-2"), QString());
         QVERIFY(!AppCatalog::find("org.example.Notes").value("active").toBool()); // Await the selected signed directory.
+        QCOMPARE(AppCatalog::setTestMode(false), QString());
+    }
+    void widgetCatalogValidationIsolationAndTestMode()
+    {
+        QVERIFY(snapshot(catalog(10)));
+        const auto validWidgets = widgetCatalog(1);
+        QCOMPARE(AppCatalog::validateWidgetUpdate(validWidgets, {}, "fixture"), QString());
+        QVERIFY(widgetSnapshot(validWidgets));
+
+        // Apps and widgets remain isolated from each other.
+        QCOMPARE(AppCatalog::find("org.example.ClockWidget"), QVariantMap{});
+        const auto found = AppCatalog::findWidget("org.example.ClockWidget");
+        QCOMPARE(found.value("appId").toString(), QString("org.example.ClockWidget"));
+        QVERIFY(found.value("active").toBool());
+        QCOMPARE(AppCatalog::findWidget("org.example.Notes"), QVariantMap{});
+
+        // Reject rollback, expired catalog, wrong format, or unsafe asset names.
+        QVERIFY(!AppCatalog::validateWidgetUpdate(widgetCatalog(0), validWidgets, "fixture").isEmpty());
+        auto wrongFormat = validWidgets;
+        auto entry = wrongFormat.value("widgets").toList().first().toMap();
+        entry["format"] = "flatpak";
+        wrongFormat["widgets"] = QVariantList{entry};
+        QVERIFY(!AppCatalog::validateWidgetUpdate(wrongFormat, {}, "fixture").isEmpty());
+
+        auto badAsset = validWidgets;
+        entry = badAsset.value("widgets").toList().first().toMap();
+        auto release = entry.value("release").toMap();
+        release["manifest"] = QJsonDocument(QJsonObject{
+            {"schemaVersion", 2},
+            {"appId", "org.example.ClockWidget"},
+            {"version", "1.0.0"},
+            {"package", QJsonObject{
+                {"asset", "clock-widget.sh"},
+                {"sha256", QString(64, 'a')},
+                {"size", 1024}
+            }}
+        }).toJson(QJsonDocument::Compact).toBase64();
+        entry["release"] = release;
+        badAsset["widgets"] = QVariantList{entry};
+        QVERIFY(!AppCatalog::validateWidgetUpdate(badAsset, {}, "fixture").isEmpty());
+
+        // Widget receipts stay separate from app receipts and apps().
+        QVERIFY(AppCatalog::recordWidgetInstallation("org.example.ClockWidget", {{"entry", found}, {"sourceId", "fixture"}, {"version", "1.0.0"}}));
+        QVERIFY(AppCatalog::receipt("org.example.ClockWidget").isEmpty());
+        QCOMPARE(AppCatalog::widgetReceipt("org.example.ClockWidget").value("version").toString(), QString("1.0.0"));
+        for (const auto& app : AppCatalog::apps())
+            QVERIFY(app.toMap().value("appId").toString() != QLatin1String("org.example.ClockWidget"));
+        QVERIFY(AppCatalog::forgetWidgetInstallation("org.example.ClockWidget"));
+        QVERIFY(AppCatalog::widgetReceipt("org.example.ClockWidget").isEmpty());
+
+        // Test mode release selection for widgets.
+        QVERIFY(!AppCatalog::selectWidgetRelease("org.example.ClockWidget", "Example/ClockWidget", "v1.0.0").isEmpty());
+        QCOMPARE(AppCatalog::setTestMode(true), QString());
+        if (AppCatalog::sources().isEmpty())
+            QCOMPARE(AppCatalog::addSource("fixture", "Example/test-catalog", fingerprint, root.filePath("public.gpg")), QString());
+        else
+            QCOMPARE(AppCatalog::selectSourceRelease("fixture", "Example/test-catalog", ""), QString());
+        QVERIFY(snapshot(catalog(1)));
+        QVERIFY(widgetSnapshot(widgetCatalog(1)));
+        QCOMPARE(AppCatalog::selectWidgetRelease("org.example.ClockWidget", "Example/ClockWidget", "v1.1.0-rc.1"), QString());
+        QCOMPARE(AppCatalog::findWidget("org.example.ClockWidget").value("releaseTag").toString(), QString("v1.1.0-rc.1"));
+        QVERIFY(!AppCatalog::selectWidgetRelease("org.example.ClockWidget", "Other/Repo", "v1.1.0").isEmpty());
         QCOMPARE(AppCatalog::setTestMode(false), QString());
     }
 };

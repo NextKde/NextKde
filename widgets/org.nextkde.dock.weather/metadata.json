@@ -1,0 +1,30 @@
+{
+  "id": "org.nextkde.dock.weather",
+  "name": "Weather",
+  "description": "Current conditions card for the Dock.",
+  "category": "weather",
+  "i18n": {
+    "en": { "name": "Weather", "description": "Current conditions card for the Dock." },
+    "zh-CN": { "name": "天气", "description": "Dock 上的实时天气卡片，悬停查看体感、湿度与风速。" }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "containers": ["dock"],
+  "dockUnits": 4,
+  "widgets": [
+    {
+      "id": "org.nextkde.dock.weather.macos",
+      "dockCardId": "org.nextkde.dock.weather",
+      "style": "macos",
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.dock.weather.material",
+      "dockCardId": "org.nextkde.dock.weather",
+      "style": "material",
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

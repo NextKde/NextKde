@@ -1,0 +1,41 @@
+{
+  "id": "org.nextkde.dock.eyes",
+  "name": "Dock Buddy",
+  "description": "Peeking Dock companion tracking your cursor with reactive moods, speech bubble, music equalizer, CPU pulse, and 20-20-20 eye care.",
+  "category": "utilities",
+  "categoryName": "Utilities",
+  "i18n": {
+    "en": {
+      "name": "Dock Buddy",
+      "description": "Peeking Dock companion tracking your cursor with reactive moods, speech bubble, music equalizer, CPU pulse, and 20-20-20 eye care.",
+      "categoryName": "Utilities"
+    },
+    "zh-CN": {
+      "name": "灵动小伴",
+      "description": "扒在 Dock 边追鼠标探头的小角色，带动态台词气泡、音乐律动条、CPU 脉冲与 20-20-20 护眼倒计时。",
+      "categoryName": "实用工具"
+    }
+  },
+  "version": "1.1.0",
+  "sdkVersion": 1,
+  "containers": ["dock"],
+  "dockUnits": 3,
+  "widgets": [
+    {
+      "id": "org.nextkde.dock.eyes.macos",
+      "dockCardId": "org.nextkde.dock.eyes",
+      "style": "macos",
+      "widgetEntry": "Widget.qml",
+      "popupEntry": "Popup.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.dock.eyes.material",
+      "dockCardId": "org.nextkde.dock.eyes",
+      "style": "material",
+      "widgetEntry": "Widget.qml",
+      "popupEntry": "Popup.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

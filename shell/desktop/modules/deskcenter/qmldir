@@ -15,5 +15,15 @@ singleton ActivityUsageService 1.0 ActivityUsageService.qml
 singleton DesktopFilesService 1.0 DesktopFilesService.qml
 singleton DeskCenterConfigService 1.0 DeskCenterConfigService.qml
 singleton PimWidgetService 1.0 PimWidgetService.qml
+singleton WidgetGalleryService 1.0 WidgetGalleryService.qml
+singleton WidgetHostService 1.0 WidgetHostService.qml
+singleton WidgetCrashGuard 1.0 WidgetCrashGuard.qml
+singleton WidgetPreviewCache 1.0 WidgetPreviewCache.qml
 
 WidgetResizeHandle 1.0 WidgetResizeHandle.qml
+WidgetGallery 1.0 WidgetGallery.qml
+WidgetGalleryWindow 1.0 WidgetGalleryWindow.qml
+WidgetConfiguration 1.0 WidgetConfiguration.qml
+WidgetPackageHost 1.0 WidgetPackageHost.qml
+WidgetPreviewHost 1.0 WidgetPreviewHost.qml
+singleton WidgetRegistry 1.0 WidgetRegistry.qml

@@ -139,6 +139,7 @@ PanelWindow {
         dragging: dockContainer.draggedPinnedLoader !== null || dockContainer.statusDragActive
         popupOpen: DockModelService.activeDockPopup !== null || dockContainer.accessoryInteractionActive
         launcherOpen: AppLauncherService.open
+        forceHidden: WidgetGalleryService.open
     }
 
     // Only a permanently visible Dock reserves workspace. Hide modes keep the

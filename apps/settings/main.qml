@@ -44,6 +44,7 @@ ApplicationWindow {
     property int currentPage: 1
     readonly property int navigationPage: currentPage === 14 ? 1 : currentPage
     property string requestedApp: ""
+    property bool requestedSources: false
     function revealRequestedApp() {
         if (servicesPage.item) servicesPage.item.requestReveal()
     }
@@ -917,6 +918,8 @@ ApplicationWindow {
                         active: window.displayedPage === 9
                         visible: active
                         sourceComponent: Pages.ServicesSettingsPage {
+                            openSourcesOnCompleted: window.requestedSources
+                            onSourcesOpened: window.requestedSources = false
                             onRevealRequested: function(card) {
                                 Qt.callLater(function() {
                                     if (!card || window.displayedPage !== 9) return

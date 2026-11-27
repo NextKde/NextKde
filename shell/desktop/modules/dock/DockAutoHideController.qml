@@ -40,6 +40,11 @@ Item {
     property bool dragging: false
     property bool popupOpen: false
     property bool launcherOpen: false
+    // Hard override: forces the dock down regardless of hover/edit/drag
+    // inhibitors, for surfaces that must visually own the dock's screen
+    // space while open (e.g. the widget gallery). Takes priority over every
+    // other input; normal evaluation resumes once it clears.
+    property bool forceHidden: false
 
     // ────────────────────────────────────────────────────────────
     // Outputs
@@ -204,6 +209,7 @@ Item {
     function _onAnimationFinished() {
         if (ctl._animTarget <= 0) {
             ctl._setPhase("Hidden")
+            if (ctl.forceHidden) return
             // Input may have changed within the debounce interval.
             if (!ctl.policyWantsHidden || ctl.hasInhibitor)
                 ctl._animateTo(1)
@@ -296,6 +302,7 @@ Item {
     // Main transition dispatch
     // ────────────────────────────────────────────────────────────
     function _doEvaluate(conflictCurrent = false) {
+        if (ctl.forceHidden) return
         if (!conflictCurrent) ctl._recomputeConflict()
         if (ctl.phase === "Bootstrapping") {
             ctl._tryResolveBoot(false)
@@ -368,7 +375,7 @@ Item {
     // Public methods
     // ────────────────────────────────────────────────────────────
     function handleEntered() {
-        if (ctl.effectiveMode === "always" || !ctl.handleActive) return
+        if (ctl.effectiveMode === "always" || !ctl.handleActive || ctl.forceHidden) return
         ctl._handleHovered = true
         if (ctl.phase === "Hidden") {
             ctl._setPhase("RevealPending")
@@ -386,7 +393,7 @@ Item {
     }
 
     function handleClicked() {
-        if (ctl.effectiveMode === "always" || !ctl.handleActive) return
+        if (ctl.effectiveMode === "always" || !ctl.handleActive || ctl.forceHidden) return
         ctl._revealDelayTimer.stop()
         if (ctl.phase === "Hidden" || ctl.phase === "RevealPending"
                 || ctl.revealProgress < 1) {
@@ -396,6 +403,7 @@ Item {
     }
 
     function requestReveal(reason, holdMs) {
+        if (ctl.forceHidden) return
         // Urgency is published on the presentation lane before placementRevision.
         // Read the new records now, or the first matching urgent app loses its hold.
         ctl._recomputeConflict()
@@ -445,6 +453,19 @@ Item {
     onHasInhibitorChanged: ctl._evaluateInteraction()
     onConfigReadyChanged: ctl._tryResolveBoot(false)
     onWindowDataReadyChanged: { ctl._recomputeConflict(); ctl._scheduleEvaluate() }
+    onForceHiddenChanged: {
+        if (ctl.forceHidden) {
+            ctl._hidePendingTimer.stop()
+            ctl._revealDelayTimer.stop()
+            ctl._tempHoldTimer.stop()
+            ctl._temporaryRevealHold = false
+            ctl._handleHovered = false
+            ctl._setPhase("Hiding")
+            ctl._animateTo(0)
+        } else {
+            ctl._scheduleEvaluate()
+        }
+    }
 
     Connections {
         target: WindowService

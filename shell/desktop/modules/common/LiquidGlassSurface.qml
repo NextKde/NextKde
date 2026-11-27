@@ -29,6 +29,7 @@ Rectangle {
     // would flatten the Bar, the Dock pill and every widget card with it.
     // Ignored by the glass form, where the compositor owns the material.
     property real tonalOpacity: -1
+    property color tonalColorOverride: "transparent"
     property color ambientPrimary: "transparent"
     property color ambientSecondary: "transparent"
     property real ambientStrength: 0.0
@@ -231,8 +232,9 @@ Rectangle {
         NumberAnimation { duration: 420; easing.type: Easing.InOutCubic }
     }
 
-    readonly property color materialSurfaceColor: material === "thick"
-        ? AppearanceTokens.colors.layer2 : AppearanceTokens.surface.panelFill
+    readonly property color materialSurfaceColor: tonalColorOverride.a > 0
+        ? tonalColorOverride
+        : (material === "thick" ? AppearanceTokens.colors.layer2 : AppearanceTokens.surface.panelFill)
     // The plate's effective alpha: the shared token unless the host overrode
     // it. Kept as one expression so the fill and its alpha cannot drift apart.
     readonly property real tonalPlateOpacity: tonalOpacity >= 0

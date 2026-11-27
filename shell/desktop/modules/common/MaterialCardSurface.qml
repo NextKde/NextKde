@@ -1,80 +1,72 @@
 import Quickshell
 import QtQuick
+import "MaterialShapeGeometry.mjs" as ShapeGeom
 
 // The Material form's card surface.
 //
 // Every desktop card gets its whole surface from here: the paint it draws and the
-// region the compositor frosts behind it. The only thing a host may vary is the
-// outline -- the rounded rectangle every card uses, or MaterialFlower's
-// silhouette, which the clock draws. Colour, opacity and the frost itself are
-// shared, so the clock is an ordinary card whose shape was cut to a flower, not a
-// card with its own finish.
-//
-// There is deliberately no LiquidGlassPanel here and no SurfaceShape
-// declaration, and that pair is what selects the Material finish: the compositor
-// ties its liquid material (refraction, glints, liquid noise) to a declared
-// shape, so a surface that declares none stays on the plain blur pipeline -- one
-// frost for all seven cards. The glass forms declare a shape per card and keep
-// the full finish.
+// region the compositor frosts behind it. The only thing a widget may vary is
+// the outline shapeType (roundedRect, pill, circle, flower, cookie, clover,
+// slantedOval, arch). Colour, opacity and the frost itself are host-owned and
+// shared across every card.
 Item {
     id: root
 
-    // The positioned wrapper whose x/y are the card's surface coordinates; both
-    // regions read them verbatim, exactly like RoundedBlurRegion.
+    // The positioned wrapper whose x/y are the card's surface coordinates; all
+    // blur regions read them verbatim, exactly like RoundedBlurRegion.
     required property Item blurAnchor
     property real radius: 16
     // The card's paint. One value for every card, in whichever shape the outline
     // takes.
     property color fillColor: "transparent"
     property real fillOpacity: 1.0
-    // The flower silhouette instead of the rounded rectangle.
-    property bool flowerShaped: false
-    property int flowerLobes: 12
-    property real flowerAmplitude: 0.075
+    // Unified Material expressive shape name (normalized via MaterialShapeGeometry).
+    property string shapeType: "roundedRect"
+
+    readonly property string effectiveShape: ShapeGeom.normalizeShape(root.shapeType)
+    readonly property bool isPolygon: ShapeGeom.isPolygonShape(root.effectiveShape)
 
     // The outline the compositor frosts. Every card publishes one: the form is one
-    // effect across all of them, and the shape is the only difference between a
-    // card and the clock.
-    readonly property var blurRegion: root.flowerShaped ? flowerRegion : rectRegion
+    // effect across all of them, and shape is the only difference between cards.
+    readonly property var blurRegion: root.isPolygon
+        ? polygonRegion
+        : (root.effectiveShape === "circle" ? circleRegion : rectRegion)
 
     // The paint, in the outline's shape.
-    Rectangle {
+    MaterialShapeVisual {
         anchors.fill: parent
+        shapeType: root.effectiveShape
         radius: root.radius
-        visible: !root.flowerShaped
-        color: root.fillColor
-        opacity: root.fillOpacity
-        border.width: 0
-    }
-
-    // The same paint, cut to the flower. Geometry is the polar curve
-    // FlowerBlurRegion frosts, so the frost edge lands on the outline that is
-    // actually drawn -- centred, and 18px smaller than the card's short side.
-    MaterialFlower {
-        anchors.centerIn: parent
-        width: Math.min(parent.width, parent.height) - 18
-        height: width
-        visible: root.flowerShaped
-        lobes: root.flowerLobes
-        amplitude: root.flowerAmplitude
-        fillColor: Qt.rgba(root.fillColor.r, root.fillColor.g,
-            root.fillColor.b, root.fillOpacity)
-        // No outline: no other card has one, and a stroke is exactly what would
-        // make the clock read as a different surface at a glance.
-        outlineWidth: 0
+        fillColor: root.fillColor
+        fillOpacity: root.fillOpacity
+        inset: 1
     }
 
     RoundedBlurRegion {
         id: rectRegion
         item: root.blurAnchor
-        radius: root.radius
+        radius: root.effectiveShape === "pill"
+            ? Math.min(root.width, root.height) / 2
+            : root.radius
     }
 
-    FlowerBlurRegion {
-        id: flowerRegion
+    Region {
+        id: circleRegion
+        property SceneBounds bounds: SceneBounds { item: root.blurAnchor }
+        readonly property rect r: bounds.rect
+        readonly property int d: Math.max(0, Math.round(Math.min(r.width, r.height) - 2))
+        x: Math.round(r.x + (r.width - d) / 2)
+        y: Math.round(r.y + (r.height - d) / 2)
+        width: d
+        height: d
+        shape: RegionShape.Ellipse
+    }
+
+    ShapeBlurRegion {
+        id: polygonRegion
         item: root.blurAnchor
-        active: root.flowerShaped
-        lobes: root.flowerLobes
-        amplitude: root.flowerAmplitude
+        shapeType: root.effectiveShape
+        active: root.isPolygon
+        inset: 2
     }
 }

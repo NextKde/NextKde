@@ -23,9 +23,11 @@ TestCase {
         id: fakeStore
         property var music: ({available: true, installed: false, busy: false})
         property var apps: []
+        property var widgets: []
         property var sources: []
         property var updateStatus: ({})
         property int updateCount: 0
+        property int widgetUpdateCount: 0
         property bool testMode: false
         property bool releasesBusy: false
         property var releases: ({releases: [{tag: "v1.0.0-rc.1", prerelease: true}]})
@@ -35,6 +37,7 @@ TestCase {
         function loadReleases(repository) { releaseRepository = repository }
         function selectSourceRelease(id, repository, tag) { lastId = id; releaseRepository = repository; releaseTag = tag; return "" }
         function selectAppRelease(id, repository, tag) { lastId = id; releaseRepository = repository; releaseTag = tag; return "" }
+        function selectWidgetRelease(id, repository, tag) { lastId = id; releaseRepository = repository; releaseTag = tag; return "" }
         property bool catalogBusy: false
         property string catalogError: ""
         property bool automaticUpdates: true
@@ -42,6 +45,7 @@ TestCase {
         property bool anyBusy: false
         property bool hasActiveMutation: false
         property int refreshes: 0
+        property int widgetRefreshes: 0
         property int catalogRequests: 0
         function ensureCatalogFresh() { catalogRequests++ }
         property string lastId: ""
@@ -53,16 +57,26 @@ TestCase {
         property int cancellations: 0
         property int confirmations: 0
         property string confirmedPlan: ""
+        property int widgetInstalls: 0
+        property int widgetUpdates: 0
+        property int widgetRemovals: 0
+        property int widgetCancellations: 0
         signal changed()
         function confirmPlan(id, planId) { confirmations++; lastId = id; confirmedPlan = planId }
         function refresh() { refreshes++ }
+        function refreshWidgets() { widgetRefreshes++ }
         function install(id) { installs++; lastId = id || "kmusic" }
         function open(id) { opens++; lastId = id || "kmusic" }
         function uninstall(id) { removals++; lastId = id || "kmusic" }
         function cancel(id) { cancellations++; lastId = id || "kmusic" }
         function checkUpdates(id) { checks++; lastId = id }
         function update(id) { updates++; lastId = id }
+        function installWidget(id) { widgetInstalls++; lastId = id }
+        function updateWidget(id) { widgetUpdates++; lastId = id }
+        function uninstallWidget(id) { widgetRemovals++; lastId = id }
+        function cancelWidget(id) { widgetCancellations++; lastId = id }
         function openRepository() {}
+        function openWidgetRepository() {}
         function openLog() {}
     }
     Component {
@@ -86,7 +100,10 @@ TestCase {
         fakeStore.hasActiveMutation = false
         fakeStore.catalogBusy = false
         fakeStore.catalogRequests = 0
-        fakeStore.apps = []; fakeStore.anyBusy = false; fakeStore.lastId = ""; fakeStore.checks = fakeStore.updates = 0
+        fakeStore.apps = []; fakeStore.widgets = []; fakeStore.widgetUpdateCount = 0
+        fakeStore.anyBusy = false; fakeStore.lastId = ""; fakeStore.checks = fakeStore.updates = 0
+        fakeStore.widgetInstalls = fakeStore.widgetUpdates = fakeStore.widgetRemovals = fakeStore.widgetCancellations = 0
+        fakeStore.widgetRefreshes = 0
     }
     function snapshot(state) { bridge.wallpaperSnapshotChanged({spatialResources: state}) }
 
@@ -464,5 +481,79 @@ TestCase {
         const before = fakeStore.refreshes;
         appControl(page, "calculator", "RecheckEnvironment").clicked();
         compare(fakeStore.refreshes, before + 1);
+    }
+    function test_plugins_tab_install_update_uninstall_and_release_selection() {
+        fakeStore.widgets = [{
+            id: "clock",
+            appId: "org.nextkde.example.clock",
+            name: "Clock",
+            description: "Desktop and Dock clock plugin",
+            repository: "https://github.com/NextKde/clock-widget",
+            repositoryPath: "NextKde/clock-widget",
+            installed: false,
+            managed: false,
+            available: true,
+            catalogActive: true,
+            catalogApproved: true,
+            busy: false,
+            latestVersion: "1.0.0",
+            catalogVersion: "1.0.0",
+            updateAvailable: false
+        }];
+        const page = createTemporaryObject(factory, this, {store: fakeStore, selectedCategory: 2});
+        verify(page);
+        compare(page.selectedCategory, 2);
+        const action = findChild(page, "clockWidgetAction");
+        verify(action);
+        compare(action.text, "Install");
+        action.clicked();
+        compare(fakeStore.widgetInstalls, 1);
+        compare(fakeStore.lastId, "clock");
+
+        // Update available triggers updateWidget.
+        fakeStore.widgets = [{
+            id: "clock",
+            appId: "org.nextkde.example.clock",
+            name: "Clock",
+            description: "Desktop and Dock clock plugin",
+            repository: "https://github.com/NextKde/clock-widget",
+            repositoryPath: "NextKde/clock-widget",
+            installed: true,
+            managed: true,
+            available: true,
+            catalogActive: true,
+            catalogApproved: true,
+            busy: false,
+            version: "1.0.0",
+            latestVersion: "1.1.0",
+            catalogVersion: "1.1.0",
+            updateAvailable: true
+        }];
+        fakeStore.widgetUpdateCount = 1;
+        fakeStore.changed();
+        compare(action.text, "Update");
+        action.clicked();
+        compare(fakeStore.widgetUpdates, 1);
+
+        // Details dialog -> Uninstall confirmation + testMode Release selector.
+        const widgetDetails = findChild(page, "clockWidgetEntry").detailsDialog;
+        widgetDetails.open();
+        tryCompare(widgetDetails, "opened", true);
+        fakeStore.testMode = true;
+        fakeStore.changed();
+        findChild(widgetDetails.contentItem, "clockWidgetSelectRelease").clicked();
+        wait(50);
+        const releaseDialog = findChild(page, "catalogReleaseDialog");
+        findChild(releaseDialog.contentItem, "catalogReleaseTag").text = "v1.0.0-rc.1";
+        findChild(page, "catalogReleaseSave").clicked();
+        compare(fakeStore.lastId, "org.nextkde.example.clock");
+        compare(fakeStore.releaseTag, "v1.0.0-rc.1");
+
+        findChild(widgetDetails.contentItem, "clockWidgetActionSecondary").clicked();
+        const dialog = findChild(page, "widgetUninstallDialog");
+        verify(dialog.visible);
+        dialog.accept();
+        compare(fakeStore.widgetRemovals, 1);
+        compare(fakeStore.lastId, "clock");
     }
 }

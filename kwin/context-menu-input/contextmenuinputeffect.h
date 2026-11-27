@@ -1,6 +1,8 @@
 #pragma once
 
 #include <effect/effect.h>
+#include <QElapsedTimer>
+#include <QPointF>
 #include <QVariant>
 #include <QDeadlineTimer>
 
@@ -47,12 +49,15 @@ private:
 
     void handleStartupInput();
     QDeadlineTimer m_startupInputDeadline;
+    void handlePointerMotion(const QPointF &position);
     void handlePointerPress(const QPointF &position, Qt::MouseButton button);
     void installPointerSpy();
     void publish(const QJsonObject &eventData);
 
     std::unique_ptr<ContextMenuPointerSpy> m_pointerSpy;
     bool m_pointerSpyInstalled = false;
+    QElapsedTimer m_pointerMotionThrottle;
+    QPointF m_lastReportedPointer;
 };
 
 } // namespace KWin

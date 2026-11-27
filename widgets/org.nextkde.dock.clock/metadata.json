@@ -1,0 +1,30 @@
+{
+  "id": "org.nextkde.dock.clock",
+  "name": "Clock",
+  "description": "Time and date card for the Dock.",
+  "category": "clock",
+  "i18n": {
+    "en": { "name": "Clock", "description": "Time and date card for the Dock." },
+    "zh-CN": { "name": "时钟", "description": "Dock 上的时间与日期卡片，悬停查看日出日落。" }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "containers": ["dock"],
+  "dockUnits": 3,
+  "widgets": [
+    {
+      "id": "org.nextkde.dock.clock.macos",
+      "dockCardId": "org.nextkde.dock.clock",
+      "style": "macos",
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.dock.clock.material",
+      "dockCardId": "org.nextkde.dock.clock",
+      "style": "material",
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

@@ -1,5 +1,6 @@
 #include "PlatformServer.h"
 #include "KimpanelBridge.h"
+#include "WidgetPackageIndex.h"
 #include "PlatformNetworkBackend.h"
 #include "KeepAwakeLease.h"
 #include "PlatformProcess.h"
@@ -135,6 +136,17 @@ PlatformServer::PlatformServer(QObject *parent)
     // (and vice versa).
     m_dbusPool.setMaxThreadCount(2);
     initKimpanelBridge();
+    m_widgetPackageWatcher = new WidgetPackageIndex::WidgetPackageWatcher(this);
+    connect(m_widgetPackageWatcher, &WidgetPackageIndex::WidgetPackageWatcher::snapshotChanged,
+            this, [this](const QJsonObject &snapshot) {
+        const QJsonObject event{
+            {QStringLiteral("event"), QStringLiteral("widget-package.changed")},
+            {QStringLiteral("payload"), snapshot}
+        };
+        const QList<QLocalSocket *> sockets = m_buffers.keys();
+        for (QLocalSocket *socket : sockets)
+            sendEvent(socket, event);
+    });
 }
 
 PlatformServer::~PlatformServer()
@@ -571,10 +583,18 @@ void PlatformServer::handleRequest(QLocalSocket *socket, const QJsonObject &requ
                 QStringLiteral("缺少 operation"), false);
         return;
     }
+    if (op == QStringLiteral("widget-package.snapshot")) {
+        if (m_widgetPackageWatcher)
+            m_widgetPackageWatcher->resyncWatches();
+        respond(socket, request, true, WidgetPackageIndex::snapshot());
+        return;
+    }
     if (op == QStringLiteral("platform.ping")) {
         respond(socket, request, true, QJsonObject{
             {QStringLiteral("ready"), true},
             {QStringLiteral("capabilities"), QJsonArray{
+                QStringLiteral("widget-package.snapshot"),
+                QStringLiteral("widget-package.watch"),
                 QStringLiteral("input.clipboard-anchor"),
                 QStringLiteral("application.widget-snapshot"),
                 QStringLiteral("application.widget-open"),

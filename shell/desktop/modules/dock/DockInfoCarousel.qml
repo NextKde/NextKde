@@ -1,16 +1,14 @@
 import QtQuick
 import qs.desktop.modules.common
-import qs.desktop.modules.weather
+import qs.desktop.modules.deskcenter
+import "DockInfoCardOrder.mjs" as DockInfoCardOrder
 
-// One Dock slot shared by music, weather, clock and metrics.
-//
-// Two layouts over the same four cards:
-//   carousel — the historical fixed-size slot; the enabled pages rotate
-//     through it and the width never follows the content.
-//   expanded — every enabled card takes its own place in the row, sized by
-//     what it actually draws (clock 3 icon units, the rest 4), and nothing
-//     rotates any more.
-//
+// The Dock's information slot. Every card is an installed widget package that
+// declares `"dock"` in `metadata.json`'s `containers` -- the official music,
+// weather, clock and system cards use exactly the same contract as third-party
+// ones. The host owns the slot shell, the rotation/expansion behaviour and the
+// hover popup shell (DockWidgetPopup); a package only paints the card content
+// and, optionally, the popup content.
 Item {
     id: carousel
     signal editRequested()
@@ -26,201 +24,207 @@ Item {
         }
     }
 
-    readonly property int musicPage: 0
-    readonly property int weatherPage: 1
-    readonly property int clockPage: 2
-    readonly property int temperaturePage: 3
-    property var cardOrder: ["music", "weather", "clock", "metrics"]
-    readonly property var pageOrder: {
-        const pages = []
-        for (const id of cardOrder) {
-            const candidate = pageForId(id)
-            if (candidate >= 0 && pages.indexOf(candidate) < 0)
-                pages.push(candidate)
+    property var cardOrder: []
+    property var dockPackages: []
+    // Card ids a package asked to hide through `dockVisible: false` (for
+    // instance a music card while no player is running).
+    property var hiddenCards: ({})
+
+    function cardIdOf(pkg) { return DockInfoCardOrder.cardIdOf(pkg) }
+
+    function packageForId(id) {
+        return (dockPackages || []).find(p => carousel.cardIdOf(p) === id) ?? null
+    }
+
+    function hasPackagePopup(id) {
+        const pkg = packageForId(id)
+        return Boolean(pkg && pkg.hasPopup && String(pkg.popupEntry || "").length > 0)
+    }
+
+    function setCardHidden(id, hidden) {
+        if (Boolean(hiddenCards[id]) === hidden)
+            return
+        const next = Object.assign({}, hiddenCards)
+        if (hidden) next[id] = true
+        else delete next[id]
+        hiddenCards = next
+    }
+
+    readonly property var orderedCardIds: {
+        const ids = []
+        for (const rawId of (cardOrder || [])) {
+            const id = String(rawId)
+            if (ids.indexOf(id) >= 0) continue
+            if (carousel.packageForId(id) !== null)
+                ids.push(id)
         }
-        return pages
+        return ids
+    }
+    readonly property var activeDockPackages: {
+        const out = []
+        for (const id of orderedCardIds)
+            out.push(carousel.packageForId(id))
+        return out
     }
 
     property int iconSize: 44
     property int dockHeight: 60
+    property real edgePadding: Math.round(iconSize * 0.18)
+    property real surfaceOriginX: 0
+    property real surfaceOriginY: 0
     required property real cornerRadius
     property int widthUnits: 4
-    property bool showClock: false
-    property bool showTemperature: true
 
     property bool expanded: false
     property bool autoRotate: true
 
-    readonly property bool hasMusic: MediaService.hasPlayer
-    readonly property bool hasWeather: WeatherService.available
     readonly property real cardGap: iconSize * 0.2
-    // Visible seam between neighbouring expanded cards. Each card's painted
-    // background already extends cardGap/2 past its content, so without this
-    // extra step two adjacent cards touch edge to edge.
     readonly property real cardSpacing: Math.max(4, Math.round(iconSize * 0.14))
+    readonly property real outerInset: Math.max(0, (dockHeight - height) / 2)
+    readonly property real concentricInset: (outerInset + edgePadding) / 2
+    readonly property real cardRadius: cornerRadius > 0
+        ? Math.max(Math.round(iconSize * 0.16), Math.min(height / 2, Math.round(cornerRadius - concentricInset)))
+        : Math.max(6, Math.round(iconSize * 0.18))
+    readonly property real contentVerticalMargin: 4
+    readonly property real contentHorizontalMargin: {
+        const r = cardRadius
+        const v = contentVerticalMargin
+        if (r <= v) return Math.max(6, v)
+        return Math.max(6, Math.ceil(r - Math.sqrt(Math.max(0, r * r - (r - v) * (r - v)))))
+    }
 
-    // Prefer the clock when Bar has just moved into Dock. This preserves the
-    // information users previously saw at the leading edge of the Dock.
-    property int page: clockPage
-    property int previousPage: -1
+    property string activeCardId: ""
+    property string previousCardId: ""
     property int transitionDirection: 1
-    property int hoveredPage: -1
+    property string hoveredCardId: ""
 
     width: expanded ? expandedWidth : iconSize * widthUnits + iconSize * 0.2
     height: iconSize * 1.2
     clip: !expanded
     anchors.verticalCenter: parent ? parent.verticalCenter : undefined
 
-    function pageForId(id) {
-        if (id === "music")
-            return musicPage
-        if (id === "weather")
-            return weatherPage
-        if (id === "clock")
-            return clockPage
-        if (id === "metrics" || id === "temperature")
-            return temperaturePage
-        return -1
+    function cardVisibleId(id) {
+        return (orderedCardIds || []).indexOf(id) >= 0 && !hiddenCards[id]
     }
 
-    function cardVisible(candidate) {
-        if ((pageOrder || []).indexOf(candidate) < 0)
-            return false
-        if (candidate === musicPage)
-            return hasMusic
-        if (candidate === weatherPage)
-            return hasWeather
-        if (candidate === clockPage)
-            return showClock
-        return candidate === temperaturePage && showTemperature
+    function unitsForId(id) {
+        const pkg = packageForId(id)
+        return Math.max(2, Math.min(4, Number(pkg?.dockUnits) || 4))
     }
 
-    function unitsFor(candidate) {
-        // The clock draws two rows of text and needs three icon units; every
-        // other card keeps the four it always reserved.
-        return candidate === clockPage ? 3 : 4
+    function midGradientColor(spec) {
+        if (!spec) return "transparent"
+        const mid = spec.midColor
+        if (mid !== undefined && mid !== null && String(mid).length > 0)
+            return mid
+        const s = Qt.color(String(spec.startColor ?? "transparent"))
+        const e = Qt.color(String(spec.endColor ?? "transparent"))
+        return Qt.rgba((s.r + e.r) * 0.5, (s.g + e.g) * 0.5, (s.b + e.b) * 0.5, (s.a + e.a) * 0.5)
     }
 
-    function cardWidth(candidate) {
-        return iconSize * (expanded ? unitsFor(candidate) : widthUnits)
-            + cardGap * 2
+    function cardWidthForId(id) {
+        return iconSize * (expanded ? unitsForId(id) : widthUnits) + cardGap
     }
 
     readonly property int availablePageCount: {
         let count = 0
-        for (const candidate of (pageOrder || [])) {
-            if (cardVisible(candidate))
-                count++
+        for (const id of (orderedCardIds || [])) {
+            if (cardVisibleId(id)) count++
         }
         return count
     }
 
     readonly property real expandedWidth: {
         let total = 0
-        for (const candidate of (pageOrder || [])) {
-            if (!cardVisible(candidate))
-                continue
-            total += iconSize * unitsFor(candidate) + cardGap + cardSpacing
+        let count = 0
+        for (const id of (orderedCardIds || [])) {
+            if (!cardVisibleId(id)) continue
+            if (count > 0) total += cardSpacing
+            total += iconSize * unitsForId(id) + cardGap
+            count++
         }
         return total
     }
 
-    function pageAvailable(candidate) {
-        return cardVisible(candidate)
+    function availableCardIds() {
+        const ids = []
+        for (const id of (orderedCardIds || [])) {
+            if (cardVisibleId(id)) ids.push(id)
+        }
+        return ids
     }
 
-    function availablePages() {
-        const pages = []
-        for (const candidate of (pageOrder || [])) {
-            if (cardVisible(candidate))
-                pages.push(candidate)
-        }
-        return pages
-    }
-
-    function ensureValidPage(preferClock) {
-        if (preferClock && showClock && (pageOrder || []).indexOf(clockPage) >= 0) {
-            previousPage = page
-            page = clockPage
+    function ensureValidPage() {
+        if (cardVisibleId(activeCardId))
             return
-        }
-        if (pageAvailable(page))
-            return
-        const pages = availablePages()
-        previousPage = page
-        page = pages.length > 0 ? pages[0] : clockPage
+        const ids = availableCardIds()
+        previousCardId = activeCardId
+        activeCardId = ids.length > 0 ? ids[0] : ""
     }
 
     function switchPage(resetTimer, requestedDirection) {
-        const pages = availablePages()
-        if (pages.length < 2)
+        const ids = availableCardIds()
+        if (ids.length < 2)
             return
         const direction = requestedDirection === undefined
             ? 1 : Math.trunc(requestedDirection)
-        let currentIndex = pages.indexOf(page)
+        let currentIndex = ids.indexOf(activeCardId)
         if (currentIndex < 0)
             currentIndex = 0
-        previousPage = page
+        previousCardId = activeCardId
         transitionDirection = direction >= 0 ? 1 : -1
-        page = pages[((currentIndex + direction) % pages.length + pages.length) % pages.length]
+        activeCardId = ids[((currentIndex + direction) % ids.length + ids.length) % ids.length]
         if (resetTimer && autoRotate)
             carouselTimer.restart()
     }
 
-    function pageX(pageIndex, pageWidth) {
-        if (page === pageIndex)
-            return 0
-        if (previousPage === pageIndex)
-            return -transitionDirection * pageWidth
+    function pageXForId(id, pageWidth) {
+        if (activeCardId === id) return 0
+        if (previousCardId === id) return -transitionDirection * pageWidth
         return transitionDirection * pageWidth
     }
 
-    // Expanded mode stacks the cards left to right in page order, skipping
-    // the ones that are off; carousel mode keeps the sliding viewport.
-    function layoutX(candidate) {
+    function layoutXForId(id) {
         if (!expanded)
-            return pageX(candidate, cardWidth(candidate))
+            return pageXForId(id, cardWidthForId(id))
         let offset = 0
-        for (const other of (pageOrder || [])) {
-            if (other === candidate)
-                return offset
-            if (cardVisible(other))
-                offset += iconSize * unitsFor(other) + cardGap + cardSpacing
+        for (const other of (orderedCardIds || [])) {
+            if (other === id) return offset
+            if (cardVisibleId(other))
+                offset += iconSize * unitsForId(other) + cardGap + cardSpacing
         }
         return offset
     }
 
-    function isShown(candidate) {
-        return expanded || page === candidate
+    function isShownId(id) {
+        return expanded || activeCardId === id
     }
 
-    function hoveredPageAt(x) {
+    function hoveredCardIdAt(x) {
         if (!expanded)
-            return page
+            return activeCardId
         let start = 0
-        for (const candidate of (pageOrder || [])) {
-            if (!cardVisible(candidate))
-                continue
-            const span = iconSize * unitsFor(candidate) + cardGap + cardSpacing
+        for (const id of (orderedCardIds || [])) {
+            if (!cardVisibleId(id)) continue
+            const span = iconSize * unitsForId(id) + cardGap + cardSpacing
             if (x >= start && x < start + span)
-                return candidate
+                return id
             start += span
         }
-        return page
+        return activeCardId
     }
 
-    Component.onCompleted: ensureValidPage(showClock)
-    onHasMusicChanged: ensureValidPage(false)
-    onHasWeatherChanged: ensureValidPage(false)
-    onShowClockChanged: ensureValidPage(showClock)
-    onShowTemperatureChanged: ensureValidPage(false)
-    onCardOrderChanged: ensureValidPage(showClock)
-    onExpandedChanged: ensureValidPage(false)
+    Component.onCompleted: ensureValidPage()
+    onCardOrderChanged: ensureValidPage()
+    onDockPackagesChanged: ensureValidPage()
+    onOrderedCardIdsChanged: ensureValidPage()
+    onAvailablePageCountChanged: ensureValidPage()
+    onHiddenCardsChanged: ensureValidPage()
+    onExpandedChanged: ensureValidPage()
 
     Timer {
         id: carouselTimer
         interval: 30000
-        // Nothing rotates once every card has its own place.
         running: carousel.visible && carousel.autoRotate && !carousel.expanded
             && carousel.availablePageCount > 1
         repeat: true
@@ -230,19 +234,28 @@ Item {
     property real wheelRemainder: 0
     property bool wheelUsesPixels: false
     property int wheelSteps: 0
+    property double lastWheelSwitchMs: 0
     FrameAnimation {
         running: carousel.wheelSteps !== 0
         onTriggered: {
             const steps = carousel.wheelSteps
             carousel.wheelSteps = 0
-            if (!carousel.expanded)
-                carousel.switchPage(true, steps)
+            carousel.wheelRemainder = 0
+            if (steps === 0 || carousel.expanded)
+                return
+            const now = Date.now()
+            if (now - carousel.lastWheelSwitchMs < 140)
+                return
+            carousel.lastWheelSwitchMs = now
+            carousel.switchPage(true, steps > 0 ? 1 : -1)
         }
     }
 
     MouseArea {
+        id: wheelOverlay
         anchors.fill: parent
         z: 20
+        hoverEnabled: true
         acceptedButtons: Qt.NoButton
         onWheel: function(wheel) {
             if (carousel.expanded)
@@ -250,7 +263,6 @@ Item {
             const pixels = wheel.angleDelta.y === 0
             const delta = pixels ? wheel.pixelDelta.y : wheel.angleDelta.y
             if (delta === 0) return
-            // Reverse before the pending frame: discard unpainted old direction.
             if (carousel.wheelSteps * delta < 0) carousel.wheelSteps = 0
             if (pixels !== carousel.wheelUsesPixels || carousel.wheelRemainder * delta < 0)
                 carousel.wheelRemainder = 0
@@ -267,168 +279,188 @@ Item {
     TapHandler {
         acceptedButtons: Qt.RightButton
         gesturePolicy: TapHandler.ReleaseWithinBounds
+        grabPermissions: PointerHandler.CanTakeOverFromItems
+            | PointerHandler.CanTakeOverFromHandlersOfSameType
+            | PointerHandler.CanTakeOverFromHandlersOfDifferentType
         onTapped: carousel.editRequested()
     }
 
+    // Zero-width probe that tracks the card under the pointer; the popup is
+    // anchored to it so the panel reads as belonging to that card.
     Item {
         id: infoAnchor
         visible: false
         y: 0
         height: carousel.height
-        x: carousel.hoveredPage >= 0 ? carousel.layoutX(carousel.hoveredPage) : 0
-        width: carousel.hoveredPage >= 0
-            ? carousel.cardWidth(carousel.hoveredPage) : carousel.width
+        x: carousel.hoveredCardId.length > 0 ? carousel.layoutXForId(carousel.hoveredCardId) : 0
+        width: carousel.hoveredCardId.length > 0
+            ? carousel.cardWidthForId(carousel.hoveredCardId) : carousel.width
     }
 
-    readonly property int pointerPage: infoHover.hovered
-        ? carousel.hoveredPageAt(infoHover.point.position.x) : -1
+    readonly property bool pointerOverCarousel: infoHover.hovered || wheelOverlay.containsMouse
+    readonly property real pointerLocalX: infoHover.hovered
+        ? infoHover.point.position.x : wheelOverlay.mouseX
+    readonly property string pointerCardId: carousel.pointerOverCarousel
+        ? carousel.hoveredCardIdAt(carousel.pointerLocalX) : ""
+    readonly property var hoveredPackage: carousel.packageForId(carousel.hoveredCardId)
+    readonly property bool canShowPopup: pointerCardId.length > 0
+        && carousel.hasPackagePopup(pointerCardId)
 
-    onPointerPageChanged: {
-        if (pointerPage < 0)
-            return
-        if (pointerPage === carousel.musicPage) {
-            infoPopupOpenDelay.stop()
-            if (infoPopup.visible)
-                infoPopup.requestClose()
+    onPointerOverCarouselChanged: {
+        if (pointerOverCarousel) {
+            popupCloseDelay.stop()
+            const cid = carousel.pointerCardId || carousel.activeCardId
+            if (cid.length > 0 && carousel.hasPackagePopup(cid)) {
+                carousel.hoveredCardId = cid
+                if (widgetPopup.requestedOpen && widgetPopup.visible)
+                    DockModelService.openDockPopup(widgetPopup)
+                else if (!popupOpenDelay.running)
+                    popupOpenDelay.start()
+            }
+        } else if (!widgetPopup.pointerInside) {
+            popupOpenDelay.stop()
+            popupCloseDelay.restart()
+        }
+    }
+
+    onPointerCardIdChanged: {
+        if (!canShowPopup) {
+            popupOpenDelay.stop()
+            if (carousel.pointerOverCarousel && widgetPopup.visible)
+                widgetPopup.requestClose()
             return
         }
-        // The temperature page hosts the same sensor popups as the Bar
-        // (TemperatureSensorPopups), so the generic info popup must not
-        // compete with it for the hover.
-        if (pointerPage === carousel.temperaturePage) {
-            infoPopupOpenDelay.stop()
-            if (infoPopup.visible)
-                infoPopup.requestClose()
-            return
-        }
-        carousel.hoveredPage = pointerPage
-        if (infoPopup.requestedOpen)
-            infoPopupOpenDelay.stop()
-        else if (infoPopup.visible)
-            DockModelService.openDockPopup(infoPopup)
-        else if (infoHover.hovered && !infoPopupOpenDelay.running)
-            infoPopupOpenDelay.start()
+        carousel.hoveredCardId = pointerCardId
+        if (widgetPopup.requestedOpen && widgetPopup.visible)
+            DockModelService.openDockPopup(widgetPopup)
+        else if (carousel.pointerOverCarousel && !popupOpenDelay.running)
+            popupOpenDelay.start()
     }
 
     HoverHandler {
         id: infoHover
-        onHoveredChanged: {
-            if (hovered) {
-                infoPopupCloseDelay.stop()
-                if (carousel.pointerPage >= 0
-                        && carousel.pointerPage !== carousel.musicPage
-                        && carousel.pointerPage !== carousel.temperaturePage) {
-                    if (infoPopup.visible)
-                        DockModelService.openDockPopup(infoPopup)
-                    else if (!infoPopupOpenDelay.running)
-                        infoPopupOpenDelay.start()
-                }
-            } else if (!infoPopup.pointerInside) {
-                infoPopupOpenDelay.stop()
-                infoPopupCloseDelay.restart()
-            }
-        }
     }
 
     Timer {
-        id: infoPopupOpenDelay
+        id: popupOpenDelay
         interval: DockAnimation.infoPopupOpenDelay
         repeat: false
         onTriggered: {
-            if (infoHover.hovered && carousel.pointerPage >= 0
-                    && carousel.pointerPage !== carousel.musicPage
-                    && carousel.pointerPage !== carousel.temperaturePage)
-                DockModelService.openDockPopup(infoPopup)
+            const cid = carousel.pointerCardId || carousel.activeCardId
+            if (carousel.pointerOverCarousel && cid.length > 0 && carousel.hasPackagePopup(cid)) {
+                carousel.hoveredCardId = cid
+                DockModelService.openDockPopup(widgetPopup)
+            }
         }
     }
 
     Timer {
-        id: infoPopupCloseDelay
+        id: popupCloseDelay
         interval: 260
         repeat: false
         onTriggered: {
-            if (!infoHover.hovered && !infoPopup.pointerInside)
-                infoPopup.requestClose()
+            if (!carousel.pointerOverCarousel && !widgetPopup.pointerInside && widgetPopup.visible)
+                widgetPopup.requestClose()
         }
     }
 
-    DockInfoPopup {
-        id: infoPopup
+    DockWidgetPopup {
+        id: widgetPopup
         anchorItem: infoAnchor
-        page: carousel.hoveredPage
+        dockEdge: "bottom"
+        packageEntry: {
+            const id = carousel.hoveredCardId || carousel.activeCardId
+            return carousel.hasPackagePopup(id) ? carousel.packageForId(id) : null
+        }
         onPointerInsideChanged: {
             if (pointerInside) {
-                infoPopupCloseDelay.stop()
-                if (!infoPopup.requestedOpen)
-                    DockModelService.openDockPopup(infoPopup)
-            } else if (!infoHover.hovered) {
-                infoPopupCloseDelay.restart()
+                popupCloseDelay.stop()
+                if (!widgetPopup.requestedOpen && widgetPopup.packageEntry)
+                    DockModelService.openDockPopup(widgetPopup)
+            } else if (!carousel.pointerOverCarousel) {
+                popupCloseDelay.restart()
             }
         }
-        onVisibleChanged: if (!visible) DockModelService.releaseDockPopup(infoPopup)
+        onVisibleChanged: if (!visible) DockModelService.releaseDockPopup(widgetPopup)
     }
 
-    DockMusicPlayer {
-        anchors.verticalCenter: parent.verticalCenter
-        iconSize: carousel.iconSize
-        dockHeight: carousel.dockHeight
-        cornerRadius: carousel.cornerRadius
-        widthUnits: carousel.expanded
-            ? carousel.unitsFor(carousel.musicPage) : carousel.widthUnits
-        visible: carousel.cardVisible(carousel.musicPage)
-        enabled: carousel.isShown(carousel.musicPage)
-        pageActive: carousel.visible && carousel.isShown(carousel.musicPage)
-        x: carousel.layoutX(carousel.musicPage)
-        opacity: carousel.isShown(carousel.musicPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-    }
+    Repeater {
+        model: carousel.activeDockPackages
+        delegate: Item {
+            id: pkgCard
+            required property var modelData
+            readonly property string cardId: carousel.cardIdOf(modelData)
+            readonly property int cardUnits: carousel.expanded
+                ? carousel.unitsForId(cardId) : carousel.widthUnits
+            readonly property bool shown: carousel.isShownId(cardId)
+            readonly property bool packageVisible: pkgHost.widgetItem
+                && pkgHost.widgetItem.dockVisible !== undefined
+                ? Boolean(pkgHost.widgetItem.dockVisible) : true
+            onPackageVisibleChanged: carousel.setCardHidden(cardId, !packageVisible)
+            Component.onCompleted: carousel.setCardHidden(cardId, !packageVisible)
 
-    DockWeatherWidget {
-        anchors.verticalCenter: parent.verticalCenter
-        iconSize: carousel.iconSize
-        dockHeight: carousel.dockHeight
-        cornerRadius: carousel.cornerRadius
-        widthUnits: carousel.expanded
-            ? carousel.unitsFor(carousel.weatherPage) : carousel.widthUnits
-        visible: carousel.cardVisible(carousel.weatherPage)
-        enabled: carousel.isShown(carousel.weatherPage)
-        pageActive: carousel.visible && carousel.isShown(carousel.weatherPage)
-        x: carousel.layoutX(carousel.weatherPage)
-        opacity: carousel.isShown(carousel.weatherPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-    }
+            anchors.verticalCenter: parent.verticalCenter
+            width: carousel.iconSize * cardUnits + carousel.cardGap
+            height: carousel.height
+            visible: carousel.cardVisibleId(cardId)
+            enabled: shown
+            x: carousel.layoutXForId(cardId)
+            opacity: shown ? 1 : 0
+            Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+            Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
 
-    DockClockWidget {
-        anchors.verticalCenter: parent.verticalCenter
-        iconSize: carousel.iconSize
-        dockHeight: carousel.dockHeight
-        cornerRadius: carousel.cornerRadius
-        widthUnits: carousel.expanded
-            ? carousel.unitsFor(carousel.clockPage) : carousel.widthUnits
-        visible: carousel.cardVisible(carousel.clockPage)
-        enabled: carousel.isShown(carousel.clockPage)
-        pageActive: carousel.visible && carousel.isShown(carousel.clockPage)
-        x: carousel.layoutX(carousel.clockPage)
-        opacity: carousel.isShown(carousel.clockPage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-    }
+            // Host-owned slot shell. macOS cards may publish a `backgroundSpec`
+            // gradient; Material slots always use the theme tonal plate.
+            Rectangle {
+                anchors.fill: parent
+                radius: carousel.cardRadius
+                clip: true
+                readonly property var spec: pkgHost.backgroundSpec
+                readonly property bool paintGradient: !AppearanceTokens.isMaterial
+                    && !!spec && !WidgetHostService.widgetAppearance.transparent
+                color: paintGradient ? "transparent"
+                    : (AppearanceTokens.isMaterial
+                        ? Qt.rgba(AppearanceTokens.colors.layer2.r,
+                            AppearanceTokens.colors.layer2.g,
+                            AppearanceTokens.colors.layer2.b, 0.72)
+                        : Qt.rgba(1, 1, 1, AppearanceTokens.isDarkTheme ? 0.08 : 0.16))
+                gradient: paintGradient ? dockPkgGradient : null
+                Gradient {
+                    id: dockPkgGradient
+                    orientation: pkgHost.backgroundSpec?.orientation === "horizontal"
+                        ? Gradient.Horizontal : Gradient.Vertical
+                    GradientStop { position: 0; color: pkgHost.backgroundSpec?.startColor ?? "transparent" }
+                    GradientStop {
+                        position: Math.max(0.01, Math.min(0.99,
+                            pkgHost.backgroundSpec?.midPosition !== undefined
+                                ? Number(pkgHost.backgroundSpec.midPosition) : 0.5))
+                        color: carousel.midGradientColor(pkgHost.backgroundSpec)
+                    }
+                    GradientStop { position: 1; color: pkgHost.backgroundSpec?.endColor ?? "transparent" }
+                }
 
-    DockTemperatureWidget {
-        anchors.verticalCenter: parent.verticalCenter
-        iconSize: carousel.iconSize
-        dockHeight: carousel.dockHeight
-        cornerRadius: carousel.cornerRadius
-        widthUnits: carousel.expanded
-            ? carousel.unitsFor(carousel.temperaturePage) : carousel.widthUnits
-        visible: carousel.cardVisible(carousel.temperaturePage)
-        enabled: carousel.isShown(carousel.temperaturePage)
-        pageActive: carousel.visible && carousel.isShown(carousel.temperaturePage)
-        x: carousel.layoutX(carousel.temperaturePage)
-        opacity: carousel.isShown(carousel.temperaturePage) ? 1 : 0
-        Behavior on x { NumberAnimation { duration: AppearanceTokens.motion.base.duration; easing.type: AppearanceTokens.motion.enterCurve } }
-        Behavior on opacity { NumberAnimation { duration: AppearanceTokens.motion.fast.duration; easing.type: AppearanceTokens.motion.enterCurve } }
+                WidgetPackageHost {
+                    id: pkgHost
+                    anchors.fill: parent
+                    anchors.topMargin: carousel.contentVerticalMargin
+                    anchors.bottomMargin: carousel.contentVerticalMargin
+                    anchors.leftMargin: carousel.contentHorizontalMargin
+                    anchors.rightMargin: carousel.contentHorizontalMargin
+                    packageId: String(pkgCard.modelData.id ?? "")
+                    instanceId: "dock:" + String(pkgCard.modelData.id ?? "")
+                    widgetEntry: String(pkgCard.modelData.widgetEntry ?? "")
+                    settingsEntry: String(pkgCard.modelData.settingsEntry ?? "")
+                    packageRevision: String(pkgCard.modelData.revision ?? "")
+                    hasSettings: Boolean(pkgCard.modelData.hasSettings)
+                    containerType: "dock"
+                    containerOrientation: "horizontal"
+                    hostActive: carousel.visible && pkgCard.shown
+                    surfaceOriginX: carousel.surfaceOriginX
+                    surfaceOriginY: carousel.surfaceOriginY
+                    widgetSize: [pkgCard.cardUnits, 1]
+                    appearance: WidgetHostService.widgetAppearance
+                }
+            }
+        }
     }
 }

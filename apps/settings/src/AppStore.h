@@ -2,6 +2,7 @@
 
 #include <QVariantMap>
 #include "IndependentApps.h"
+#include "WidgetPackages.h"
 #include <QFutureWatcher>
 
 // One process owns each operation, independently of the lifetime of its QML page.
@@ -17,8 +18,10 @@ class AppStore final : public QObject {
     Q_PROPERTY(bool updateNotifications READ updateNotifications WRITE setUpdateNotifications NOTIFY changed)
     Q_PROPERTY(QVariantMap updateStatus READ updateStatus NOTIFY changed)
     Q_PROPERTY(int updateCount READ updateCount NOTIFY changed)
+    Q_PROPERTY(int widgetUpdateCount READ widgetUpdateCount NOTIFY changed)
     Q_PROPERTY(QVariantMap music READ music NOTIFY changed)
     Q_PROPERTY(QVariantList apps READ apps NOTIFY changed)
+    Q_PROPERTY(QVariantList widgets READ widgets NOTIFY changed)
     Q_PROPERTY(bool anyBusy READ anyBusy NOTIFY changed)
     Q_PROPERTY(bool hasActiveMutation READ hasActiveMutation NOTIFY changed)
 public:
@@ -32,6 +35,7 @@ public:
     Q_INVOKABLE void loadReleases(const QString& repository);
     Q_INVOKABLE QString selectSourceRelease(const QString& id, const QString& repository, const QString& tag);
     Q_INVOKABLE QString selectAppRelease(const QString& id, const QString& repository, const QString& tag);
+    Q_INVOKABLE QString selectWidgetRelease(const QString& id, const QString& repository, const QString& tag);
     QVariantList sources() const;
     QString catalogError() const { return m_catalogError; }
     bool catalogBusy() const { return m_catalogRefresh.isRunning(); }
@@ -41,6 +45,7 @@ public:
     void setUpdateNotifications(bool enabled);
     QVariantMap updateStatus() const;
     int updateCount() const;
+    int widgetUpdateCount() const;
     Q_INVOKABLE void refreshCatalog();
     Q_INVOKABLE void ensureCatalogFresh();
     Q_INVOKABLE QString addSource(const QString& id, const QString& repository, const QString& fingerprint, const QString& publicKeyFile);
@@ -55,6 +60,7 @@ public:
     Q_INVOKABLE void openLog();
     Q_INVOKABLE void openRepository();
     QVariantList apps() const;
+    QVariantList widgets() const;
     bool anyBusy() const;
     bool hasActiveMutation() const;
     Q_INVOKABLE void install(const QString& id);
@@ -67,11 +73,18 @@ public:
     Q_INVOKABLE void openRepository(const QString& id);
     Q_INVOKABLE void checkUpdates(const QString& id);
     Q_INVOKABLE void refreshApps();
+    Q_INVOKABLE void refreshWidgets();
+    Q_INVOKABLE void installWidget(const QString& id);
+    Q_INVOKABLE void updateWidget(const QString& id);
+    Q_INVOKABLE void uninstallWidget(const QString& id);
+    Q_INVOKABLE void cancelWidget(const QString& id);
+    Q_INVOKABLE void openWidgetRepository(const QString& id);
 signals:
     void changed();
     void taskFinished(const QString& name, const QString& code);
 private:
     IndependentApps m_independent;
+    WidgetPackages m_widgets;
     QFutureWatcher<QString> m_catalogRefresh;
     QString m_catalogError, m_releaseContext, m_checkAfterRefresh;
     QFutureWatcher<QVariantMap> m_releases;

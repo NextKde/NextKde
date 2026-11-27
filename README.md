@@ -163,6 +163,7 @@ Quickshell Shell ──► kos-platform ──────► KWin / network / a
 | Desktop icon layout | [Desktop icons](docs/DesktopIcons.md) |
 | Spatial wallpapers | [Depth engine](docs/DepthEngine.md) |
 | Source sessions, builds, and debugging | [Development guide](docs/Development.md) |
+| Build third-party desktop & Dock widgets | [Widget SDK (zh-CN)](docs/plugins/WidgetSDK.zh-CN.md) · [Dock Widget SDK (zh-CN)](docs/plugins/DockWidgetSDK.zh-CN.md) |
 | Changes and pull requests | [Contributing](CONTRIBUTING.md) |
 
 Next steps include per-screen layouts, consistent widgets across displays,

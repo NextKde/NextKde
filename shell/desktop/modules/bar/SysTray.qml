@@ -975,7 +975,6 @@ Item {
     ContextMenu {
         id: trayMenu
         objectName: "status-tray-context-menu"
-        scrimLevel: AppearanceTokens.bar.popupScrimLevel
         customAnchorEdges: root.popupEdge
         customGravity: root.popupEdge
         customMargins: ({

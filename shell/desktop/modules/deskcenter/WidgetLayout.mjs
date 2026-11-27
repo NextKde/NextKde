@@ -1,5 +1,16 @@
 export const sizeOrder = ["1x1", "1x2", "2x2", "2x1"];
 
+// Legacy gallery size names shared by the gallery and its desktop host.
+export function namedGallerySpan(size) {
+    const pair = toArray(size);
+    if (pair && pair.length === 2
+        && Number.isInteger(Number(pair[0])) && Number.isInteger(Number(pair[1])))
+        return [Number(pair[0]), Number(pair[1])];
+    const match = /^(\d+)x(\d+)$/.exec(String(size));
+    if (match) return [Number(match[1]), Number(match[2])];
+    return size === "large" ? [2, 2] : size === "medium" ? [2, 1] : [1, 1];
+}
+
 const variants = {
     clock: { small: [1, 1], medium: [2, 1], large: [2, 2] },
     weather: { small: [2, 1], medium: [3, 1], large: [3, 2] },
@@ -40,8 +51,100 @@ export function minSpanFor(widgetId) {
 
 export function isValidSize(widgetId, size) {
     const value = String(size);
-    return ["small", "medium", "large"].includes(value)
-        || allowedSizeOrder(widgetId).includes(value);
+    if (["small", "medium", "large"].includes(value)) return true;
+    if (allowedSizeOrder(widgetId).includes(value)) return true;
+    if (Object.prototype.hasOwnProperty.call(variants, String(widgetId))) return false;
+    // Package-backed widget instances are not one of the eight legacy named
+    // ids above (see DeskCenterWindow.qml's addGalleryWidget/resizeWidget),
+    // so they never appear in allowedSizeOrder/variants and would otherwise
+    // be rejected outright -- silently dropping any span a package declares
+    // beyond the legacy 2x2 ceiling, such as the example clock's 3x2. Accept
+    // any syntactically valid NxM span within metadata.json's own 1-4 bound
+    // (see WidgetPackageIndex.cpp's validSize) instead.
+    const match = /^(\d+)x(\d+)$/.exec(value);
+    return !!match && Number(match[1]) >= 1 && Number(match[1]) <= 4
+        && Number(match[2]) >= 1 && Number(match[2]) <= 4;
+}
+
+// A JS array that has passed through a Repeater/ListView `model:` binding
+// comes back out as a Qt sequence wrapper on its nested array fields --
+// indexable and JSON.stringify-able, but Array.isArray() on it is false (it
+// is not the same realm's Array). Array.prototype.slice.call duck-types on
+// `.length` instead, so it accepts that wrapper as well as a plain array.
+function toArray(value) {
+    return (value != null && typeof value !== "string" && typeof value.length === "number")
+        ? Array.prototype.slice.call(value) : null;
+}
+
+// A package's own declared sizes (metadata.json's `sizes`, e.g. [[2,2],[3,2]])
+// define its real resize ceiling/floor, which can exceed the legacy 2x2 cap
+// baked into maxSpanFor's default. Returns null when there is nothing
+// declared, so the caller can fall back to the legacy named-widget bounds.
+export function declaredSizeCeiling(sizes) {
+    const list = toArray(sizes);
+    if (!list || list.length === 0) return null;
+    return list.reduce((acc, span) => [Math.max(acc[0], span[0]), Math.max(acc[1], span[1])], [1, 1]);
+}
+
+export function declaredSizeFloor(sizes) {
+    const list = toArray(sizes);
+    if (!list || list.length === 0) return null;
+    return list.reduce((acc, span) => [Math.min(acc[0], span[0]), Math.min(acc[1], span[1])], list[0]);
+}
+
+// A package declares a *discrete* set of sizes (metadata.json's `sizes`),
+// not a continuous [floor, ceiling] rectangle -- a package declaring
+// [[1,1],[3,3]] (skipping [2,2]) must still snap only to those two, not to
+// every combination the per-axis min/max happens to allow. Picks whichever
+// declared pair is closest (straight-line distance in cell units) to the
+// column/row guess the drag/magnet math produced.
+export function nearestDeclaredSize(columns, rows, sizes) {
+    const list = toArray(sizes);
+    if (!list || list.length === 0) return [columns, rows];
+    let best = list[0];
+    let bestDistance = Infinity;
+    for (const span of list) {
+        const dc = span[0] - columns;
+        const dr = span[1] - rows;
+        const distance = dc * dc + dr * dr;
+        if (distance < bestDistance) { bestDistance = distance; best = span; }
+    }
+    return [best[0], best[1]];
+}
+
+// Reconcile a persisted instance span against the package's current `sizes`
+// list (e.g. after a package update removed a previously used size). Returns
+// `{ span: [cols, rows], changed: bool }`.
+export function resolveDeclaredSpan(columns, rows, sizes, defaultSize) {
+    const rawList = toArray(sizes);
+    if (!rawList || rawList.length === 0)
+        return { span: [columns, rows], changed: false };
+    const validList = [];
+    for (const item of rawList) {
+        const pair = toArray(item);
+        if (!pair || pair.length !== 2) continue;
+        const c = Number(pair[0]);
+        const r = Number(pair[1]);
+        if (Number.isInteger(c) && Number.isInteger(r) && c >= 1 && c <= 4 && r >= 1 && r <= 4)
+            validList.push([c, r]);
+    }
+    if (validList.length === 0)
+        return { span: [columns, rows], changed: false };
+    if (Number.isInteger(columns) && Number.isInteger(rows)
+            && validList.some(pair => pair[0] === columns && pair[1] === rows)) {
+        return { span: [columns, rows], changed: false };
+    }
+    if (Number.isInteger(columns) && Number.isInteger(rows) && columns >= 1 && rows >= 1) {
+        return { span: nearestDeclaredSize(columns, rows, validList), changed: true };
+    }
+    const defPair = toArray(defaultSize);
+    if (defPair && defPair.length === 2) {
+        const dc = Number(defPair[0]);
+        const dr = Number(defPair[1]);
+        if (validList.some(pair => pair[0] === dc && pair[1] === dr))
+            return { span: [dc, dr], changed: true };
+    }
+    return { span: [validList[0][0], validList[0][1]], changed: true };
 }
 
 export function maxSpanFor(widgetId) {
@@ -145,7 +248,7 @@ export function placeAnchoredWidget(widget, placements, columnCount, rowCount) {
         return null;
     const columns = Math.max(1, Number(widget.columns) || 1);
     const rows = Math.max(1, Number(widget.rows) || 1);
-    const obstacles = Array.isArray(placements) ? placements : [];
+    const obstacles = toArray(placements) ?? [];
     const fits = (column, row) => Number.isInteger(column) && Number.isInteger(row)
         && column >= 0 && row >= 0
         && column + columns <= columnCount && row + rows <= rowCount

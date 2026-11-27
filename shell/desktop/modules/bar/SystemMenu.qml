@@ -87,9 +87,6 @@ Item {
         id: menu
         anchorItem: root
         implicitWidth: 300
-        scrimLevel: AppearanceTokens.bar.popupScrimLevel
-        blurOverrideEnabled: true
-        blurStrength: Math.min(1, AppearanceConfigService.effectiveDockBlur + 0.2)
         position: "bottom"
         centerBelowAnchor: false
         centerBelowOffset: root.height

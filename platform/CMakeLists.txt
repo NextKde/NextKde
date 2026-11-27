@@ -51,6 +51,8 @@ set(kos_platform_sources
     src/daemon/PlatformServerApplications.cpp
     src/daemon/IndependentAppWidgets.cpp
     src/daemon/IndependentAppWidgets.h
+    src/daemon/WidgetPackageIndex.cpp
+    src/daemon/WidgetPackageIndex.h
     src/daemon/PlatformServerAudio.cpp
     src/daemon/PlatformServerBluetooth.cpp
     src/daemon/PlatformServerClipboard.cpp
@@ -102,6 +104,14 @@ if(BUILD_TESTING)
         Qt6::Core Qt6::Test KF6::ConfigCore kos-flatpak-client)
     add_test(NAME kos-platform.independent-app-widgets COMMAND kos-independent-app-widgets-test)
     set_tests_properties(kos-platform.independent-app-widgets PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} LABELS "platform;data" TIMEOUT 30)
+
+    qt_add_executable(kos-widget-package-index-test
+        tests/test_widget_package_index.cpp src/daemon/WidgetPackageIndex.cpp)
+    target_include_directories(kos-widget-package-index-test PRIVATE src/daemon)
+    target_link_libraries(kos-widget-package-index-test PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME kos-platform.widget-package-index COMMAND kos-widget-package-index-test)
+    set_tests_properties(kos-platform.widget-package-index PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR} LABELS "platform;data" TIMEOUT 30)
 
     qt_add_executable(kos-status-panel-data-test tests/test_status_panel_data.cpp)

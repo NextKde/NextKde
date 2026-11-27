@@ -179,7 +179,6 @@ NumberAnimation {
 | `AppLauncherWindow.qml` 文件夹合并进度 | 650ms + Linear | 与 folderMergeTimer 的停留判定同步 |
 | `DeskCenterWindow.qml` 文件夹放入进度 | 380ms + Linear | 完成时才授权文件放入操作，时长属于手势阈值 |
 | `AppLauncherWindow.qml` 清除搜索按钮 | 450ms Bezier ×2，原控制点 | scale/rotation 同步回弹，压到 300 会改变表现 |
-| `DockMusicPlayer.qml` 跑马灯/歌词停顿 | 1200/800/900/650ms 及距离计算、暂停 | 阅读停留与滚动速度，不是 UI 进入退出 |
 | `WifiCard.qml`、`BluetoothCard.qml`、`WavyProgress.qml` | 900/1100ms 周期与原曲线 | 等待/加载循环 |
 | `DeskCenterWindow.qml` 音符 | 2200/1840 + index×180、360ms 段与错峰 | 同一循环的行程与透明度必须同步 |
 | `LiquidGlassSurface.qml` | 420ms 光照过渡、2600ms 环境变化 | 表面连续光照表现，不随 popup 时长压缩 |
@@ -452,15 +451,6 @@ repository {'duration_lines': 429, 'numeric_start_lines': 287, 'easing_lines': 3
 | `shell/desktop/modules/dock/DockIcon.qml` | 718 | `105` | 关注提示弹跳、编辑抖动及徽标回弹的配套淡入 |
 | `shell/desktop/modules/dock/DockIcon.qml` | 941 | `140` | 关注提示弹跳、编辑抖动及徽标回弹的配套淡入 |
 | `shell/desktop/modules/dock/DockIcon.qml` | 944 | `160` | 关注提示弹跳、编辑抖动及徽标回弹的配套淡入 |
-| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 273 | `1200` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
-| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 277 | `Math.max(900,` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
-| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 282 | `800` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
-| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 370 | `900` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
-| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 375 | `Math.max(800,` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
-| `shell/desktop/modules/dock/DockMusicPlayer.qml` | 381 | `650` | 跑马灯阅读停顿和按距离计算的匀速滚动 |
-| `shell/desktop/modules/dock/DockMusicPopup.qml` | 251 | `index * 85` | 均衡器周期及错相延迟 |
-| `shell/desktop/modules/dock/DockMusicPopup.qml` | 253 | `220` | 均衡器周期及错相延迟 |
-| `shell/desktop/modules/dock/DockMusicPopup.qml` | 255 | `260` | 均衡器周期及错相延迟 |
 | `shell/desktop/modules/dock/DockRevealHandle.qml` | 180 | `600` | 环境背景插值 |
 | `shell/desktop/modules/inputmethod/InputMethodCandidateList.qml` | 134, 136, 138, 140 | `150` | SmoothedAnimation 速度连续性及原 easing cap |
 | `shell/desktop/modules/inputmethod/InputMethodPopup.qml` | 134, 139 | `160` | SmoothedAnimation 速度连续性及原 easing cap |

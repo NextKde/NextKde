@@ -1,0 +1,186 @@
+{
+  "id": "org.nextkde.widget.clock",
+  "name": "Clock",
+  "description": "Analog and digital clock faces for desktop and Dock.",
+  "category": "clock",
+  "categoryName": "Clock",
+  "i18n": {
+    "en": {
+      "name": "Clock",
+      "description": "Analog and digital clock faces for desktop and Dock.",
+      "categoryName": "Clock"
+    },
+    "zh-CN": {
+      "name": "时钟",
+      "description": "模拟与数字双样式时钟，支持桌面与 Dock。",
+      "categoryName": "时钟"
+    }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "containers": ["desktop"],
+  "sizes": [[1, 1]],
+  "defaultSize": [1, 1],
+  "widgets": [
+    {
+      "id": "org.nextkde.widget.clock.macos.analog",
+      "name": "Analog Clock",
+      "description": "1×1 analog dial clock.",
+      "i18n": {
+        "en": {
+          "name": "Analog Clock",
+          "description": "1×1 analog dial clock."
+        },
+        "zh-CN": {
+          "name": "指针时钟",
+          "description": "1×1 指针表盘时钟。"
+        }
+      },
+      "style": "macos",
+      "widgetEntry": "macos/AnalogWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.clock.macos.digital",
+      "name": "Digital Clock",
+      "description": "1×1 perimeter-seconds digital clock.",
+      "i18n": {
+        "en": {
+          "name": "Digital Clock",
+          "description": "1×1 perimeter-seconds digital clock."
+        },
+        "zh-CN": {
+          "name": "数字时钟",
+          "description": "1×1 环形秒针数字时钟。"
+        }
+      },
+      "style": "macos",
+      "widgetEntry": "macos/DigitalWidget.qml",
+      "snapshotEntry": "Snapshot.qml",
+      "settingsEntry": "Settings.qml"
+    },
+    {
+      "id": "org.nextkde.widget.clock.material.analog",
+      "name": "Analog Clock",
+      "description": "1×1 standard rounded analog clock.",
+      "i18n": {
+        "en": {
+          "name": "Analog Clock",
+          "description": "1×1 standard rounded analog clock."
+        },
+        "zh-CN": {
+          "name": "指针时钟",
+          "description": "1×1 标准圆角指针时钟。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/AnalogWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.clock.material.analog.flower",
+      "name": "Analog Clock · Flower",
+      "description": "1×1 flower-shaped analog clock.",
+      "i18n": {
+        "en": {
+          "name": "Analog Clock · Flower",
+          "description": "1×1 flower-shaped analog clock."
+        },
+        "zh-CN": {
+          "name": "指针时钟 · 花瓣",
+          "description": "1×1 花瓣轮廓指针时钟。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/AnalogFlowerWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.clock.material.analog.circle",
+      "name": "Analog Clock · Circle",
+      "description": "1×1 circular analog clock.",
+      "i18n": {
+        "en": {
+          "name": "Analog Clock · Circle",
+          "description": "1×1 circular analog clock."
+        },
+        "zh-CN": {
+          "name": "指针时钟 · 圆形",
+          "description": "1×1 圆形轮廓指针时钟。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/AnalogCircleWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.clock.material.digital",
+      "name": "Digital Clock",
+      "description": "1×1 standard rounded digital clock.",
+      "i18n": {
+        "en": {
+          "name": "Digital Clock",
+          "description": "1×1 standard rounded digital clock."
+        },
+        "zh-CN": {
+          "name": "数字时钟",
+          "description": "1×1 标准圆角数字时钟。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/DigitalWidget.qml",
+      "snapshotEntry": "Snapshot.qml",
+      "settingsEntry": "Settings.qml"
+    },
+    {
+      "id": "org.nextkde.widget.clock.material.digital.clover",
+      "name": "Digital Clock · Clover",
+      "description": "1×1 clover-shaped digital clock.",
+      "i18n": {
+        "en": {
+          "name": "Digital Clock · Clover",
+          "description": "1×1 clover-shaped digital clock."
+        },
+        "zh-CN": {
+          "name": "数字时钟 · 四叶草",
+          "description": "1×1 四叶草轮廓数字时钟。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/DigitalCloverWidget.qml",
+      "snapshotEntry": "Snapshot.qml",
+      "settingsEntry": "Settings.qml"
+    },
+    {
+      "id": "org.nextkde.widget.clock.material.digital.slanted",
+      "name": "Digital Clock · Slanted Oval",
+      "description": "1×1 slanted oval digital clock.",
+      "i18n": {
+        "en": {
+          "name": "Digital Clock · Slanted Oval",
+          "description": "1×1 slanted oval digital clock."
+        },
+        "zh-CN": {
+          "name": "数字时钟 · 斜椭圆",
+          "description": "1×1 斜椭圆轮廓数字时钟。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/DigitalSlantedWidget.qml",
+      "snapshotEntry": "Snapshot.qml",
+      "settingsEntry": "Settings.qml"
+    }
+  ]
+}

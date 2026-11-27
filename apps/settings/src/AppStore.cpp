@@ -8,13 +8,16 @@
 // All catalogue entries use the same Flatpak lifecycle. Native installations
 // may coexist; they neither block Flatpak operations nor act as launch fallbacks.
 AppStore::AppStore(QObject* parent)
-    : QObject(parent), m_independent(this)
+    : QObject(parent), m_independent(this), m_widgets(this)
 {
     connect(&m_independent, &IndependentApps::changed, this, &AppStore::changed);
     connect(&m_independent, &IndependentApps::taskFinished, this, &AppStore::taskFinished);
+    connect(&m_widgets, &WidgetPackages::changed, this, &AppStore::changed);
+    connect(&m_widgets, &WidgetPackages::taskFinished, this, &AppStore::taskFinished);
     connect(&m_catalogRefresh, &QFutureWatcher<QString>::finished, this, [this] {
         m_catalogError = m_catalogRefresh.result();
         const auto check = m_checkAfterRefresh; m_checkAfterRefresh.clear();
+        m_widgets.refresh();
         if (m_catalogError.isEmpty() && !check.isEmpty()) m_independent.perform(check, "check-update");
         else m_independent.refresh();
         emit changed();
@@ -27,16 +30,22 @@ AppStore::AppStore(QObject* parent)
 }
 AppStore::~AppStore() = default;
 QVariantList AppStore::apps() const { return m_independent.apps(); }
+QVariantList AppStore::widgets() const { return m_widgets.widgets(); }
 QVariantMap AppStore::music() const
 {
     for (const auto& app : apps())
         if (app.toMap().value("id").toString() == "kmusic") return app.toMap();
     return {};
 }
-bool AppStore::anyBusy() const { return m_independent.busy(); }
-bool AppStore::hasActiveMutation() const { return m_independent.hasActiveMutation(); }
-void AppStore::refresh() { if (!anyBusy()) m_independent.refresh(); }
+bool AppStore::anyBusy() const { return m_independent.busy() || m_widgets.busy(); }
+bool AppStore::hasActiveMutation() const { return m_independent.hasActiveMutation() || m_widgets.hasActiveMutation(); }
+void AppStore::refresh()
+{
+    if (!m_independent.busy()) m_independent.refresh();
+    if (!m_widgets.busy()) m_widgets.refresh();
+}
 void AppStore::refreshApps() { refresh(); }
+void AppStore::refreshWidgets() { if (!m_widgets.busy()) m_widgets.refresh(); }
 void AppStore::install() { install("kmusic"); }
 void AppStore::uninstall() { uninstall("kmusic"); }
 void AppStore::cancel() { cancel("kmusic"); }
@@ -46,6 +55,11 @@ void AppStore::openRepository() { openRepository("kmusic"); }
 void AppStore::install(const QString& id) { if (!anyBusy()) m_independent.perform(id, "install"); }
 void AppStore::uninstall(const QString& id) { if (!anyBusy()) m_independent.perform(id, "uninstall"); }
 void AppStore::update(const QString& id) { if (!anyBusy()) m_independent.perform(id, "update"); }
+void AppStore::installWidget(const QString& id) { if (!anyBusy()) m_widgets.perform(id, "install"); }
+void AppStore::updateWidget(const QString& id) { if (!anyBusy()) m_widgets.perform(id, "update"); }
+void AppStore::uninstallWidget(const QString& id) { if (!anyBusy()) m_widgets.perform(id, "uninstall"); }
+void AppStore::cancelWidget(const QString& id) { m_widgets.cancel(id); }
+void AppStore::openWidgetRepository(const QString& id) { m_widgets.openRepository(id); }
 void AppStore::checkUpdates(const QString& id)
 {
     if (anyBusy() || catalogBusy()) return;
@@ -65,7 +79,7 @@ QString AppStore::setTestMode(bool enabled)
 {
     if (anyBusy() || catalogBusy() || releasesBusy()) return "BUSY";
     const auto error = AppCatalog::setTestMode(enabled);
-    if (error.isEmpty()) { m_catalogError.clear(); m_releaseResult.clear(); m_independent.refresh(); }
+    if (error.isEmpty()) { m_catalogError.clear(); m_releaseResult.clear(); m_independent.refresh(); m_widgets.refresh(); }
     emit changed(); return error;
 }
 void AppStore::loadReleases(const QString& repository)
@@ -89,6 +103,13 @@ QString AppStore::selectAppRelease(const QString& id, const QString& repository,
     if (error.isEmpty()) m_independent.refresh();
     emit changed(); return error;
 }
+QString AppStore::selectWidgetRelease(const QString& id, const QString& repository, const QString& tag)
+{
+    if (anyBusy() || catalogBusy()) return "BUSY";
+    const auto error = AppCatalog::selectWidgetRelease(id, repository, tag.trimmed());
+    if (error.isEmpty()) m_widgets.refresh();
+    emit changed(); return error;
+}
 QVariantList AppStore::sources() const { return AppCatalog::sources(); }
 QVariantMap AppStore::updateStatus() const { return AppCatalog::readState("update-status"); }
 bool AppStore::automaticUpdates() const { return !testMode() && AppCatalog::readState("preferences").value("automaticUpdates", true).toBool(); }
@@ -108,6 +129,12 @@ int AppStore::updateCount() const
 {
     int count = 0;
     for (const auto& item : apps()) if (item.toMap().value("updateAvailable").toBool()) ++count;
+    return count;
+}
+int AppStore::widgetUpdateCount() const
+{
+    int count = 0;
+    for (const auto& item : widgets()) if (item.toMap().value("updateAvailable").toBool()) ++count;
     return count;
 }
 void AppStore::refreshCatalog()
@@ -133,7 +160,7 @@ QString AppStore::removeSource(const QString& id)
 {
     if (hasActiveMutation() || catalogBusy()) return "BUSY";
     const auto error = AppCatalog::removeSource(id);
-    m_independent.refresh(); emit changed(); return error;
+    m_independent.refresh(); m_widgets.refresh(); emit changed(); return error;
 }
 bool AppStore::startUpdateAgent(bool checkNow)
 {

@@ -59,7 +59,7 @@ ShellRoot {
         Rectangle { anchors.fill: parent; color: "gray" }
     }
     ContextMenu { id: menu; anchorItem: anchorItem }
-    DockInfoPopup { id: info; anchorItem: anchorItem; page: 2 }
+    DockWidgetPopup { id: info; anchorItem: anchorItem }
     AppLauncherWindow { id: launcher; outputAvailable: true }
 
     QtObject {

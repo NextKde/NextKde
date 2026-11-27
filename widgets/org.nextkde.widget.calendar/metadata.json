@@ -1,0 +1,77 @@
+{
+  "id": "org.nextkde.widget.calendar",
+  "name": "Calendar",
+  "description": "Today's date, monthly calendar, and upcoming events.",
+  "category": "calendar",
+  "categoryName": "Calendar & To-Do",
+  "i18n": {
+    "en": {
+      "name": "Calendar",
+      "description": "Today's date, monthly calendar, and upcoming events.",
+      "categoryName": "Calendar & To-Do"
+    },
+    "zh-CN": {
+      "name": "日历",
+      "description": "查看今日日期、月历网格与日程安排，点击打开日历应用。",
+      "categoryName": "日程与待办"
+    }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "sizes": [[1, 1], [2, 1], [2, 2]],
+  "defaultSize": [2, 1],
+  "widgets": [
+    {
+      "id": "org.nextkde.widget.calendar.macos",
+      "style": "macos",
+      "widgetEntry": "macos/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.calendar.material",
+      "style": "material",
+      "widgetEntry": "material/Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.calendar.material.arch",
+      "name": "Calendar · Arch",
+      "description": "1×1 arch-shaped calendar card.",
+      "i18n": {
+        "en": {
+          "name": "Calendar · Arch",
+          "description": "1×1 arch-shaped calendar card."
+        },
+        "zh-CN": {
+          "name": "日历 · 拱门",
+          "description": "1×1 拱门轮廓日历卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/ArchWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.widget.calendar.material.circle",
+      "name": "Calendar · Circle",
+      "description": "1×1 circular calendar card.",
+      "i18n": {
+        "en": {
+          "name": "Calendar · Circle",
+          "description": "1×1 circular calendar card."
+        },
+        "zh-CN": {
+          "name": "日历 · 圆形",
+          "description": "1×1 圆形轮廓日历卡片。"
+        }
+      },
+      "style": "material",
+      "sizes": [[1, 1]],
+      "defaultSize": [1, 1],
+      "widgetEntry": "material/CircleWidget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}

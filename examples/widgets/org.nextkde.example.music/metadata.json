@@ -1,0 +1,24 @@
+{
+  "id": "org.nextkde.example.music",
+  "name": "Music Control",
+  "description": "Displays the active track and playback controls.",
+  "category": "media",
+  "categoryName": "Media & Music",
+  "i18n": {
+    "en": {
+      "name": "Music Control",
+      "description": "Displays the active track and playback controls.",
+      "categoryName": "Media & Music"
+    },
+    "zh-CN": {
+      "name": "音乐控制",
+      "description": "展示正在播放的曲目并控制播放。",
+      "categoryName": "音乐与媒体"
+    }
+  },
+  "version": "0.1.0",
+  "sdkVersion": 1,
+  "style": "macos",
+  "sizes": [[1, 1], [2, 1]],
+  "defaultSize": [2, 1]
+}

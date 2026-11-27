@@ -23,13 +23,34 @@ Item {
     id: root
 
     property string title: ""
-    // Host declaration: this card's surface outline is MaterialFlower's flower
-    // silhouette instead of the rounded rectangle every other card uses. It is a
-    // request, not a form of its own -- the tonal backend paints the same paint
-    // in a different shape, same colour, same opacity.
-    property bool flowerShapedSurface: false
+    property Component contentComponent: null
+    property bool contentEnabled: true
+    // Gallery copies paint a bounded thumbnail; they never publish compositor
+    // surface shapes or blur regions into the desktop window.
+    property bool preview: false
+    // Material widgets may select a host-owned panel silhouette (e.g.
+    // "roundedRect", "pill", "circle", "flower", "cookie", "clover",
+    // "slantedOval", "arch") by publishing `surfaceShape` on Widget.qml.
+    // Colour, opacity and compositor blur remain host-owned across every card.
+    property string materialSurfaceShape: "roundedRect"
     property color startColor: "transparent"
+    property bool hasMidColor: false
+    property color midColor: "transparent"
+    property real midPosition: 0.5
     property color endColor: "transparent"
+    property int gradientOrientation: Gradient.Vertical
+    // motion-exception: Ambient backgroundSpec crossfade avoids abrupt palette jumps on track/state changes.
+    property int backgroundTransitionDuration: 560
+    property bool _backgroundReady: false
+    readonly property color _resolvedMidColor: hasMidColor
+        ? midColor
+        : Qt.rgba(
+            (startColor.r + endColor.r) * 0.5,
+            (startColor.g + endColor.g) * 0.5,
+            (startColor.b + endColor.b) * 0.5,
+            (startColor.a + endColor.a) * 0.5
+        )
+    Component.onCompleted: _backgroundReady = true
     property bool showSurface: true
     property color materialSurfaceColor: AppearanceTokens.surface.widgetFill
     // Widgets normally honour the colour-artwork style. A host that must keep
@@ -44,64 +65,158 @@ Item {
     // the shell style, which is what keeps both forms in one component.
     readonly property var surface: AppearanceTokens.surface
     readonly property bool tonalSurface: root.surface.paintInQml
-    // A shape request only means something to the backend that paints the card.
-    readonly property bool shapedSurface:
-        root.flowerShapedSurface && root.tonalSurface
+    readonly property string effectiveMaterialShape: root.tonalSurface
+        ? (root.materialSurfaceShape || "roundedRect")
+        : "roundedRect"
 
     // `Item.clip` below only clips to a rectangle. Colour-artwork widgets can
     // contain their own full-bleed header or artwork, so mask their composed
     // layer to the same continuous contour that KWin uses for glass cards. The
     // tonal backend and the KWin-backed card already have their own mask path.
-    layer.enabled: root.usesColorArtwork && !root.tonalSurface
-    layer.effect: SquircleMask {
-        cornerRadius: root.radius
-        cornerExponent: AppearanceTokens.shape.cornerExponent
-        maskWidth: root.width
-        maskHeight: root.height
-    }
+    //
+    // This clip/mask lives on `surface` (below), not on `root` itself: the
+    // host (DeskCenterWindow) parents edit-mode affordances -- the remove
+    // badge, settings affordance, resize handle -- directly onto this
+    // component as root's own children, and those are deliberately drawn
+    // hanging half outside the card's corner (see the remove badge's
+    // negative anchor margins). Clipping at root would cut that overhang off
+    // along with anything else drawn outside the card's rectangle.
+    Item {
+        id: surface
+        anchors.fill: parent
+        clip: true
+        layer.enabled: root.usesColorArtwork && !root.tonalSurface
+        layer.effect: SquircleMask {
+            cornerRadius: root.radius
+            cornerExponent: AppearanceTokens.shape.cornerExponent
+            maskWidth: surface.width
+            maskHeight: surface.height
+        }
 
-    clip: true
+        Component {
+            id: tonalSurfaceComponent
 
-    Component {
-        id: tonalSurfaceComponent
+            MaterialCardSurface {
+                // The surface fills this card at local (0,0); both regions read the
+                // anchor's x/y verbatim as surface coordinates, so point them at THIS
+                // wrapper (whose x/y carry the grid offset the delegate assigned)
+                // instead of the surface, or the region lands at the window origin.
+                blurAnchor: root
+                radius: root.radius
+                fillColor: root.materialSurfaceColor
+                fillOpacity: AppearanceTokens.surface.widgetOpacity
+                shapeType: root.effectiveMaterialShape
+            }
+        }
 
-        MaterialCardSurface {
-            // The surface fills this card at local (0,0); both regions read the
-            // anchor's x/y verbatim as surface coordinates, so point them at THIS
-            // wrapper (whose x/y carry the grid offset the delegate assigned)
-            // instead of the surface, or the region lands at the window origin.
-            blurAnchor: root
+        Component {
+            id: glassSurfaceComponent
+
+            ControlCenterCard {
+                // KWin keeps the material as the card's only paint layer; this card
+                // then exists solely to publish the blur shape and the SurfaceShape
+                // KWin paints from.
+                fallbackEnabled: false
+                // Same anchor rule as the tonal surface above.
+                blurAnchor: root
+                cardRadius: root.radius
+                // Desktop widgets keep the same see-through level as the Dock.
+                cardScrimLevel: "subtle"
+            }
+        }
+
+        Loader {
+            id: surfaceBackend
+            anchors.fill: parent
+            // The tonal form draws MaterialCardSurface with the widget's declared
+            // `surfaceShape` (defaulting to roundedRect); the glass form only owns
+            // one when the card is not drawing colour artwork of its own.
+            sourceComponent: root.preview ? null : root.tonalSurface
+                ? tonalSurfaceComponent
+                : (root.usesColorArtwork ? null : glassSurfaceComponent)
+        }
+
+        MaterialShapeVisual {
+            anchors.fill: parent
+            visible: root.preview && root.tonalSurface
+            shapeType: root.effectiveMaterialShape
             radius: root.radius
             fillColor: root.materialSurfaceColor
-            fillOpacity: AppearanceTokens.surface.widgetOpacity
-            flowerShaped: root.shapedSurface
+            fillOpacity: 1.0
+            strokeColor: Qt.rgba(AppearanceTokens.colors.outline.r,
+                AppearanceTokens.colors.outline.g,
+                AppearanceTokens.colors.outline.b, 0.32)
+            strokeWidth: 1
+            inset: 1
         }
-    }
 
-    Component {
-        id: glassSurfaceComponent
-
-        ControlCenterCard {
-            // KWin keeps the material as the card's only paint layer; this card
-            // then exists solely to publish the blur shape and the SurfaceShape
-            // KWin paints from.
-            fallbackEnabled: false
-            // Same anchor rule as the tonal surface above.
-            blurAnchor: root
-            cardRadius: root.radius
-            // Desktop widgets keep the same see-through level as the Dock.
-            cardScrimLevel: "subtle"
+        Rectangle {
+            anchors.fill: parent
+            radius: root.radius
+            visible: root.preview && !root.tonalSurface && !root.usesColorArtwork
+            color: AppearanceTokens.colors.layer1
+            border.width: 1
+            border.color: AppearanceTokens.colors.outlineVariant
         }
-    }
 
-    Loader {
-        id: surfaceBackend
-        anchors.fill: parent
-        // The tonal form always has a surface; the glass form only owns one when
-        // the card is not drawing colour artwork of its own.
-        sourceComponent: root.tonalSurface
-            ? tonalSurfaceComponent
-            : (root.usesColorArtwork ? null : glassSurfaceComponent)
+        Rectangle {
+            anchors.fill: parent
+            radius: root.radius
+            visible: root.usesColorArtwork && !root.tonalSurface
+            gradient: Gradient {
+                orientation: root.gradientOrientation
+                GradientStop {
+                    position: 0
+                    color: root.startColor
+                    Behavior on color {
+                        enabled: root._backgroundReady && !root.preview && root.backgroundTransitionDuration > 0
+                        ColorAnimation { duration: root.backgroundTransitionDuration; easing.type: Easing.InOutCubic }
+                    }
+                }
+                GradientStop {
+                    position: Math.max(0.01, Math.min(0.99, root.midPosition))
+                    color: root._resolvedMidColor
+                    Behavior on color {
+                        enabled: root._backgroundReady && !root.preview && root.backgroundTransitionDuration > 0
+                        ColorAnimation { duration: root.backgroundTransitionDuration; easing.type: Easing.InOutCubic }
+                    }
+                }
+                GradientStop {
+                    position: 1
+                    color: root.endColor
+                    Behavior on color {
+                        enabled: root._backgroundReady && !root.preview && root.backgroundTransitionDuration > 0
+                        ColorAnimation { duration: root.backgroundTransitionDuration; easing.type: Easing.InOutCubic }
+                    }
+                }
+            }
+        }
+
+        Loader {
+            id: contentLoader
+            anchors.fill: parent
+            active: root.visible
+            enabled: root.contentEnabled && !root.preview
+            sourceComponent: root.contentComponent
+        }
+
+        Text {
+            visible: root.title.length > 0
+            text: root.title
+            color: AppearanceTokens.surface.widgetForeground
+
+            anchors {
+                left: parent.left
+                top: parent.top
+                leftMargin: 18
+                topMargin: 15
+            }
+
+            font {
+                pixelSize: 12
+                weight: Font.DemiBold
+            }
+        }
     }
 
     // Published (as composite member) to the window's single blur region union.
@@ -110,43 +225,9 @@ Item {
     readonly property var blurRegion:
         surfaceBackend.item ? surfaceBackend.item.blurRegion : null
 
-    Rectangle {
-        anchors.fill: parent
-        radius: root.radius
-        visible: root.usesColorArtwork && !root.tonalSurface
-        gradient: Gradient {
-            GradientStop { position: 0; color: root.startColor }
-            GradientStop { position: 1; color: root.endColor }
-        }
-    }
-
-    // A broad, low-contrast bloom makes colour cards feel like widgets rather
-    // than rectangular panels, while never running beneath the text itself.
-    Rectangle {
-        visible: root.showSurface && root.usesColorArtwork && !root.tonalSurface
-        width: parent.width * 0.78
-        height: width
-        radius: width / 2
-        x: parent.width * 0.48
-        y: -height * 0.44
-        color: Qt.rgba(1, 1, 1, 0.1)
-    }
-
-    Text {
-        visible: root.title.length > 0
-        text: root.title
-        color: AppearanceTokens.surface.widgetForeground
-
-        anchors {
-            left: parent.left
-            top: parent.top
-            leftMargin: 18
-            topMargin: 15
-        }
-
-        font {
-            pixelSize: 12
-            weight: Font.DemiBold
-        }
-    }
+    // Lets a settings affordance built by the host (DeskCenterWindow) reach
+    // into the same running content instance instead of creating a second,
+    // out-of-sync one -- a package's settings must edit the live instance's
+    // data service, not a throwaway copy.
+    readonly property var loadedContent: contentLoader.item
 }

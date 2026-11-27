@@ -5,9 +5,11 @@ import "./AdaptiveMath.mjs" as AdaptiveMath
 import qs.desktop
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.common
-import qs.desktop.modules.weather
+import qs.desktop.modules.deskcenter
+import qs.desktop.modules.platform
 import "../../../Kos/Ui"
 import "DockMagnification.mjs" as Magnification
+import "DockInfoCardOrder.mjs" as DockInfoCardOrder
 
 // ────────────────────────────────────────────────────────────────
 // DockContainer — Adaptive layout engine.
@@ -53,19 +55,36 @@ Item {
     function infoCardSelected(id) {
         return ConfigService.infoCardOrder.indexOf(id) >= 0
     }
-    readonly property bool hasPlayingMusic: infoCardSelected("music")
-        && MediaService.hasPlayer
-    readonly property bool hasWeather: infoCardSelected("weather")
-        && WeatherService.available
-    // Side Dock Stack information keeps its clock page. The separate
-    // top-of-Dock clock is intentionally not injected by DesktopEnvironment.
-    readonly property bool hasClock: infoCardSelected("clock")
-        && (clockInInfoCarousel || vertical)
-    // Temperature is a permanent horizontal Dock page. MetricsService may
-    // still be loading its first snapshot; the card remains and shows "--".
-    readonly property bool hasTemperature: infoCardSelected("metrics")
-    readonly property bool hasAvailableInfo: hasPlayingMusic || hasWeather || hasClock
-        || hasTemperature
+    // Every Dock information card is an installed package that declares
+    // containers: ["dock"]. A card is keyed by `dockCardId` (default: entry id)
+    // so its macOS and Material entries share one slot in the saved order.
+    readonly property var dockPackages: {
+        const _crashRev = WidgetCrashGuard.revision
+        const _style = WidgetRegistry.activePackageStyle
+        const seen = Object.create(null)
+        const out = []
+        for (const entry of (WidgetPackageService.packages ?? [])) {
+            if (!WidgetRegistry.canExecute(entry)
+                    || !WidgetRegistry.matchesActiveStyle(entry)
+                    || WidgetCrashGuard.isBlocked(entry.id, entry.revision)
+                    || !DockInfoCardOrder.supportsContainer(entry, "dock"))
+                continue
+            const cardId = DockInfoCardOrder.cardIdOf(entry)
+            if (seen[cardId])
+                continue
+            seen[cardId] = true
+            out.push(entry)
+        }
+        return out
+    }
+    readonly property var activeDockPackages:
+        dockPackages.filter(pkg => infoCardSelected(DockInfoCardOrder.cardIdOf(pkg)))
+    readonly property var hiddenInfoCards: vertical
+        ? (verticalInfoCarousel ? verticalInfoCarousel.hiddenCards : ({}))
+        : (horizontalInfoCarousel ? horizontalInfoCarousel.hiddenCards : ({}))
+    readonly property var visibleDockPackages:
+        activeDockPackages.filter(pkg => !hiddenInfoCards[DockInfoCardOrder.cardIdOf(pkg)])
+    readonly property bool hasAvailableInfo: visibleDockPackages.length > 0
     readonly property int screenWidth: targetScreen?.width
         ?? Quickshell.screens[0]?.width ?? 1920
     readonly property int screenHeight: targetScreen?.height
@@ -161,12 +180,9 @@ Item {
     readonly property int expandedInfoUnits: {
         let total = 0
         for (const id of ConfigService.infoCardOrder) {
-            const available = id === "music" ? hasPlayingMusic
-                : id === "weather" ? hasWeather
-                : id === "clock" ? hasClock
-                : id === "metrics" ? hasTemperature : false
-            if (available)
-                total += vertical ? 2 : (id === "clock" ? 3 : 4)
+            const pkg = visibleDockPackages.find(item => DockInfoCardOrder.cardIdOf(item) === id)
+            if (pkg)
+                total += vertical ? 2 : Math.max(2, Math.min(4, Number(pkg.dockUnits) || 4))
         }
         return total
     }
@@ -1302,19 +1318,24 @@ Item {
             visible: container.hasInfo && (container.pinnedCount + container.windowCount > 0)
         }
 
-        // ── Shared music / weather / clock / temperature information slot ──
+        // ── Shared music / weather / clock / temperature + package info slot ──
         DockInfoCarousel {
             id: horizontalInfoCarousel
             cornerRadius: container.surfaceRadius
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
+            edgePadding: container.hPadding
+            surfaceOriginX: container.surfaceOriginX
+            surfaceOriginY: container.surfaceOriginY
             widthUnits: container.infoUnits
-            showClock: container.hasClock
-            showTemperature: container.hasTemperature
             cardOrder: ConfigService.infoCardOrder
+            dockPackages: container.dockPackages
             expanded: container.infoExpanded
             autoRotate: ConfigService.infoCardAutoRotate
-            onEditRequested: componentEditor.openFor(horizontalInfoCarousel)
+            onEditRequested: {
+                container.editMode = true
+                WidgetGalleryService.show(container.targetScreen, "dock")
+            }
             visible: container.hasInfo && !container.vertical
         }
 
@@ -1323,16 +1344,22 @@ Item {
         // reserving only two icon lengths along the edge.
         DockSideInfoCarousel {
             id: verticalInfoCarousel
+            dockEdge: ConfigService.position
             cornerRadius: container.surfaceRadius
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
+            edgePadding: container.hPadding
+            surfaceOriginX: container.surfaceOriginX
+            surfaceOriginY: container.surfaceOriginY
             widthUnits: container.infoUnits
-            showClock: container.hasClock
-            showTemperature: container.hasTemperature
             cardOrder: ConfigService.infoCardOrder
+            dockPackages: container.dockPackages
             expanded: container.infoExpanded
             autoRotate: ConfigService.infoCardAutoRotate
-            onEditRequested: componentEditor.openFor(verticalInfoCarousel)
+            onEditRequested: {
+                container.editMode = true
+                WidgetGalleryService.show(container.targetScreen, "dock")
+            }
             visible: container.hasInfo && container.vertical
         }
 
@@ -1386,15 +1413,7 @@ Item {
         }
 
         TapHandler {
-            onTapped: componentEditor.openFor(componentEditButton)
-        }
-    }
-
-    DockComponentEditor {
-        id: componentEditor
-        onVisibleChanged: {
-            if (visible)
-                container.editMode = true
+            onTapped: WidgetGalleryService.show(container.targetScreen, "dock")
         }
     }
 }

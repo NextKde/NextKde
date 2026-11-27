@@ -5,12 +5,16 @@ import QtCore
 import Quickshell
 import qs.desktop.modules.common
 import "WidgetLayout.mjs" as WidgetLayout
+import "WidgetInstanceConfig.mjs" as WidgetInstanceConfig
 
 QtObject {
     id: service
 
+    signal instanceConfigChanged(string instanceId)
+
     property int revision: 0
     property var projectedPositions: ({})
+    property var _instanceConfigs: null
     readonly property var defaultSizes: ({
         clock: "small",
         weather: "medium",
@@ -35,6 +39,12 @@ QtObject {
         property string sizesJson: "{}"
         property string orderJson: "[]"
         property string positionsJson: "{}"
+        // Placed package instances per output, plus the id-suffix counter.
+        // Both live here because the desktop surface is recreated on every
+        // login and must re-expand the placements from disk (R4).
+        property string instancesJson: "{}"
+        property string instanceConfigsJson: "{}"
+        property int instanceSeq: 1
         property bool desktopLyricsEnabled: true
         property real desktopLyricsX: 0.5
         property real desktopLyricsY: 1.0
@@ -109,7 +119,7 @@ QtObject {
     }
 
     function savePosition(output, placements, widgetId, column, row, geometry) {
-        if (defaultOrder.indexOf(widgetId) < 0 || !Number.isInteger(column)
+        if (typeof widgetId !== "string" || widgetId.length === 0 || !Number.isInteger(column)
                 || !Number.isInteger(row) || column < 0 || row < 0) return false
         let all = ({})
         try {
@@ -131,6 +141,143 @@ QtObject {
         _settings.sync()
         revision++
         return true
+    }
+
+    // Placed package instances (instance id + owning package id), keyed by
+    // output. Disk is the only cross-restart source: DeskCenterWindow
+    // re-expands these into widgetInstances on startup, so the persisted
+    // position/size keys keep pointing at the same cards. Records whose
+    // package is missing or not executable are kept here untouched instead of
+    // being dropped, so a later package deployment can still revive them
+    // (see WidgetGalleryPreviewPlan R7).
+    function instancesForOutput(output) {
+        const list = parsedInstances()[String(output)]
+        const result = []
+        if (!Array.isArray(list)) return result
+        for (const item of list) {
+            if (!validInstanceRecord(item)) continue
+            if (result.some(record => record.id === item.id)) continue
+            result.push({ id: item.id, packageId: item.packageId })
+        }
+        return result
+    }
+
+    function saveInstancesForOutput(output, instances) {
+        const all = parsedInstances()
+        const records = []
+        for (const item of instances ?? []) {
+            if (!validInstanceRecord(item)) continue
+            if (records.some(record => record.id === item.id)) continue
+            records.push({ id: item.id, packageId: item.packageId })
+        }
+        all[String(output)] = records
+        _settings.instancesJson = JSON.stringify(all)
+        _settings.sync()
+        revision++
+    }
+
+    // Per-instance state files (e.g. the clock's format24h) are keyed by
+    // instance id, so the counter must stay unique across outputs: two screens
+    // must not both hand out "…#1". The stored counter is the fast path; the
+    // scan keeps it ahead of ids written by an older build or a hand-edited
+    // file.
+    function allocateInstanceSeq() {
+        let next = Math.max(1, _settings.instanceSeq)
+        const all = parsedInstances()
+        for (const key of Object.keys(all)) {
+            const list = Array.isArray(all[key]) ? all[key] : []
+            for (const record of list) {
+                const match = typeof record?.id === "string" ? /#(\d+)$/.exec(record.id) : null
+                if (match) next = Math.max(next, Number(match[1]) + 1)
+            }
+        }
+        _settings.instanceSeq = next + 1
+        _settings.sync()
+        return next
+    }
+
+    // Removing a card also retires its saved position, span, and per-instance
+    // settings, so a later instance cannot inherit stale state or leave orphan
+    // config entries behind.
+    function removeInstance(output, instanceId) {
+        const key = String(output)
+        let changed = false
+        let configRemoved = false
+        const all = parsedInstances()
+        const list = Array.isArray(all[key]) ? all[key] : []
+        const next = list.filter(record => record?.id !== instanceId)
+        if (next.length !== list.length) {
+            all[key] = next
+            _settings.instancesJson = JSON.stringify(all)
+            changed = true
+        }
+        const allPositions = parsedObject(_settings.positionsJson)
+        const positions = allPositions[key]
+        if (positions && typeof positions === "object" && !Array.isArray(positions)
+                && Object.prototype.hasOwnProperty.call(positions, instanceId)) {
+            delete positions[instanceId]
+            _settings.positionsJson = JSON.stringify(allPositions)
+            changed = true
+        }
+        const sizes = parsedObject(_settings.sizesJson)
+        if (Object.prototype.hasOwnProperty.call(sizes, instanceId)) {
+            delete sizes[instanceId]
+            _settings.sizesJson = JSON.stringify(sizes)
+            changed = true
+        }
+        const removedCfg = WidgetInstanceConfig.removeInstanceConfig(_ensureInstanceConfigs(), instanceId)
+        if (removedCfg.changed) {
+            _instanceConfigs = removedCfg.map
+            _settings.instanceConfigsJson = JSON.stringify(removedCfg.map)
+            changed = true
+            configRemoved = true
+        }
+        if (changed) {
+            _settings.sync()
+            revision++
+        }
+        if (configRemoved)
+            instanceConfigChanged(String(instanceId))
+        return changed
+    }
+
+    function _ensureInstanceConfigs() {
+        if (_instanceConfigs === null)
+            _instanceConfigs = WidgetInstanceConfig.parseConfigMap(_settings.instanceConfigsJson)
+        return _instanceConfigs
+    }
+
+    function instanceConfigFor(instanceId) {
+        return WidgetInstanceConfig.getInstanceConfig(_ensureInstanceConfigs(), String(instanceId ?? ""))
+    }
+
+    function saveInstanceConfig(instanceId, next) {
+        const id = String(instanceId ?? "")
+        const res = WidgetInstanceConfig.setInstanceConfig(_ensureInstanceConfigs(), id, next)
+        if (!res.ok) return false
+        _instanceConfigs = res.map
+        _settings.instanceConfigsJson = JSON.stringify(res.map)
+        _settings.sync()
+        revision++
+        instanceConfigChanged(id)
+        return true
+    }
+
+    function parsedInstances() {
+        const all = parsedObject(_settings.instancesJson)
+        return all && typeof all === "object" && !Array.isArray(all) ? all : ({})
+    }
+
+    function parsedObject(json) {
+        try {
+            const value = JSON.parse(json)
+            return value && typeof value === "object" && !Array.isArray(value) ? value : ({})
+        } catch (_) { return ({}) }
+    }
+
+    function validInstanceRecord(item) {
+        return !!item && typeof item.id === "string" && item.id.length > 0
+            && typeof item.packageId === "string" && item.packageId.length > 0
     }
 
     function sizeFor(widgetId) {

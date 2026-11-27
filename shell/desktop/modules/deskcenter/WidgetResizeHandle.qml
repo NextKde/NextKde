@@ -26,6 +26,16 @@ Item {
     // type tabs and member grid stop fitting. Ordinary widgets keep one cell.
     property int minimumColumns: 1
     property int minimumRows: 1
+    // A package's own declared sizes (metadata.json's `sizes`, e.g.
+    // [[2,2],[3,2]]) -- when set, the drag snaps only to one of these exact
+    // pairs instead of letting each axis vary independently within
+    // [minimum*, maximum*]. That per-axis range only coincides with the
+    // declared set when it happens to be rectangular (e.g. one shared row
+    // count paired with two column counts); a package declaring a sparser
+    // set like [[1,1],[3,3]] must still never land on an undeclared [2,2].
+    // null/empty means "no discrete set declared" -- keep the old
+    // continuous per-axis magnet behaviour for the legacy named widgets.
+    property var declaredSizes: null
     // The corner position the drag actually shows: the pointer, bent by the
     // magnetic mapping so the card is held near whole-cell sizes.
     property real previewWidth: 0
@@ -76,11 +86,7 @@ Item {
             handle.startPoint = mapToItem(null, mouse.x, mouse.y)
             handle.startWidth = handle.cardWidth
             handle.startHeight = handle.cardHeight
-            const span = WidgetLayout.snappedSpan(handle.startWidth, handle.startHeight,
-                handle.cellSize, handle.gap, handle.maximumColumns, handle.maximumRows,
-                handle.minimumColumns, handle.minimumRows)
-            handle.previewColumns = span[0]
-            handle.previewRows = span[1]
+            handle.applySpan(handle.startWidth, handle.startHeight)
             handle.previewWidth = handle.startWidth
             handle.previewHeight = handle.startHeight
             handle.resizing = true
@@ -92,17 +98,7 @@ Item {
             const point = mapToItem(null, mouse.x, mouse.y)
             const width = handle.startWidth + point.x - handle.startPoint.x
             const height = handle.startHeight + point.y - handle.startPoint.y
-            const span = WidgetLayout.snappedSpan(width, height, handle.cellSize,
-                handle.gap, handle.maximumColumns, handle.maximumRows,
-                handle.minimumColumns, handle.minimumRows)
-            handle.previewColumns = span[0]
-            handle.previewRows = span[1]
-            handle.previewWidth = WidgetLayout.magnetizedSize(width,
-                handle.cellSize, handle.gap, handle.maximumColumns,
-                handle.minimumColumns)
-            handle.previewHeight = WidgetLayout.magnetizedSize(height,
-                handle.cellSize, handle.gap, handle.maximumRows,
-                handle.minimumRows)
+            handle.applySpan(width, height)
         }
         onReleased: {
             if (handle.previewAllowed)
@@ -110,5 +106,35 @@ Item {
             handle.resizing = false
         }
         onCanceled: handle.resizing = false
+    }
+
+    // Shared by onPressed/onPositionChanged: resolves a raw pixel size to
+    // the span the release will actually commit, and the pixel preview
+    // the card ghosts while dragging.
+    function applySpan(width, height) {
+        const continuous = WidgetLayout.snappedSpan(width, height, handle.cellSize,
+            handle.gap, handle.maximumColumns, handle.maximumRows,
+            handle.minimumColumns, handle.minimumRows)
+        // handle.declaredSizes may have crossed a Repeater/ListView model:
+        // boundary upstream, which boxes it into a Qt sequence wrapper --
+        // still indexable/has `.length`, but Array.isArray() on it is
+        // false. Duck-type on `.length` instead (see WidgetLayout.mjs's
+        // toArray, which nearestDeclaredSize below also goes through).
+        const hasDeclaredSizes = !!handle.declaredSizes && handle.declaredSizes.length > 0
+        const span = hasDeclaredSizes
+            ? WidgetLayout.nearestDeclaredSize(continuous[0], continuous[1], handle.declaredSizes)
+            : continuous
+        handle.previewColumns = span[0]
+        handle.previewRows = span[1]
+        // Always bend the drag magnetically so the card smoothly tracks the
+        // pointer while held, then hands velocity off to MotionSpring +
+        // FrameAnimation to snap at native refresh rate onto the committed
+        // discrete declared span upon release.
+        handle.previewWidth = WidgetLayout.magnetizedSize(width,
+            handle.cellSize, handle.gap, handle.maximumColumns,
+            handle.minimumColumns)
+        handle.previewHeight = WidgetLayout.magnetizedSize(height,
+            handle.cellSize, handle.gap, handle.maximumRows,
+            handle.minimumRows)
     }
 }

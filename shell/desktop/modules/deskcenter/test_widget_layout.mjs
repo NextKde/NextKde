@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
-import { canPlace, fitWidgets, insetRightEdge, isValidSize, magnetizedSize,
-    maxSpanFor, minSpanFor, placeAnchoredWidget, savedPositionsAfterMove,
-    widgetColumnLimit, packWidgets, sizeOrder, snappedPosition, snappedSpan,
-    spanFor } from "./WidgetLayout.mjs";
+import { canPlace, declaredSizeCeiling, declaredSizeFloor, fitWidgets,
+    insetRightEdge, isValidSize, magnetizedSize, maxSpanFor, minSpanFor,
+    namedGallerySpan, nearestDeclaredSize, placeAnchoredWidget,
+    resolveDeclaredSpan, savedPositionsAfterMove, widgetColumnLimit,
+    packWidgets, sizeOrder, snappedPosition, snappedSpan, spanFor }
+    from "./WidgetLayout.mjs";
 
 const ids = ["clock", "weather", "calendar", "todo", "system", "activity", "music"];
 
@@ -217,3 +219,39 @@ for (const files of [0, 1, 8, 16]) {
 }
 assert.deepEqual(fitWidgets(saved, 4, 0, 4), {columns: 0, placements: []});
 assert.deepEqual(fitWidgets(saved, 4, 8, 0), {columns: 0, placements: []});
+
+// Qt sequence wrapper / array-like boundary tests (Array.isArray is false).
+const boxedPair = { 0: 3, 1: 2, length: 2 };
+const boxedSizes = { 0: { 0: 2, 1: 1, length: 2 }, 1: boxedPair, length: 2 };
+assert.deepEqual(namedGallerySpan(boxedPair), [3, 2]);
+assert.deepEqual(namedGallerySpan([2, 2]), [2, 2]);
+assert.deepEqual(namedGallerySpan("3x2"), [3, 2]);
+assert.deepEqual(namedGallerySpan("small"), [1, 1]);
+assert.deepEqual(namedGallerySpan("medium"), [2, 1]);
+assert.deepEqual(namedGallerySpan("large"), [2, 2]);
+assert.deepEqual(namedGallerySpan("12"), [1, 1], "two-char string must not be sliced as [1, 2]");
+assert.deepEqual(declaredSizeCeiling(boxedSizes), [3, 2]);
+assert.deepEqual(declaredSizeFloor(boxedSizes), [2, 1]);
+assert.deepEqual(nearestDeclaredSize(3, 2, boxedSizes), [3, 2]);
+assert.deepEqual(nearestDeclaredSize(3, 3, boxedSizes), [3, 2]);
+const boxedObstacles = { 0: { id: "blocker", column: 8, row: 0, columns: 2, rows: 3 }, length: 1 };
+assert.deepEqual(
+    placeAnchoredWidget({ id: "groups", columns: 2, rows: 3 }, boxedObstacles, 10, 6),
+    { id: "groups", column: 6, row: 0, columns: 2, rows: 3 });
+
+// Package update removed a previously placed size -> auto-snap to nearest declared size.
+assert.deepEqual(
+    resolveDeclaredSpan(3, 2, [[2, 2], [3, 2]], [2, 2]),
+    { span: [3, 2], changed: false });
+assert.deepEqual(
+    resolveDeclaredSpan(3, 2, [[2, 2]], [2, 2]),
+    { span: [2, 2], changed: true });
+assert.deepEqual(
+    resolveDeclaredSpan(3, 1, [[2, 1], [3, 3]], [2, 1]),
+    { span: [2, 1], changed: true });
+assert.deepEqual(
+    resolveDeclaredSpan(3, 2, { 0: { 0: 2, 1: 2, length: 2 }, length: 1 }, [2, 2]),
+    { span: [2, 2], changed: true });
+assert.deepEqual(
+    resolveDeclaredSpan(0, 0, [[1, 1], [2, 2]], [2, 2]),
+    { span: [2, 2], changed: true });

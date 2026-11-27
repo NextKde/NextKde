@@ -1,0 +1,30 @@
+{
+  "id": "org.nextkde.dock.system",
+  "name": "System",
+  "description": "Temperature and resource usage card for the Dock.",
+  "category": "system",
+  "i18n": {
+    "en": { "name": "System", "description": "Temperature and resource usage card for the Dock." },
+    "zh-CN": { "name": "系统", "description": "Dock 上的温度与资源占用卡片，悬停查看详情。" }
+  },
+  "version": "1.0.0",
+  "sdkVersion": 1,
+  "containers": ["dock"],
+  "dockUnits": 4,
+  "widgets": [
+    {
+      "id": "org.nextkde.dock.system.macos",
+      "dockCardId": "org.nextkde.dock.system",
+      "style": "macos",
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    },
+    {
+      "id": "org.nextkde.dock.system.material",
+      "dockCardId": "org.nextkde.dock.system",
+      "style": "material",
+      "widgetEntry": "Widget.qml",
+      "snapshotEntry": "Snapshot.qml"
+    }
+  ]
+}
