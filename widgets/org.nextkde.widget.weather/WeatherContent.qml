@@ -294,7 +294,7 @@ Item {
             color: root.primaryInk
             font {
                 pixelSize: Math.min(root.compact ? 34 : 42, parent.height * 0.32,
-                    Math.max(18, (parent.height - weeklyForecast.height - 34) / 1.4))
+                    Math.max(18, (parent.height - weeklyForecast.height - 38) / 1.4))
                 weight: Font.Normal
             }
             style: root.textStyle

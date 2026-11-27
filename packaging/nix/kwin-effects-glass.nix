@@ -10,7 +10,9 @@
 stdenv.mkDerivation {
   pname = "kwin-glass";
   version = lib.removeSuffix "\n" (builtins.readFile "${src}/VERSION");
-  src = "${src}/kwin/glass";
+  # Keep the sibling kwin/common headers used by glass.cpp available.
+  inherit src;
+  sourceRoot = "source/kwin/glass";
 
   nativeBuildInputs = [
     cmake

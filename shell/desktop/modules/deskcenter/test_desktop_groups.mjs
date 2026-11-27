@@ -102,33 +102,12 @@ assert.match(deskcenter, /maxDropColumns/);
 assert.match(deskcenter, /allowColorArtwork: modelData\.id !== "groups"/);
 assert.match(deskcenter, /card\.modelData\.id === "groups"/);
 assert.match(deskcenter, /DesktopGroupsContent \{/);
-// Editing chrome stays centered on the free bottom edge. Anchoring it to a
-// top corner made it move as soon as the top-right grouped card appeared.
-const toolbarStart = deskcenter.indexOf('id: widgetEditToolbar');
-const toolbarEnd = deskcenter.indexOf('Rectangle {\n        id: widgetLibrary',
-    toolbarStart);
-assert.ok(toolbarStart >= 0 && toolbarEnd > toolbarStart,
-    'edit toolbar moved; update this test');
-const toolbar = deskcenter.slice(toolbarStart, toolbarEnd);
-assert.ok(!toolbar.includes('groupsWidgetShown'),
-    'the edit toolbar must not depend on the grouped card');
-assert.match(toolbar, /x: \(parent\.width - width\) \/ 2/);
-assert.match(toolbar, /y: parent\.height - root\.bottomInset - height/);
-
-const libraryStart = deskcenter.indexOf('id: widgetLibrary');
-const libraryEnd = deskcenter.indexOf('Rectangle {\n        id: widgetDropPreview',
-    libraryStart);
-assert.ok(libraryStart >= 0 && libraryEnd > libraryStart,
-    'widget library moved; update this test');
-const library = deskcenter.slice(libraryStart, libraryEnd);
-assert.ok(!library.includes('groupsWidgetShown'),
-    'the widget library must not depend on the grouped card');
-assert.match(library, /transformOrigin: Item\.Bottom/);
-assert.match(library, /x: \(parent\.width - width\) \/ 2/);
-assert.match(library, /y: widgetEditToolbar\.y - height - 10/);
-assert.match(library, /width: libraryRow\.implicitWidth \+ 32/,
-    'the library keeps 16 px of padding on each side');
-assert.match(library, /id: libraryRow/);
+// Editing chrome lives in the floating WidgetGalleryWindow (driven by
+// WidgetGalleryService) anchored along the free bottom edge, independent of the
+// top-right grouped card.
+assert.match(deskcenter, /WidgetGalleryService\.show\(root\.screen\)/);
+assert.match(deskcenter, /readonly property real galleryX:/);
+assert.match(deskcenter, /readonly property real galleryY:/);
 
 assert.ok(!deskcenter.includes('DesktopGroupsView'),
     'the standalone view is replaced by the widget content');
@@ -146,8 +125,8 @@ assert.match(layout, /export function minSpanFor/);
 assert.match(layout, /\["2x2", "2x3", "3x2", "3x3"\]/,
     'the grouped view offers only its four readable spans');
 assert.match(deskcenter, /WidgetLayout\.minSpanFor/);
-assert.match(deskcenter, /readonly property var sizeLimit: WidgetLayout\.maxSpanFor/);
-assert.match(deskcenter, /readonly property var sizeFloor: WidgetLayout\.minSpanFor/);
+assert.match(deskcenter, /readonly property var sizeLimit:[\s\S]*?WidgetLayout\.maxSpanFor/);
+assert.match(deskcenter, /readonly property var sizeFloor:[\s\S]*?WidgetLayout\.minSpanFor/);
 assert.match(deskcenter, /maximumColumns: card\.sizeLimit\[0\]/);
 assert.match(deskcenter, /maximumRows: card\.sizeLimit\[1\]/);
 assert.match(deskcenter, /minimumColumns: card\.sizeFloor\[0\]/);

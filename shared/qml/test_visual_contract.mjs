@@ -289,13 +289,14 @@ for (const control of ["KosButton", "KosRoundButton", "KosSlider", "KosSwitch"])
 const deskCenter = read("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml");
 assert.doesNotMatch(deskCenter, /#101010|#17151c|#170f14/,
     "desktop widget palette avoids near-black blocks");
+const widgetHost = read("../../shell/desktop/modules/deskcenter/WidgetHostService.qml");
 for (const app of ["weather", "calendar"]) {
-    assert.match(deskCenter, new RegExp(`IndependentAppWidgetService\\.open\\("${app}"`),
+    assert.match(widgetHost, new RegExp(`IndependentAppWidgetService\\.open\\("${app}"`),
         `${app} widgets open their inspected installation through the identity-bound service`);
     assert.doesNotMatch(deskCenter, new RegExp(`launchById\\("kos-${app}"`),
         `${app} widgets never fall back to a different desktop identity`);
 }
-assert.match(deskCenter, /launchById\("listenfree"/,
+assert.match(widgetHost, /launchById\("listenfree"/,
     "Music retains its independent player launch behavior");
 
 const appActions = read("../../shell/desktop/modules/common/AppActionService.qml");

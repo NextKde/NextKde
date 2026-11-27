@@ -928,7 +928,7 @@ Rectangle {
                             }
                             Text {
                                 width: parent.width
-                                text: I18n.tr("上次加载时导致桌面崩溃，已自动暂停")
+                                text: I18n.tr("Paused because the last load crashed the desktop")
                                 textFormat: Text.PlainText
                                 color: root.ink
                                 opacity: 0.7

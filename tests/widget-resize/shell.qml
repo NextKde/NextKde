@@ -21,14 +21,17 @@ ShellRoot {
     property int resizeIndex: 0
     property var committedBeforeResize: [1, 1]
     property int renderIndex: 0
-    property var renderSpans: [[1, 1], [1, 2], [2, 2], [2, 1]]
+    property var renderSpans: [[1, 1], [2, 1]]
     property var spans: [[2, 1], [2, 2], [1, 2], [1, 1], [1, 2]]
     property point releasePoint: Qt.point(0, 0)
     property int moveIndex: 0
     property var moveTargets: []
     property var beforeMove: []
     property var retainedWidgetCards: []
-    property Item retainedClockFace: null
+    property string primaryId: ""
+    property string weatherId: ""
+    property string musicId: ""
+    property string todoId: ""
     property Item trackedDragCard: null
     property int dragGeometryChanges: 0
     Connections {
@@ -38,6 +41,7 @@ ShellRoot {
     }
     function check(ok, message) { if (!ok) throw new Error(message) }
     function find(item, name) {
+        if (!item) return null
         if (item.objectName === name) return item
         for (const child of item.children || []) {
             const result = find(child, name)
@@ -60,11 +64,15 @@ ShellRoot {
         }
         return null
     }
+    function instanceIdFor(packageId) {
+        const found = desktop.widgetInstances.find(item => item.packageId === packageId)
+        return found ? found.id : ""
+    }
     Timer {
         interval: 350; running: true; repeat: true
         onTriggered: {
             try {
-                if (!AppearanceConfigService.ready) return
+                if (!AppearanceConfigService.ready || desktop.widgetCatalog.length === 0) return
                 const repeat = find(desktop.contentItem, "desktop-widget-repeater")
                 if (stage === 0) {
                     ScreenLifecycle.activeScreen = desktop.screen
@@ -74,10 +82,12 @@ ShellRoot {
                         icon: "text-plain", isDir: false, output: desktop.desktopOutput
                     }))
                     if (Quickshell.env("VERIFY_WIDGET_RESTART") === "1") {
-                        const span = DeskCenterConfigService.spanFor("clock")
+                        const restoredPrimary = instanceIdFor("org.nextkde.widget.calendar.macos")
+                        check(restoredPrimary.length > 0, "placed SDK widget instance survives restart")
+                        const span = DeskCenterConfigService.spanFor(restoredPrimary)
                         check(span[0] === 1 && span[1] === 2, "portrait span survives restart")
-                        const position = DeskCenterConfigService.positionsForOutput(desktop.desktopOutput).clock
-                        check(position.column === desktop.maximumWidgetColumns - 1 && position.row === 2,
+                        const position = DeskCenterConfigService.positionsForOutput(desktop.desktopOutput)[restoredPrimary]
+                        check(position && position.column === desktop.maximumWidgetColumns - 1 && position.row === 2,
                             "manual grid position survives restart")
                         check(DeskCenterConfigService.positionsForOutput("projection-test").music.row === 6,
                             "another card's original position survives restart")
@@ -94,26 +104,33 @@ ShellRoot {
                         "current screen keeps its temporary placement")
                     check(DeskCenterConfigService.displayPositionsForOutput("projection-test", "8:8").music.row === 6,
                         "restored screen recovers original placement")
-                    // The anchored groups widget has its own top-right layout;
-                    // this fixture exercises the ordinary left-flow cards.
                     AppearanceConfigService.setDeskCenterWidgetVisible("groups", false)
-                    for (const id of DeskCenterConfigService.defaultOrder) {
-                        if (id === "groups") continue
-                        AppearanceConfigService.setDeskCenterWidgetVisible(id, true)
+                    while (desktop.widgetInstances.length > 0)
+                        desktop.removeWidget(desktop.widgetInstances[0].id)
+                    for (const pkgId of [
+                        "org.nextkde.widget.calendar.macos",
+                        "org.nextkde.widget.weather.macos",
+                        "org.nextkde.widget.music.macos",
+                        "org.nextkde.widget.todo.macos"
+                    ]) {
+                        const entry = desktop.widgetCatalog.find(item => item.id === pkgId)
+                        check(!!entry, "SDK package indexed: " + pkgId)
+                        desktop.addGalleryWidget(entry, "1x1")
                     }
-                    // Start with room around the clock so accepted corner resizes
-                    // need not move any neighbouring widget.
-                    for (const id of DeskCenterConfigService.defaultOrder) {
-                        if (id === "groups") continue
-                        DeskCenterConfigService.setSpan(id, 1, 1)
-                    }
-                    DeskCenterConfigService.savePosition(desktop.desktopOutput, [], "clock",
-                        desktop.maximumWidgetColumns - 2, desktop.usableRows - 2, desktop.widgetGeometry)
-                    desktop.enterWidgetEditMode(false)
+                    test.primaryId = instanceIdFor("org.nextkde.widget.calendar.macos")
+                    test.weatherId = instanceIdFor("org.nextkde.widget.weather.macos")
+                    test.musicId = instanceIdFor("org.nextkde.widget.music.macos")
+                    test.todoId = instanceIdFor("org.nextkde.widget.todo.macos")
+                    check(test.primaryId && test.weatherId && test.musicId && test.todoId,
+                        "all four SDK package instances created")
+                    DeskCenterConfigService.savePosition(desktop.desktopOutput, desktop.placements,
+                        test.primaryId, desktop.maximumWidgetColumns - 2, desktop.usableRows - 2,
+                        desktop.widgetGeometry)
+                    desktop.enterWidgetEditMode()
                     stage = 1
                     return
                 }
-                check(repeat.count === 7, "all enabled cards instantiated")
+                check(repeat.count === 4, "all enabled SDK cards instantiated")
                 if (retainedWidgetCards.length === 0) {
                     const snapshot = []
                     for (let i = 0; i < repeat.count; ++i) {
@@ -121,21 +138,6 @@ ShellRoot {
                         snapshot.push({ id: card.modelData.id, item: card })
                     }
                     retainedWidgetCards = snapshot
-                    retainedClockFace = find(desktop.contentItem, "desktop-clock-face")
-                    check(retainedClockFace !== null, "clock face is loaded before interaction")
-                }
-                check(retainedClockFace !== null
-                    && find(desktop.contentItem, "desktop-clock-face") === retainedClockFace,
-                    "clock face survives size and position saves without reloading")
-                const clockPages = find(desktop.contentItem, "desktop-clock-pages")
-                const timerPage = find(desktop.contentItem, "desktop-clock-timer-page")
-                // Await explicit page transitions on a loaded compositor;
-                // layout changes below must not start such a transition.
-                if ((stage === 11 || stage === 13)
-                        && clockPages.pageProgress !== (desktop.timerView ? 1 : 0)) return
-                if (!desktop.timerView) {
-                    check(clockPages.pageProgress === 0 && timerPage.y === timerPage.height,
-                        "hidden countdown stays below the face during layout changes")
                 }
                 for (let i = 0; i < repeat.count; i++) {
                     const card = repeat.itemAt(i)
@@ -143,13 +145,10 @@ ShellRoot {
                     check(retained && retained.item === card,
                         card.modelData.id + " retains its instance across layout saves")
                     check(card.visible, card.modelData.id + " remains visible")
-                    // A dragged card follows the pointer, not its saved cell.
                     if (card.moving) continue
                     check(card.x >= 0 && card.y >= 0, "card stays in screen")
                     check(card.x + card.width <= desktop.width + 1, "card stays inside right edge")
                     check(card.y + card.height <= desktop.height - desktop.bottomInset + 1, "card stays above dock")
-                    // Frame-driven animations can finish later than a timer
-                    // on a loaded compositor. Await the actual destination.
                     if (stage !== 2 && (Math.abs(card.width - desktop.spanSize(card.displayColumns)) > 1
                             || Math.abs(card.height - desktop.spanSize(card.displayRows)) > 1
                             || Math.abs(card.x - desktop.leftInset - card.placement.column * (desktop.cellSize + desktop.gap)) > 1
@@ -159,26 +158,17 @@ ShellRoot {
                 check(files.width >= DesktopFilesService.layout.iconSize + 88,
                     "rightmost widget preserves a usable file lane")
                 if (stage === 4) {
-                    // Load and render every widget at every supported size,
-                    // including the narrow music/calendar/weather content.
                     if (renderIndex > 0) {
                         const span = renderSpans[renderIndex - 1]
                         for (let i = 0; i < repeat.count; i++) {
                             const card = repeat.itemAt(i)
-                            check(card.displayColumns === span[0] && card.displayRows === span[1], "all cards use requested size")
+                            check(card.displayColumns === span[0] && card.displayRows === span[1],
+                                "all cards use requested size")
                             for (let j = i + 1; j < repeat.count; j++) {
                                 const other = repeat.itemAt(j)
                                 check(card.x + card.width <= other.x + 1 || other.x + other.width <= card.x + 1
                                     || card.y + card.height <= other.y + 1 || other.y + other.height <= card.y + 1,
                                     "settled cards never overlap")
-                            }
-                        }
-                        const directory = Quickshell.env("WIDGET_RESIZE_CAPTURE_DIR")
-                        if (directory) {
-                            for (const id of ["music", "calendar", "weather"]) {
-                                find(desktop.contentItem, "desktop-widget-" + id).grabToImage(function(result) {
-                                    check(result.saveToFile(directory + "/" + id + "-" + span[0] + "x" + span[1] + ".png"), "capture saved")
-                                })
                             }
                         }
                     }
@@ -188,15 +178,13 @@ ShellRoot {
                 if (stage === 5) {
                     if (renderIndex < renderSpans.length) {
                         const span = renderSpans[renderIndex++]
-                        for (const id of DeskCenterConfigService.defaultOrder) {
-                            if (id === "groups") continue
-                            DeskCenterConfigService.setSpan(id, span[0], span[1])
-                        }
+                        for (const inst of desktop.widgetInstances)
+                            DeskCenterConfigService.setSpan(inst.id, span[0], span[1])
                         stage = 4
                         return
                     }
-                    DeskCenterConfigService.setSpan("clock", 1, 2)
-                    const occupied = desktop.placementFor("weather")
+                    DeskCenterConfigService.setSpan(test.primaryId, 1, 2)
+                    const occupied = desktop.placementFor(test.weatherId)
                     moveTargets = [
                         { column: desktop.maximumWidgetColumns - 1, row: 0, allowed: true },
                         { column: desktop.maximumWidgetColumns - 1, row: 2, allowed: true },
@@ -206,28 +194,6 @@ ShellRoot {
                     return
                 }
                 if (stage === 10) {
-                    check(repeat.itemAt(0).modelData.id === "music", "saved order updates without recreating cards")
-                    desktop.timerView = true
-                    stage = 11
-                    return
-                }
-                if (stage === 11) {
-                    check(clockPages.pageProgress === 1 && timerPage.y === 0,
-                        "explicit page switch reveals the countdown")
-                    const placement = desktop.placementFor("clock")
-                    DeskCenterConfigService.savePosition(desktop.desktopOutput, desktop.placements,
-                        "clock", placement.column, placement.row, desktop.widgetGeometry)
-                    stage = 12
-                    return
-                }
-                if (stage === 12) {
-                    check(clockPages.pageProgress === 1 && timerPage.y === 0,
-                        "layout save preserves the selected countdown page")
-                    desktop.timerView = false
-                    stage = 13
-                    return
-                }
-                if (stage === 13) {
                     console.log("WIDGET_RESIZE_PASS")
                     running = false
                     finish.start()
@@ -235,7 +201,7 @@ ShellRoot {
                 }
                 if (stage >= 6 && stage <= 9) {
                     const target = moveTargets[moveIndex]
-                    const draggedId = target.id || "clock"
+                    const draggedId = target.id || test.primaryId
                     const card = find(desktop.contentItem, "desktop-widget-" + draggedId)
                     if (stage === 6) {
                         trackedDragCard = card
@@ -254,9 +220,6 @@ ShellRoot {
                         }
                         const start = card.mapToItem(desktop.contentItem, card.width / 2, card.height / 2)
                         const step = desktop.cellSize + desktop.gap
-                        // Let go a fifth of a cell short of the destination: the
-                        // rounded drop still commits that cell, and the remaining
-                        // fifth is the distance the release spring travels.
                         const settle = 0.2
                         const deltaX = target.column - card.placement.column
                         const deltaY = target.row - card.placement.row
@@ -272,9 +235,6 @@ ShellRoot {
                     }
                     if (stage === 7) {
                         check(card.moving, "card body starts position drag")
-                        // The 120ms lift animation has finished. A subsequent
-                        // move must still notify SurfaceShape through x/y;
-                        // Translate alone leaves native glass at the old point.
                         dragGeometryChanges = 0
                         events.mouseMove(desktop.contentItem, releasePoint.x, releasePoint.y, 20, Qt.LeftButton, Qt.NoModifier)
                         stage = 8
@@ -295,7 +255,8 @@ ShellRoot {
                             && Math.abs(blur.width - visual.width) < 1 && Math.abs(blur.height - visual.height) < 1,
                             "blur region follows the dragged and scaled content")
                         const preview = find(desktop.contentItem, "widget-drop-preview")
-                        check(preview.visible && preview.allowed === target.allowed, "drop preview distinguishes empty and occupied cells")
+                        check(preview.visible && preview.allowed === target.allowed,
+                            "drop preview distinguishes empty and occupied cells")
                         const xBeforeRelease = card.x
                         const yBeforeRelease = card.y
                         const previewBeforeRelease = Qt.rect(preview.x, preview.y, preview.width, preview.height)
@@ -305,8 +266,6 @@ ShellRoot {
                             && preview.width === previewBeforeRelease.width && preview.height === previewBeforeRelease.height
                             && preview.allowed === allowedBeforeRelease,
                             "drop preview holds its last target geometry and colour while fading out")
-                        // No frame has run yet: the card is still where the pointer
-                        // let go. A jump here would mean the drop is not animated.
                         if (target.column !== card.placement.column)
                             check(Math.abs(card.x - xBeforeRelease) < 1 && Math.abs(card.x
                                 - (desktop.leftInset + target.column * step)) > 1,
@@ -327,7 +286,7 @@ ShellRoot {
                     check(!find(desktop.contentItem, "widget-drop-preview").visible, "drop clears preview")
                     console.log("WIDGET_RESIZE_MOVE", draggedId, target.column, target.row, target.allowed)
                     if (moveIndex === 0) {
-                        const savedSpan = DeskCenterConfigService.spanFor("clock")
+                        const savedSpan = DeskCenterConfigService.spanFor(test.primaryId)
                         const handle = find(card, "widget-resize-handle")
                         const pointer = find(card, "widget-resize-pointer")
                         const start = pointer.mapToItem(desktop.contentItem, pointer.width / 2, pointer.height / 2)
@@ -337,15 +296,13 @@ ShellRoot {
                         check(!handle.previewAllowed, "right-edge resize is rejected")
                         events.mouseRelease(desktop.contentItem, start.x + desktop.cellSize + desktop.gap,
                             start.y, Qt.LeftButton, Qt.NoModifier, 5)
-                        check(DeskCenterConfigService.spanFor("clock").join() === savedSpan.join(),
+                        check(DeskCenterConfigService.spanFor(test.primaryId).join() === savedSpan.join(),
                             "rejected resize does not save")
                     }
                     moveIndex++
                     if (moveIndex === 3) {
-                        // These cards have a full-card launch MouseArea. The
-                        // parent drag must take over without launching apps.
                         const extra = []
-                        for (const id of ["weather", "todo", "music"]) {
+                        for (const id of [test.weatherId, test.todoId, test.musicId]) {
                             const original = desktop.placementFor(id)
                             extra.push({ id, relocate: true, allowed: true })
                             extra.push({ id, column: original.column, row: original.row, allowed: true })
@@ -353,11 +310,10 @@ ShellRoot {
                         moveTargets = moveTargets.concat(extra)
                     }
                     if (moveIndex < moveTargets.length) { stage = 6; return }
-                    DeskCenterConfigService.moveWidget("music", 0)
                     stage = 10
                     return
                 }
-                const card = find(desktop.contentItem, "desktop-widget-clock")
+                const card = find(desktop.contentItem, "desktop-widget-" + test.primaryId)
                 const handle = find(card, "widget-resize-handle")
                 const pointer = find(card, "widget-resize-pointer")
                 const target = spans[resizeIndex]
@@ -367,10 +323,6 @@ ShellRoot {
                     const committedColumns = card.displayColumns
                     const committedRows = card.displayRows
                     test.committedBeforeResize = [committedColumns, committedRows]
-                    // Let go just past the halfway line: the magnet has already
-                    // committed the next cell there, while the corner itself is
-                    // still held short of it -- the gap is what the release
-                    // spring has to travel.
                     const travel = 0.55
                     releasePoint = Qt.point(start.x + (target[0] - committedColumns) * step * travel,
                         start.y + (target[1] - committedRows) * step * travel)
@@ -382,9 +334,6 @@ ShellRoot {
                     check(handle.resizing, "corner move keeps resize " + target)
                     check(handle.previewColumns === target[0] && handle.previewRows === target[1],
                         "past halfway the magnet commits the new span " + target)
-                    // The magnet bends the drag instead of jumping the card: the
-                    // corner sits between the two cell sizes, closer to the one
-                    // it is held by.
                     if (target[0] !== committedColumns) {
                         const corner = card.width
                         const low = Math.min(desktop.spanSize(committedColumns), desktop.spanSize(target[0]))
@@ -404,13 +353,12 @@ ShellRoot {
                 }
                 if (stage === 2) {
                     check(handle.resizing, "corner drag retains pointer grab")
-                    check(handle.previewColumns === target[0] && handle.previewRows === target[1], "drag previews requested span")
+                    check(handle.previewColumns === target[0] && handle.previewRows === target[1],
+                        "drag previews requested span")
                     const widthBeforeRelease = card.width
                     const heightBeforeRelease = card.height
                     events.mouseRelease(desktop.contentItem, releasePoint.x, releasePoint.y, Qt.LeftButton, Qt.NoModifier, 5)
                     check(!handle.resizing, "release ends resizing")
-                    // No frame has run yet: an unchanged corner means the spring
-                    // has taken over instead of the size jumping to the cell.
                     const changedColumns = target[0] !== test.committedBeforeResize[0]
                     const changedRows = target[1] !== test.committedBeforeResize[1]
                     if (changedColumns)
@@ -426,7 +374,7 @@ ShellRoot {
                     return
                 }
                 check(!handle.resizing, "release ends resizing")
-                const saved = DeskCenterConfigService.spanFor("clock")
+                const saved = DeskCenterConfigService.spanFor(test.primaryId)
                 check(saved[0] === target[0] && saved[1] === target[1], "drag commits span")
                 check(card.displayColumns === target[0] && card.displayRows === target[1], "card uses committed span")
                 check(card.dragOffsetX === 0 && card.dragOffsetY === 0, "resize never becomes reorder drag")

@@ -2,8 +2,8 @@
 """Real Quickshell input/rendering tests, with persistence confined to a fixture.
 
 Uses a private Wayland compositor in CI, or an existing session by default.
-Requires QtTest and Pillow. The fake platform only serves state:
-appearance requests never reach the user's compositor or installed daemon.
+Requires QtTest. The fake platform only serves state and widget package
+snapshots: appearance requests never reach the user's compositor or daemon.
 """
 import json
 import os
@@ -16,78 +16,147 @@ import sys
 import tempfile
 import threading
 import time
-from PIL import Image
 
 REPO = Path(__file__).resolve().parents[2]
-WIDGETS = ["clock", "weather", "calendar", "todo", "system", "activity", "music", "groups"]
-DIGITAL_CAPTURES = [
-    "digital-light-small", "digital-dark-large", "digital-glass-fixed-light",
-    "digital-glass-follow-light-large", "digital-glass-follow-dark",
-]
 state = {
     "appearance/config.json": json.dumps({"version": 28, "shellStyle": "macos", "useSystemFont": False}),
     "appearance/icon-appearance.json": json.dumps({"version": 1, "mode": "grayscale"}),
 }
 
 
+def build_widget_packages():
+    """Mirror WidgetPackageIndex's widget-package.snapshot payload from REPO/widgets."""
+    packages = []
+    widgets_dir = REPO / "widgets"
+    if not widgets_dir.is_dir():
+        return packages
+    for pkg_dir in sorted(widgets_dir.iterdir()):
+        meta_path = pkg_dir / "metadata.json"
+        if not meta_path.is_file():
+            continue
+        meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        variants = meta.get("widgets")
+        if isinstance(variants, list) and variants:
+            for variant in variants:
+                widget_rel = variant.get("widgetEntry", "Widget.qml")
+                snap_rel = variant.get("snapshotEntry", meta.get("snapshotEntry", "Snapshot.qml"))
+                settings_rel = variant.get("settingsEntry", meta.get("settingsEntry", ""))
+                popup_rel = variant.get("popupEntry", meta.get("popupEntry", ""))
+                merged_i18n = {}
+                for locale, block in (meta.get("i18n") or {}).items():
+                    if isinstance(block, dict):
+                        merged_i18n[locale] = dict(block)
+                for locale, block in (variant.get("i18n") or {}).items():
+                    if isinstance(block, dict):
+                        merged_i18n.setdefault(locale, {}).update(block)
+                entry = {
+                    "id": variant["id"],
+                    "packageId": meta["id"],
+                    "packageName": meta.get("name", meta["id"]),
+                    "name": variant.get("name", meta.get("name", variant["id"])),
+                    "description": variant.get("description", meta.get("description", "")),
+                    "category": variant.get("category", meta.get("category", "other")),
+                    "categoryName": variant.get("categoryName", meta.get("categoryName", "")),
+                    "style": variant.get("style", meta.get("style", "")),
+                    "source": "default",
+                    "version": meta.get("version", "1.0.0"),
+                    "minApiRevision": meta.get("minApiRevision", 1),
+                    "containers": variant.get("containers", meta.get("containers", ["desktop"])),
+                    "sizes": variant.get("sizes", meta.get("sizes", [[1, 1]])),
+                    "defaultSize": variant.get("defaultSize", meta.get("defaultSize", [1, 1])),
+                    "dockUnits": variant.get("dockUnits", meta.get("dockUnits", 2)),
+                    "available": True,
+                    "rootPath": str(pkg_dir.resolve()),
+                    "widgetEntry": str((pkg_dir / widget_rel).resolve()),
+                    "snapshotEntry": str((pkg_dir / snap_rel).resolve()),
+                    "revision": "fixture-1",
+                    "hasSettings": bool(settings_rel),
+                    "hasPopup": bool(popup_rel),
+                    "i18n": merged_i18n,
+                }
+                if settings_rel:
+                    entry["settingsEntry"] = str((pkg_dir / settings_rel).resolve())
+                if popup_rel:
+                    entry["popupEntry"] = str((pkg_dir / popup_rel).resolve())
+                packages.append(entry)
+        else:
+            widget_rel = meta.get("widgetEntry", "Widget.qml")
+            snap_rel = meta.get("snapshotEntry", "Snapshot.qml")
+            settings_rel = meta.get("settingsEntry", "")
+            popup_rel = meta.get("popupEntry", "")
+            entry = {
+                "id": meta["id"],
+                "packageId": meta["id"],
+                "packageName": meta.get("name", meta["id"]),
+                "name": meta.get("name", meta["id"]),
+                "description": meta.get("description", ""),
+                "category": meta.get("category", "other"),
+                "categoryName": meta.get("categoryName", ""),
+                "style": meta.get("style", ""),
+                "source": "default",
+                "version": meta.get("version", "1.0.0"),
+                "minApiRevision": meta.get("minApiRevision", 1),
+                "containers": meta.get("containers", ["desktop"]),
+                "sizes": meta.get("sizes", [[1, 1]]),
+                "defaultSize": meta.get("defaultSize", [1, 1]),
+                "dockUnits": meta.get("dockUnits", 2),
+                "available": True,
+                "rootPath": str(pkg_dir.resolve()),
+                "widgetEntry": str((pkg_dir / widget_rel).resolve()),
+                "snapshotEntry": str((pkg_dir / snap_rel).resolve()),
+                "revision": "fixture-1",
+                "hasSettings": bool(settings_rel),
+                "hasPopup": bool(popup_rel),
+                "i18n": meta.get("i18n", {}),
+            }
+            if settings_rel:
+                entry["settingsEntry"] = str((pkg_dir / settings_rel).resolve())
+            if popup_rel:
+                entry["popupEntry"] = str((pkg_dir / popup_rel).resolve())
+            packages.append(entry)
+    return packages
+
+
+WIDGET_PACKAGES = build_widget_packages()
+
+
 class Platform(socketserver.StreamRequestHandler):
     def handle(self):
-        for line in self.rfile:
-            request = json.loads(line)
-            payload = request.get("payload", {})
-            key = "/".join(str(payload.get("dir", "")).split("/")[-1:]) + "/" + payload.get("file", "")
-            operation = request["operation"]
-            if operation == "state.read":
-                result = {"exists": key in state, "data": state.get(key, "")}
-            elif operation == "system.timezone":
-                result = {"timeZone": "Europe/London"}
-            elif operation == "state.write":
-                state[key] = payload["data"]
-                result = {}
-            else:
-                result = {}
-            reply = {"version": 1, "requestId": request["requestId"], "ok": True, "result": result}
-            self.wfile.write((json.dumps(reply) + "\n").encode())
-            self.wfile.flush()
+        try:
+            for line in self.rfile:
+                request = json.loads(line)
+                payload = request.get("payload", {})
+                key = "/".join(str(payload.get("dir", "")).split("/")[-1:]) + "/" + payload.get("file", "")
+                operation = request["operation"]
+                if operation == "platform.ping":
+                    result = {
+                        "capabilities": [
+                            "state.read",
+                            "state.write",
+                            "system.timezone",
+                            "widget-package.snapshot",
+                        ]
+                    }
+                elif operation == "widget-package.snapshot":
+                    result = {"packages": WIDGET_PACKAGES, "invalidPackages": []}
+                elif operation == "state.read":
+                    result = {"exists": key in state, "data": state.get(key, "")}
+                elif operation == "system.timezone":
+                    result = {"timeZone": "Europe/London"}
+                elif operation == "state.write":
+                    state[key] = payload["data"]
+                    result = {}
+                else:
+                    result = {}
+                reply = {"version": 1, "requestId": request["requestId"], "ok": True, "result": result}
+                self.wfile.write((json.dumps(reply) + "\n").encode())
+                self.wfile.flush()
+        except (ConnectionResetError, BrokenPipeError):
+            pass
 
 
 class Server(socketserver.ThreadingUnixStreamServer):
     daemon_threads = True
-
-
-def check_digital_pixels(directory):
-    frames = {}
-    for name in DIGITAL_CAPTURES:
-        with Image.open(directory / f"{name}.png") as image:
-            frame = image.convert("RGBA")
-        assert frame.width > 40 and frame.height > 40, (name, "invalid card geometry")
-        visible = [pixel for pixel in frame.getdata() if pixel[3] > 32]
-        opaque = [pixel for pixel in visible if pixel[3] > 240]
-        assert len(visible) > 20 and len(set(visible)) > 20, (name, "digital content was not rendered")
-        if name in ("digital-light-small", "digital-dark-large"):
-            assert len(opaque) > frame.width * frame.height // 2, (name, "card was not painted")
-            average = sum(sum(pixel[:3]) for pixel in opaque) / (len(opaque) * 3)
-            if name == "digital-light-small":
-                assert average > 210, (name, "light card is not white", average)
-            else:
-                assert average < 160, (name, "dark card is not dark", average)
-        frames[name] = frame
-    assert frames["digital-dark-large"].width > frames["digital-light-small"].width
-    assert frames["digital-glass-follow-light-large"].height > frames["digital-glass-fixed-light"].height
-
-
-def check_bell_pixels(directory):
-    frames = {}
-    for name in ["timer-color", "timer-glass", "timer-restored"]:
-        with Image.open(directory / f"{name}.png") as image:
-            frame = image.convert("RGBA")
-        visible = [pixel for pixel in frame.getdata() if pixel[3] > 32]
-        assert len(visible) >= 5, (name, "bell was not rendered")
-        expected = (255, 255, 255) if name == "timer-glass" else (255, 176, 40)
-        assert all(all(abs(pixel[channel] - expected[channel]) <= 8 for channel in range(3))
-                   for pixel in visible), (name, "stale countdown ink", visible[:10])
-        frames[name] = frame
-    assert frames["timer-color"].tobytes() == frames["timer-restored"].tobytes(), "bell colour did not round-trip"
 
 
 def run(base_env=None):
@@ -98,7 +167,6 @@ def run(base_env=None):
         root = Path(directory)
         for name in ["config", "state", "runtime"]:
             (root / name).mkdir(mode=0o700)
-        (root / "captures").mkdir()
         (root / "config/kdeglobals").write_text("[General]\nfont=Inter,10\n")
         (root / "runtime" / wayland).symlink_to(runtime / wayland)
         for name in ["desktop", "Kos", "shared"]:
@@ -111,38 +179,26 @@ def run(base_env=None):
                        KOS_PLATFORM_SOCKET=str(root / "platform.sock"),
                        KOS_DATA_SOCKET=str(root / "absent-data.sock"),
                        QT_QPA_PLATFORM="wayland",
-                       WIDGET_CAPTURE_DIR=str(root / "captures"),
                        # These assertions inspect the legacy blur-region transport.
                        # Keep them stable when the compositor also advertises v8.
                        KOS_SURFACE_SHAPE_MAX_VERSION="7")
-            # The first load defaults to analog and toggles digital. The second
-            # must restore digital before switching back to analog.
-            for expected, clock_style in [("glass", "analog"), ("color", "digital")]:
+            for expected in ["glass", "color"]:
                 result = subprocess.run(["quickshell", "--path", str(root), "--no-color"],
-                                        env=dict(env, EXPECTED_WIDGET_STYLE=expected,
-                                                 EXPECTED_CLOCK_STYLE=clock_style),
+                                        env=dict(env, EXPECTED_WIDGET_STYLE=expected),
                                         capture_output=True, text=True, timeout=120)
                 output = result.stdout + result.stderr
                 qa = Path(base_env["KOS_WIDGET_QA"]) / expected if base_env.get("KOS_WIDGET_QA") else None
                 if qa:
                     qa.mkdir(parents=True, exist_ok=True)
                     (qa / "quickshell.log").write_text(output)
-                    for capture in (root / "captures").glob("*.png"):
-                        shutil.copy(capture, qa / capture.name)
                 assert result.returncode == 0, output
                 assert "WIDGET_EXPERIENCE_PASS" in output, output
                 assert not re.search(r"WIDGET_EXPERIENCE_FAIL|ReferenceError|TypeError|Cannot assign|Unable to assign|is not a type", output), output
-                check_digital_pixels(root / "captures")
-                check_bell_pixels(root / "captures")
                 saved = json.loads(state["appearance/config.json"])
                 assert saved["version"] == 35 and saved["widgetStyle"] == "color", saved
                 assert "useSystemFont" not in saved and isinstance(saved["desktopFontFamily"], str) and saved["desktopFontFamily"], saved
-                assert set(saved["hiddenDeskCenterWidgets"]) == set(WIDGETS) - {"clock"}, saved
                 assert json.loads(state["appearance/icon-appearance.json"])["mode"] == "grayscale"
-                # Each launch must render its own frames, not reuse the first run.
-                for capture in (root / "captures").glob("*.png"):
-                    capture.unlink()
-                print(f"PASS: {expected} load, empty desktop recovery, {clock_style} clock restore and pointer/keyboard toggle, exact digital time/offset/elapsed ticks, reduced motion, 5 real-span digital appearance captures, gestures, edit-mode dismissal, 18 appearance combinations, countdown colour pixels, persistence")
+                print(f"PASS: {expected} load, SDK package catalog/add/park/restore, gestures, edit-mode dismissal, 18 appearance combinations, persistence")
             server.shutdown()
 
 

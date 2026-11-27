@@ -15,7 +15,7 @@ import { test } from "node:test";
 // constant margin fails here instead of on a user's desktop.
 
 const source = readFileSync(
-    new URL("../../shell/desktop/modules/deskcenter/DeskCenterWindow.qml", import.meta.url), "utf8");
+    new URL("../../widgets/org.nextkde.widget.weather/WeatherContent.qml", import.meta.url), "utf8");
 
 function sliceAfter(marker) {
     const at = source.indexOf(marker);
@@ -28,6 +28,9 @@ function sliceAfter(marker) {
 const LINE = 1.5;
 const TOP_TEMP_MARGIN = 29;
 const TOP_SYMBOL_MARGIN = 14;
+const TEMP_AVAIL = 38;
+const TEMP_LINE = 1.4;
+const SYMBOL_AVAIL = 64;
 const FORECAST_BOTTOM_MARGIN = 8;
 const HIGHLOW_BOTTOM_MARGIN = 3;
 
@@ -36,7 +39,7 @@ function overlap(a, b) {
 }
 
 function geometry(cardHeight) {
-    const forecastHeight = Math.min(62, cardHeight * 0.46);
+    const forecastHeight = Math.min(62, cardHeight * 0.44);
     const forecastTop = cardHeight - FORECAST_BOTTOM_MARGIN - forecastHeight;
     const highLowBottom = forecastTop - HIGHLOW_BOTTOM_MARGIN;
     const highLowHeight = 11 * 1.4; // 11 px DemiBold, ~1.4 line box
@@ -49,30 +52,30 @@ function geometry(cardHeight) {
 
 function tempBox(cardHeight, forecastHeight) {
     const size = Math.min(42, cardHeight * 0.32,
-        Math.max(16, (cardHeight - forecastHeight - 38) / LINE));
-    return { top: TOP_TEMP_MARGIN, bottom: TOP_TEMP_MARGIN + size * LINE };
+        Math.max(18, (cardHeight - forecastHeight - TEMP_AVAIL) / TEMP_LINE));
+    return { top: TOP_TEMP_MARGIN, bottom: TOP_TEMP_MARGIN + size * TEMP_LINE };
 }
 
 function symbolBox(cardHeight, forecastHeight) {
     const size = Math.min(34, cardHeight * 0.26,
-        Math.max(16, (cardHeight - forecastHeight - 72) * 0.75));
+        Math.max(18, (cardHeight - forecastHeight - SYMBOL_AVAIL) * 0.75));
     return { top: TOP_SYMBOL_MARGIN, bottom: TOP_SYMBOL_MARGIN + size * LINE };
 }
 
 test("deskcenter weather card #205", async () => {
     // ── the temperature size formula carries the availability term ──
-    const tempText = sliceAfter("text: WeatherService.temperature");
-    assert.match(tempText, /Math\.min\(42,\s*parent\.height \* 0\.32,\s*\n?\s*Math\.max\(16, \(parent\.height - weeklyForecast\.height - 38\) \/ 1\.5\)\)/,
+    const tempText = sliceAfter("text: String(root.weatherData?.temperatureText");
+    assert.match(tempText, /Math\.min\(root\.compact \? 34 : 42,\s*parent\.height \* 0\.32,\s*\n?\s*Math\.max\(18, \(parent\.height - weeklyForecast\.height - 38\) \/ 1\.4\)\)/,
         "temperature size must shrink with the band above the weekly forecast"
         + " (issue #205)");
 
     // ── the condition symbol size carries its own availability term ──
-    const symbolText = sliceAfter("text: WeatherService.conditionSymbol");
-    assert.match(symbolText, /Math\.min\(34,\s*parent\.height \* 0\.26,\s*\n?\s*Math\.max\(16, \(parent\.height - weeklyForecast\.height - 72\) \* 0\.75\)\)/,
+    const symbolText = sliceAfter("text: String(root.weatherData?.conditionSymbol");
+    assert.match(symbolText, /Math\.min\(34,\s*parent\.height \* 0\.26,\s*\n?\s*Math\.max\(18, \(parent\.height - weeklyForecast\.height - 64\) \* 0\.75\)\)/,
         "condition symbol size must shrink with the band above the forecast");
 
     // ── the condition text follows the symbol, never a constant margin ──
-    const block = source.match(/id: weatherConditionSymbol[\s\S]*?font \{ pixelSize: 15/);
+    const block = source.match(/id: weatherConditionSymbol[\s\S]*?font \{ pixelSize: root\.compact \? 11 : 15/);
     assert.ok(block, "condition text block moved; update this test");
     assert.match(block[0], /top:\s*weatherConditionSymbol\.bottom/,
         "condition text must anchor below the symbol (constant topMargin 48"

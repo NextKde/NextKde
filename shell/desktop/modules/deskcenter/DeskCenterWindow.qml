@@ -166,6 +166,19 @@ PanelWindow {
     readonly property real galleryX: root.leftInset + (root.width - root.leftInset - root.rightInset - galleryWidth) / 2
     readonly property real galleryY: Math.max(root.topInset + 44, root.height - galleryHeight)
     property var activeDragCard: null
+    // The loaded grouped content, if the card is on screen. Its own editor is
+    // the only visible rename surface while the normal icon field is hidden.
+    property var groupsContentItem: null
+
+    function beginGroupsRename(entry) {
+        const path = entry?.path ?? ""
+        if (!path || !groupsContentItem)
+            return
+        Qt.callLater(function() {
+            if (root.groupsContentItem)
+                root.groupsContentItem.beginRename(path)
+        })
+    }
     // Self-clearing: without this, a one-off "added"/"no room" message from
     // addGalleryWidget()/resizeNamedWidget() would sit in the gallery footer
     // forever, since nothing else routinely overwrites it back to "".
@@ -429,7 +442,15 @@ PanelWindow {
     // runs dynamically through WidgetPackageHost.
     property var widgetCatalog: WidgetPackageService.packages
     property var widgetInstances: []
-    readonly property var widgetDefinitions: {
+    readonly property bool groupsWidgetVisible:
+        !AppearanceConfigService.isDeskCenterWidgetHidden("groups")
+    // Widgets are authored on the active output only; the grouped view follows
+    // that rule, and only its own output hides the normal file icons.
+    readonly property bool groupsWidgetShown:
+        groupsWidgetVisible
+        && !!groupsPlacement
+        && root.screen?.name === ScreenLifecycle.activeScreen?.name
+    readonly property var flowWidgetDefinitions: {
         const revision = DeskCenterConfigService.revision
         const sizes = DeskCenterConfigService.parsedSizes()
         const positions = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)
@@ -445,6 +466,31 @@ PanelWindow {
             })
         })
     }
+    readonly property var groupsWidgetDefinition: {
+        const revision = DeskCenterConfigService.revision
+        if (!groupsWidgetVisible)
+            return null
+        const span = DeskCenterConfigService.spanFor("groups")
+        const positions = DeskCenterConfigService.displayPositionsForOutput(desktopOutput, widgetGeometry)
+        const position = positions["groups"]
+        const rows = Math.min(span[1], usableRows)
+        if (rows < 2)
+            return null
+        return {
+            id: "groups",
+            title: I18n.tr("Grouped View"),
+            surface: false,
+            startColor: "#51415d",
+            endColor: "#332a3d",
+            columns: span[0],
+            rows: rows,
+            column: position?.column,
+            row: position?.row
+        }
+    }
+    readonly property var widgetDefinitions: groupsWidgetDefinition
+        ? flowWidgetDefinitions.concat([groupsWidgetDefinition])
+        : flowWidgetDefinitions
 
     FontMetrics { id: desktopFileFontMetrics }
     readonly property var reservedFileMetrics: DesktopGridMetrics.metrics(
@@ -458,10 +504,17 @@ PanelWindow {
             / (reservedFileMetrics.cellHeight + reservedFileMetrics.gap)))
     readonly property string widgetGeometry: maximumWidgetColumns + ":" + usableRows
 
-    readonly property var widgetLayout: WidgetLayout.fitWidgets(
-        widgetDefinitions, 4, maximumWidgetColumns, usableRows)
-    readonly property var placements: widgetLayout.placements
-    readonly property int widgetColumns: widgetLayout.columns
+    readonly property var flowWidgetLayout: WidgetLayout.fitWidgets(
+        flowWidgetDefinitions, 4, maximumWidgetColumns, usableRows)
+    readonly property var flowPlacements: flowWidgetLayout.placements
+    readonly property var groupsPlacement: groupsWidgetDefinition
+        ? WidgetLayout.placeAnchoredWidget(groupsWidgetDefinition,
+            flowPlacements, columns, usableRows)
+        : null
+    readonly property var placements: groupsPlacement
+        ? flowPlacements.concat([groupsPlacement])
+        : flowPlacements
+    readonly property int widgetColumns: flowWidgetLayout.columns
 
     function resizeWidget(widgetId, columns, rows) {
         const placement = placementFor(widgetId)
@@ -473,12 +526,13 @@ PanelWindow {
         const definition = widgetDefinitions.find(widget => widget.id === widgetId)
         const limit = WidgetLayout.declaredSizeCeiling(definition?.sizes) ?? WidgetLayout.maxSpanFor(widgetId)
         const minimum = WidgetLayout.declaredSizeFloor(definition?.sizes) ?? WidgetLayout.minSpanFor(widgetId)
+        const maxColumns = widgetId === "groups" ? root.columns : maximumWidgetColumns
         if (!WidgetLayout.isValidSize(widgetId, columns + "x" + rows)
                 || columns < minimum[0] || rows < minimum[1] || columns > limit[0]
                 || rows > limit[1] || !placement
                 || !WidgetLayout.canPlace(placements, widgetId,
                 placement.column, placement.row, columns, rows,
-                maximumWidgetColumns, usableRows)) return false
+                maxColumns, usableRows)) return false
         if (!DeskCenterConfigService.savePosition(desktopOutput, placements,
                 widgetId, placement.column, placement.row, widgetGeometry))
             return false
@@ -794,7 +848,9 @@ PanelWindow {
                 WidgetLayout.declaredSizeCeiling(modelData.sizes) ?? WidgetLayout.maxSpanFor(widgetId)
             readonly property var sizeFloor:
                 WidgetLayout.declaredSizeFloor(modelData.sizes) ?? WidgetLayout.minSpanFor(widgetId)
-            readonly property int maxDropColumns: root.maximumWidgetColumns
+            readonly property int maxDropColumns: modelData.id === "groups"
+                ? root.columns : root.maximumWidgetColumns
+            allowColorArtwork: modelData.id !== "groups"
             readonly property var dropPosition: WidgetLayout.snappedPosition(
                 x - root.leftInset, y - root.topInset,
                 displayColumns, displayRows, root.cellSize, root.gap,
@@ -1221,6 +1277,35 @@ PanelWindow {
             }
 
             Component {
+                id: groupsHostContent
+                DesktopGroupsContent {
+                    anchors.fill: parent
+                    entries: desktopFileGrid.screenEntries
+                    editing: root.editMode
+                    initialCategory: root.desktopFiles.layout.groupSelectedCategory
+                    showExtensions: desktopFileGrid.desktopLayout.showExtensions
+                    folderCustomizations: desktopFileGrid._folderCustomCache
+                    iconSize: desktopFileGrid.desktopLayout.iconSize
+                    renameCallback: function(entry, name) {
+                        return desktopFileGrid.commitRename(entry, name)
+                    }
+                    onCategorySelected: function(category) {
+                        root.desktopFiles.setGroupSelectedCategory(category)
+                    }
+                    onOpenEntryRequested: function(entry) {
+                        root.desktopFiles.openEntry(entry)
+                    }
+                    onContextMenuRequested: function(entry, x, y) {
+                        desktopFileGrid.setSelectedPaths(entry?.path ? [entry.path] : [])
+                        desktopFileGrid.showMenu(entry,
+                            Qt.point(x - desktopFileGrid.x, y - desktopFileGrid.y))
+                    }
+                    Component.onCompleted: root.groupsContentItem = this
+                    Component.onDestruction: if (root.groupsContentItem === this) root.groupsContentItem = null
+                }
+            }
+
+            Component {
                 id: packageHostContent
                 WidgetPackageHost {
                     anchors.fill: parent
@@ -1236,8 +1321,9 @@ PanelWindow {
                 }
             }
 
-            contentComponent: String(card.modelData.widgetEntry ?? "").length > 0
-                ? packageHostContent : null
+            contentComponent: card.modelData.id === "groups"
+                ? groupsHostContent
+                : (String(card.modelData.widgetEntry ?? "").length > 0 ? packageHostContent : null)
             contentEnabled: !root.editMode
         }
     }
@@ -1874,8 +1960,12 @@ PanelWindow {
                 createNewFile()
             else if (kind === "openEntry")
                 root.desktopFiles.openEntry(entry)
-            else if (kind === "rename")
-                beginInlineRename(entry)
+            else if (kind === "rename") {
+                if (root.groupsWidgetShown)
+                    root.beginGroupsRename(entry)
+                else
+                    beginInlineRename(entry)
+            }
             else if (kind === "openWithMore")
                 openWithDialog.show(entry)
             else if (kind === "trash") {
@@ -2008,6 +2098,9 @@ PanelWindow {
                 items.push(_ctxAct(I18n.tr("New Folder"), "newFolder"))
                 items.push(_ctxAct(I18n.tr("Paste"), "paste"))
                 items.push({ separator: true })
+                items.push(_ctxCheck(I18n.tr("Grouped View"), "toggleGroupsWidget",
+                    null, root.groupsWidgetVisible))
+                items.push({ separator: true })
                 const arrange = [
                     _ctxAct(I18n.tr("By Name"), "arrangeByName"),
                     _ctxAct(I18n.tr("By Type"), "arrangeByType"),
@@ -2085,6 +2178,12 @@ PanelWindow {
             case "setIconSize": setIconSize(v); break
             case "setIconSpacing": setIconSpacing(v); break
             case "setShortcutAlignment": setShortcutAlignment(v); break
+            case "toggleGroupsWidget": {
+                AppearanceConfigService.setDeskCenterWidgetVisible("groups",
+                    !root.groupsWidgetVisible)
+                desktopFileGrid.clearDesktopSelection()
+                break
+            }
             case "refresh": triggerContextAction("refresh"); break
             // Session entries live in a submenu; without these the menu closes
             // and the command is dropped.
@@ -2236,8 +2335,25 @@ PanelWindow {
         }
 
 
+        DropArea {
+            id: externalDesktopDrop
+            anchors.fill: parent
+            z: 20
+            enabled: root.groupsWidgetShown
+            onEntered: function(drag) {
+                drag.accepted = drag.hasUrls && !drag.source
+            }
+            onDropped: function(drop) {
+                if (!drop.hasUrls || drop.source)
+                    return
+                root.desktopFiles.dropExternalUrls(drop.urls, root.desktopOutput)
+                drop.acceptProposedAction()
+            }
+        }
+
         FreeSlotDesktopDemo {
             id: freeSlotDesktop
+            visible: !root.groupsWidgetShown
             x: -desktopFileGrid.x
             y: -desktopFileGrid.y
             width: root.width
