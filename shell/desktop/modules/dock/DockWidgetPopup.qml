@@ -16,6 +16,10 @@ AnimatedPopupWindow {
     property Item anchorItem: null
     property string dockEdge: "bottom" // "bottom" | "left" | "right"
     property var packageEntry: null
+    property var _latchedEntry: null
+    readonly property var effectiveEntry: packageEntry ?? _latchedEntry
+    onPackageEntryChanged: if (packageEntry) _latchedEntry = packageEntry
+    onVisibleChanged: if (!visible && !requestedOpen) _latchedEntry = null
 
     readonly property bool pointerInside: popupHover.hovered
     readonly property int fixedPopupWidth: 300
@@ -50,9 +54,9 @@ AnimatedPopupWindow {
             : (popup.dockEdge === "left" ? Edges.Right : Edges.Left)
         gravity: popup.dockEdge === "bottom" ? Edges.Top
             : (popup.dockEdge === "left" ? Edges.Right : Edges.Left)
-        margins.top: popup.dockEdge === "bottom" ? -12 : 0
-        margins.right: popup.dockEdge === "left" ? -12 : 0
-        margins.left: popup.dockEdge === "right" ? -12 : 0
+        margins.top: popup.dockEdge === "bottom" ? -8 : 0
+        margins.right: popup.dockEdge === "left" ? -8 : 0
+        margins.left: popup.dockEdge === "right" ? -8 : 0
     }
 
     function requestClose() { hide() }
@@ -69,41 +73,44 @@ AnimatedPopupWindow {
             cornerExponent: AppearanceTokens.shape.cornerExponent
             baseColor: ThemeService.backgroundColor
             surfaceOpacity: 1.0
+            tonalOpacity: AppearanceTokens.isMaterial ? 0.94 : -1
             scrimEnabled: AppearanceTokens.surface.usesBackdrop
             scrimLevel: "subtle"
-        }
 
-        Flickable {
-            id: popupFlick
-            anchors.fill: parent
-            clip: true
-            boundsBehavior: Flickable.StopAtBounds
-            contentWidth: width
-            contentHeight: Math.max(height, Math.round(popup.rawDesiredHeight))
-            interactive: contentHeight > height + 1
+            Flickable {
+                id: popupFlick
+                anchors.fill: parent
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                contentWidth: width
+                contentHeight: Math.max(height, Math.round(popup.rawDesiredHeight))
+                interactive: contentHeight > height + 1
+                onInteractiveChanged: if (!interactive) contentY = 0
 
-            WidgetPackageHost {
-                id: popupHost
-                x: 0
-                y: 0
-                width: popupFlick.width
-                height: popupFlick.contentHeight
-                useImplicitHeight: true
-                packageId: String(popup.packageEntry?.id ?? "")
-                instanceId: "dock:" + String(popup.packageEntry?.id ?? "")
-                widgetEntry: (popup.visible || popup.requestedOpen) && popup.packageEntry?.hasPopup
-                    ? String(popup.packageEntry?.popupEntry ?? "") : ""
-                packageRevision: String(popup.packageEntry?.revision ?? "")
-                containerType: "dock"
-                containerOrientation: popup.dockEdge === "bottom" ? "horizontal" : "vertical"
-                hostActive: popup.visible
-                widgetSize: [Math.max(2, Math.min(4, Number(popup.packageEntry?.dockUnits) || 4)), 1]
-                appearance: popup.popupAppearance
+                WidgetPackageHost {
+                    id: popupHost
+                    x: 0
+                    y: 0
+                    width: popupFlick.width
+                    height: popupFlick.contentHeight
+                    useImplicitHeight: true
+                    packageId: String(popup.effectiveEntry?.id ?? "")
+                    instanceId: "dock:" + String(popup.effectiveEntry?.id ?? "")
+                    widgetEntry: (popup.visible || popup.requestedOpen) && popup.effectiveEntry?.hasPopup
+                        ? String(popup.effectiveEntry?.popupEntry ?? "") : ""
+                    packageRevision: String(popup.effectiveEntry?.revision ?? "")
+                    containerType: "dock"
+                    containerOrientation: popup.dockEdge === "bottom" ? "horizontal" : "vertical"
+                    hostActive: popup.visible
+                    widgetSize: [Math.max(2, Math.min(4, Number(popup.effectiveEntry?.dockUnits) || 4)), 1]
+                    appearance: popup.popupAppearance
+                    onPackageIdChanged: popupFlick.contentY = 0
+                }
             }
-        }
 
-        HoverHandler {
-            id: popupHover
+            HoverHandler {
+                id: popupHover
+            }
         }
     }
 }

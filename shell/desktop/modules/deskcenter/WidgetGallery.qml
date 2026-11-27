@@ -98,6 +98,12 @@ Rectangle {
         // thinner backdrop with a deeper base tint and popup-level depth,
         // rather than chasing the launcher's exact blurSigma/scrimLevel.
         materialDepth: 1
+        tonalOpacity: AppearanceTokens.isMaterial ? 0.90 : -1
+        tonalColorOverride: AppearanceTokens.isMaterial
+            ? (AppearanceTokens.isDarkTheme
+                ? AppearanceTokens.colors.background
+                : AppearanceTokens.colors.surfaceContainerHighest)
+            : "transparent"
         baseColor: Qt.rgba(0, 0, 0, 0.22)
         scrimEnabled: AppearanceTokens.surface.usesBackdrop
         scrimLevel: "transparent"
@@ -451,7 +457,9 @@ Rectangle {
                                         gradientOrientation: _bgSpec?.orientation === "horizontal"
                                             ? Gradient.Horizontal : Gradient.Vertical
                                         showSurface: Boolean(_bgSpec)
-                                        materialSurfaceColor: AppearanceTokens.colors.layer1
+                                        materialSurfaceColor: AppearanceTokens.isDarkTheme
+                                            ? AppearanceTokens.colors.layer2
+                                            : AppearanceTokens.colors.surfaceContainerLow
                                         materialSurfaceShape: choice.entry.style === "material" && previewCard.loadedContent
                                             ? String(previewCard.loadedContent.surfaceShape || "roundedRect")
                                             : "roundedRect"
@@ -687,9 +695,11 @@ Rectangle {
                             ? Math.max(2, Math.min(4, Number(pkgEntry.dockUnits) || 4)) : 3
                         readonly property bool active: ConfigService.infoCardOrder.indexOf(modelData) >= 0
                         readonly property int activeIndex: ConfigService.infoCardOrder.indexOf(modelData)
-                        readonly property bool hasPopup: Boolean(pkgEntry
-                            && pkgEntry.hasPopup && String(pkgEntry.popupEntry || "").length > 0)
                         property real dragOffset: 0
+                        function toggleCard() {
+                            if (dockCard.active) ConfigService.removeInfoCard(dockCard.modelData)
+                            else ConfigService.addInfoCard(dockCard.modelData, ConfigService.infoCardOrder.length)
+                        }
 
                         width: Math.max(156, units * 46 + 24)
                         height: 110
@@ -754,6 +764,7 @@ Rectangle {
                                 id: dockPreviewLoader
                                 anchors.fill: parent
                                 anchors.margins: 4
+                                enabled: false
                                 active: root.visible && root.selectedCategory === "dock"
                                     && Boolean(dockCard.pkgEntry)
                                 sourceComponent: Component {
@@ -771,57 +782,21 @@ Rectangle {
                             }
                         }
 
-                        // Title + optional Popup preview pill on bottom row
-                        Row {
+                        Text {
                             anchors {
                                 left: parent.left; right: parent.right
-                                bottom: parent.bottom; margins: 8; bottomMargin: 7
+                                bottom: parent.bottom; margins: 8; bottomMargin: 10
                             }
-                            height: 26
-                            spacing: 6
-
-                            Text {
-                                width: Math.max(1, parent.width
-                                    - (popupPreviewBtn.visible ? popupPreviewBtn.width + 6 : 0))
-                                anchors.verticalCenter: parent.verticalCenter
-                                elide: Text.ElideRight
-                                text: dockCard.pkgEntry
-                                    ? (root.localized(dockCard.pkgEntry, "name") || dockCard.modelData)
-                                    : dockCard.modelData
-                                color: root.ink
-                                font { pixelSize: 11; weight: Font.DemiBold }
-                            }
-
-                            Rectangle {
-                                id: popupPreviewBtn
-                                visible: dockCard.hasPopup
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: popupBtnLabel.implicitWidth + 14
-                                height: 22
-                                radius: 11
-                                color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.12)
-                                Text {
-                                    id: popupBtnLabel
-                                    anchors.centerIn: parent
-                                    text: I18n.tr("Popup")
-                                    color: root.ink
-                                    font { pixelSize: 10; weight: Font.DemiBold }
-                                }
-                                MouseArea {
-                                    anchors.fill: parent
-                                    acceptedButtons: Qt.LeftButton
-                                    cursorShape: Qt.PointingHandCursor
-                                    onClicked: function(mouse) {
-                                        mouse.accepted = true
-                                        dockPopupPreview.pkgEntry = dockCard.pkgEntry
-                                        dockPopupPreview.units = dockCard.units
-                                        dockPopupPreview.open()
-                                    }
-                                }
-                            }
+                            elide: Text.ElideRight
+                            text: dockCard.pkgEntry
+                                ? (root.localized(dockCard.pkgEntry, "name") || dockCard.modelData)
+                                : dockCard.modelData
+                            color: root.ink
+                            font { pixelSize: 11; weight: Font.DemiBold }
                         }
 
                         Rectangle {
+                            z: 5
                             anchors { top: parent.top; right: parent.right; margins: 4 }
                             width: 20; height: 20; radius: 10
                             color: dockCard.active ? "#ff453a" : "#007aff"
@@ -831,25 +806,23 @@ Rectangle {
                                 color: "white"
                                 size: 14
                             }
+                            MouseArea {
+                                anchors.fill: parent
+                                acceptedButtons: Qt.LeftButton
+                                cursorShape: Qt.PointingHandCursor
+                                onClicked: dockCard.toggleCard()
+                            }
                         }
 
                         TapHandler {
                             enabled: !dockReorderDrag.active
-                            onTapped: function(eventPoint) {
-                                if (popupPreviewBtn.visible) {
-                                    const pt = popupPreviewBtn.mapFromItem(dockCard,
-                                        eventPoint.position.x, eventPoint.position.y)
-                                    if (popupPreviewBtn.contains(pt))
-                                        return
-                                }
-                                if (dockCard.active) ConfigService.removeInfoCard(dockCard.modelData)
-                                else ConfigService.addInfoCard(dockCard.modelData, ConfigService.infoCardOrder.length)
-                            }
+                            onTapped: dockCard.toggleCard()
                         }
                         DragHandler {
                             id: dockReorderDrag
                             target: null
                             enabled: dockCard.active
+                            dragThreshold: 12
                             xAxis.enabled: true
                             yAxis.enabled: false
                             onTranslationChanged: if (active) dockCard.dragOffset = translation.x
@@ -898,67 +871,6 @@ Rectangle {
                     accentColor: "#007aff"
                     trackColor: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.18)
                     onToggled: enabled => ConfigService.updateInfoCardAutoRotate(enabled)
-                }
-            }
-        }
-
-        Controls.Popup {
-            id: dockPopupPreview
-            property var pkgEntry: null
-            property int units: 4
-            readonly property real rawDesiredHeight: galleryPopupHost.preferredContentHeight > 0
-                ? galleryPopupHost.preferredContentHeight : 160
-            readonly property int clampedHeight: Math.round(
-                Math.max(72, Math.min(480, rawDesiredHeight)))
-            parent: Controls.Overlay.overlay
-            anchors.centerIn: parent
-            width: 300
-            height: clampedHeight
-            padding: 0
-            modal: true
-            focus: true
-            closePolicy: Controls.Popup.CloseOnEscape | Controls.Popup.CloseOnPressOutside
-            background: Rectangle {
-                radius: 18
-                color: AppearanceTokens.isMaterial
-                    ? AppearanceTokens.colors.layer1
-                    : (ThemeService.isDark ? Qt.rgba(0.14, 0.16, 0.20, 0.94) : Qt.rgba(0.96, 0.97, 0.99, 0.96))
-                border.width: 1
-                border.color: AppearanceTokens.isMaterial
-                    ? AppearanceTokens.colors.outlineVariant
-                    : Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.16)
-            }
-            contentItem: Flickable {
-                id: galleryPopupFlick
-                clip: true
-                boundsBehavior: Flickable.StopAtBounds
-                contentWidth: width
-                contentHeight: Math.max(height, Math.round(dockPopupPreview.rawDesiredHeight))
-                interactive: contentHeight > height + 1
-                WidgetPreviewHost {
-                    id: galleryPopupHost
-                    x: 0
-                    y: 0
-                    width: galleryPopupFlick.width
-                    height: galleryPopupFlick.contentHeight
-                    useImplicitHeight: true
-                    packageId: dockPopupPreview.opened && dockPopupPreview.pkgEntry
-                        ? String(dockPopupPreview.pkgEntry.id ?? "") : ""
-                    widgetEntry: dockPopupPreview.opened && dockPopupPreview.pkgEntry?.hasPopup
-                        ? String(dockPopupPreview.pkgEntry.popupEntry ?? "") : ""
-                    snapshotEntry: dockPopupPreview.opened && dockPopupPreview.pkgEntry
-                        ? String(dockPopupPreview.pkgEntry.snapshotEntry ?? "") : ""
-                    packageRevision: String(dockPopupPreview.pkgEntry?.revision ?? "")
-                    containerType: "dock"
-                    containerOrientation: "horizontal"
-                    widgetSize: [dockPopupPreview.units, 1]
-                    appearance: {
-                        const base = WidgetHostService.widgetAppearance
-                        return Object.assign({}, base, {
-                            foreground: ThemeService.foregroundColor,
-                            palette: AppearanceTokens.isMaterial ? (base.palette ?? ({})) : ({})
-                        })
-                    }
                 }
             }
         }

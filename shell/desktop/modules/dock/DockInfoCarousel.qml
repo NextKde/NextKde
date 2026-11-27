@@ -70,6 +70,8 @@ Item {
     property int iconSize: 44
     property int dockHeight: 60
     property real edgePadding: Math.round(iconSize * 0.18)
+    property real surfaceOriginX: 0
+    property real surfaceOriginY: 0
     required property real cornerRadius
     property int widthUnits: 4
 
@@ -250,8 +252,10 @@ Item {
     }
 
     MouseArea {
+        id: wheelOverlay
         anchors.fill: parent
         z: 20
+        hoverEnabled: true
         acceptedButtons: Qt.NoButton
         onWheel: function(wheel) {
             if (carousel.expanded)
@@ -293,44 +297,48 @@ Item {
             ? carousel.cardWidthForId(carousel.hoveredCardId) : carousel.width
     }
 
-    readonly property string pointerCardId: infoHover.hovered
-        ? carousel.hoveredCardIdAt(infoHover.point.position.x) : ""
+    readonly property bool pointerOverCarousel: infoHover.hovered || wheelOverlay.containsMouse
+    readonly property real pointerLocalX: infoHover.hovered
+        ? infoHover.point.position.x : wheelOverlay.mouseX
+    readonly property string pointerCardId: carousel.pointerOverCarousel
+        ? carousel.hoveredCardIdAt(carousel.pointerLocalX) : ""
     readonly property var hoveredPackage: carousel.packageForId(carousel.hoveredCardId)
     readonly property bool canShowPopup: pointerCardId.length > 0
         && carousel.hasPackagePopup(pointerCardId)
 
+    onPointerOverCarouselChanged: {
+        if (pointerOverCarousel) {
+            popupCloseDelay.stop()
+            const cid = carousel.pointerCardId || carousel.activeCardId
+            if (cid.length > 0 && carousel.hasPackagePopup(cid)) {
+                carousel.hoveredCardId = cid
+                if (widgetPopup.requestedOpen && widgetPopup.visible)
+                    DockModelService.openDockPopup(widgetPopup)
+                else if (!popupOpenDelay.running)
+                    popupOpenDelay.start()
+            }
+        } else if (!widgetPopup.pointerInside) {
+            popupOpenDelay.stop()
+            popupCloseDelay.restart()
+        }
+    }
+
     onPointerCardIdChanged: {
         if (!canShowPopup) {
             popupOpenDelay.stop()
-            if (infoHover.hovered && widgetPopup.visible)
+            if (carousel.pointerOverCarousel && widgetPopup.visible)
                 widgetPopup.requestClose()
             return
         }
         carousel.hoveredCardId = pointerCardId
-        if (widgetPopup.requestedOpen)
-            popupOpenDelay.stop()
-        else if (widgetPopup.visible)
+        if (widgetPopup.requestedOpen && widgetPopup.visible)
             DockModelService.openDockPopup(widgetPopup)
-        else if (infoHover.hovered && !popupOpenDelay.running)
+        else if (carousel.pointerOverCarousel && !popupOpenDelay.running)
             popupOpenDelay.start()
     }
 
     HoverHandler {
         id: infoHover
-        onHoveredChanged: {
-            if (hovered) {
-                popupCloseDelay.stop()
-                if (carousel.canShowPopup) {
-                    if (widgetPopup.visible)
-                        DockModelService.openDockPopup(widgetPopup)
-                    else if (!popupOpenDelay.running)
-                        popupOpenDelay.start()
-                }
-            } else if (!widgetPopup.pointerInside) {
-                popupOpenDelay.stop()
-                popupCloseDelay.restart()
-            }
-        }
     }
 
     Timer {
@@ -338,8 +346,11 @@ Item {
         interval: DockAnimation.infoPopupOpenDelay
         repeat: false
         onTriggered: {
-            if (infoHover.hovered && carousel.canShowPopup)
+            const cid = carousel.pointerCardId || carousel.activeCardId
+            if (carousel.pointerOverCarousel && cid.length > 0 && carousel.hasPackagePopup(cid)) {
+                carousel.hoveredCardId = cid
                 DockModelService.openDockPopup(widgetPopup)
+            }
         }
     }
 
@@ -348,7 +359,7 @@ Item {
         interval: 260
         repeat: false
         onTriggered: {
-            if (!infoHover.hovered && !widgetPopup.pointerInside && widgetPopup.visible)
+            if (!carousel.pointerOverCarousel && !widgetPopup.pointerInside && widgetPopup.visible)
                 widgetPopup.requestClose()
         }
     }
@@ -357,13 +368,16 @@ Item {
         id: widgetPopup
         anchorItem: infoAnchor
         dockEdge: "bottom"
-        packageEntry: carousel.hasPackagePopup(carousel.hoveredCardId) ? carousel.hoveredPackage : null
+        packageEntry: {
+            const id = carousel.hoveredCardId || carousel.activeCardId
+            return carousel.hasPackagePopup(id) ? carousel.packageForId(id) : null
+        }
         onPointerInsideChanged: {
             if (pointerInside) {
                 popupCloseDelay.stop()
                 if (!widgetPopup.requestedOpen && widgetPopup.packageEntry)
                     DockModelService.openDockPopup(widgetPopup)
-            } else if (!infoHover.hovered) {
+            } else if (!carousel.pointerOverCarousel) {
                 popupCloseDelay.restart()
             }
         }
@@ -441,6 +455,8 @@ Item {
                     containerType: "dock"
                     containerOrientation: "horizontal"
                     hostActive: carousel.visible && pkgCard.shown
+                    surfaceOriginX: carousel.surfaceOriginX
+                    surfaceOriginY: carousel.surfaceOriginY
                     widgetSize: [pkgCard.cardUnits, 1]
                     appearance: WidgetHostService.widgetAppearance
                 }

@@ -24,7 +24,7 @@ QtObject {
     readonly property int sdkVersion: 1
     readonly property int apiRevision: 1
     readonly property string locale: String(I18n.language || "en")
-    readonly property var availableSources: ["clock", "media", "weather", "system", "activity", "pim"]
+    readonly property var availableSources: ["clock", "media", "weather", "system", "activity", "pim", "pointer"]
     readonly property var supportedActions: [
         "media.previous",
         "media.toggle-play-pause",
@@ -138,6 +138,11 @@ QtObject {
     readonly property var system: systemMetricsSnapshot()
     readonly property var activity: activityUsageSnapshot()
     readonly property var pim: pimSnapshot()
+    readonly property var pointer: ({
+        available: WindowService.globalPointerValid,
+        x: WindowService.globalPointerX,
+        y: WindowService.globalPointerY
+    })
 
     function clockSnapshot() {
         const d = host.now

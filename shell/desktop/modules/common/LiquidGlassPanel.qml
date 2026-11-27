@@ -162,6 +162,7 @@ Item {
     // Forwarded verbatim to LiquidGlassSurface.tonalOpacity; -1 keeps the
     // shared token, so panels that say nothing render exactly as before.
     property real tonalOpacity: -1
+    property color tonalColorOverride: "transparent"
     property bool adaptiveDarkScrim: false
     // Contrast scrim owned by the compositor: a black or white tint whose
     // opacity the glass scales to the backdrop it sits on, so light text over
@@ -325,6 +326,7 @@ Item {
         materialDepth: root.materialDepth
         surfaceOpacity: root.surfaceOpacity
         tonalOpacity: root.tonalOpacity
+        tonalColorOverride: root.tonalColorOverride
         adaptiveDarkScrim: root.adaptiveDarkScrim
         // The QML fallback's in-scene scrim uses the same preset values the
         // compositor path publishes above, so the two finishes agree on how

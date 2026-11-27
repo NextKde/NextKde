@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 
 Item {
     id: root
@@ -50,6 +51,7 @@ Item {
     }
 
     component CircleArtBadge: Item {
+        id: badge
         property string url: ""
 
         Rectangle {
@@ -57,24 +59,35 @@ Item {
             radius: width / 2
             color: root.chipBg
 
-            Image {
-                id: artImg
-                anchors.centerIn: parent
-                width: parent.width * 0.72
-                height: width
-                source: parent.parent.url
-                fillMode: Image.PreserveAspectCrop
-                smooth: true
-                asynchronous: true
-                visible: parent.parent.url.length > 0 && status === Image.Ready
-            }
-
             Text {
                 anchors.centerIn: parent
                 visible: !artImg.visible
                 text: "♫"
                 color: root.primaryCol
                 font { pixelSize: Math.max(16, Math.round(parent.width * 0.44)); weight: Font.Bold }
+            }
+        }
+
+        Rectangle {
+            id: artMask
+            anchors.fill: parent
+            radius: width / 2
+            visible: false
+            layer.enabled: true
+        }
+
+        Image {
+            id: artImg
+            anchors.fill: parent
+            source: badge.url
+            fillMode: Image.PreserveAspectCrop
+            smooth: true
+            asynchronous: true
+            visible: badge.url.length > 0 && status === Image.Ready
+            layer.enabled: true
+            layer.effect: MultiEffect {
+                maskEnabled: true
+                maskSource: artMask
             }
         }
     }

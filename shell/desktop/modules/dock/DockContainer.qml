@@ -1325,6 +1325,8 @@ Item {
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             edgePadding: container.hPadding
+            surfaceOriginX: container.surfaceOriginX
+            surfaceOriginY: container.surfaceOriginY
             widthUnits: container.infoUnits
             cardOrder: ConfigService.infoCardOrder
             dockPackages: container.dockPackages
@@ -1347,6 +1349,8 @@ Item {
             iconSize: container.iconSize
             dockHeight: container.computedDockHeight
             edgePadding: container.hPadding
+            surfaceOriginX: container.surfaceOriginX
+            surfaceOriginY: container.surfaceOriginY
             widthUnits: container.infoUnits
             cardOrder: ConfigService.infoCardOrder
             dockPackages: container.dockPackages

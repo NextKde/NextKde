@@ -63,7 +63,8 @@ ListenFree 需显式 `./tools/kosctl install apps --with-listenfree`。
 Shell 负责呈现，C++ `kos-platform` 负责桌面接入，Go `kos-data-service` 负责指标/历史/共享天气。
 日历与内置待办使用按需 PIM，独立应用不导入 Shell 模块。
 [项目架构](docs/ProjectArchitecture.md)、[外观](docs/AppearanceArchitecture.zh-CN.md)、
-[Dock](docs/DockArchitecture.md)、[桌面图标](docs/DesktopIcons.zh-CN.md)、[深度引擎](docs/DepthEngine.md)。
+[Dock](docs/DockArchitecture.md)、[桌面图标](docs/DesktopIcons.zh-CN.md)、[深度引擎](docs/DepthEngine.md)、
+[桌面组件开发指南](docs/plugins/WidgetSDK.zh-CN.md)、[Dock 组件开发指南](docs/plugins/DockWidgetSDK.zh-CN.md)。
 
 开发和架构文档面向 AI 贡献者，见[项目上下文](PROJECT_CONTEXT.zh-CN.md)、
 [开发指南](docs/Development.zh-CN.md)、[贡献规范](CONTRIBUTING.zh-CN.md)、[发布流程](docs/Releasing.zh-CN.md)。

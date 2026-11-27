@@ -142,7 +142,11 @@ Item {
             shapeType: root.effectiveMaterialShape
             radius: root.radius
             fillColor: root.materialSurfaceColor
-            fillOpacity: AppearanceTokens.surface.widgetOpacity
+            fillOpacity: 1.0
+            strokeColor: Qt.rgba(AppearanceTokens.colors.outline.r,
+                AppearanceTokens.colors.outline.g,
+                AppearanceTokens.colors.outline.b, 0.32)
+            strokeWidth: 1
             inset: 1
         }
 

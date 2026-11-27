@@ -13,6 +13,8 @@ Item {
     property real radius: 16
     property color fillColor: "transparent"
     property real fillOpacity: 1.0
+    property color strokeColor: "transparent"
+    property real strokeWidth: 0
     property real inset: 1
 
     readonly property string canonicalShape: ShapeGeom.normalizeShape(shapeType)
@@ -32,7 +34,8 @@ Item {
         radius: root.canonicalShape === "pill" ? Math.min(width, height) / 2 : root.radius
         color: root.fillColor
         opacity: root.fillOpacity
-        border.width: 0
+        border.width: root.strokeWidth
+        border.color: root.strokeWidth > 0 ? root.strokeColor : "transparent"
     }
 
     Rectangle {
@@ -43,7 +46,8 @@ Item {
         radius: width / 2
         color: root.fillColor
         opacity: root.fillOpacity
-        border.width: 0
+        border.width: root.strokeWidth
+        border.color: root.strokeWidth > 0 ? root.strokeColor : "transparent"
     }
 
     Shape {
@@ -53,8 +57,8 @@ Item {
         ShapePath {
             fillColor: Qt.rgba(root.fillColor.r, root.fillColor.g,
                 root.fillColor.b, root.fillOpacity)
-            strokeColor: "transparent"
-            strokeWidth: 0
+            strokeColor: root.strokeWidth > 0 ? root.strokeColor : "transparent"
+            strokeWidth: root.strokeWidth
             capStyle: ShapePath.RoundCap
             joinStyle: ShapePath.RoundJoin
             PathPolyline {

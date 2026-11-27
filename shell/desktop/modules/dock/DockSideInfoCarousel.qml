@@ -55,6 +55,8 @@ Item {
     property int iconSize: 44
     property int dockHeight: 60
     property real edgePadding: Math.round(iconSize * 0.18)
+    property real surfaceOriginX: 0
+    property real surfaceOriginY: 0
     property string dockEdge: "left"
     required property real cornerRadius
     property real widthUnits: 2
@@ -333,6 +335,8 @@ Item {
                             containerType: "dock"
                             containerOrientation: "vertical"
                             hostActive: carousel.visible && (carousel.expanded || carousel.activeCardId === sideSlot.modelData)
+                            surfaceOriginX: carousel.surfaceOriginX
+                            surfaceOriginY: carousel.surfaceOriginY
                             widgetSize: [1, 2]
                             appearance: WidgetHostService.widgetAppearance
                         }

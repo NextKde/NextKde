@@ -55,7 +55,12 @@ public:
     {
     }
 
-    void pointerMotion(PointerMotionEvent *) override { m_effect->handleStartupInput(); }
+    void pointerMotion(PointerMotionEvent *event) override
+    {
+        m_effect->handleStartupInput();
+        if (event)
+            m_effect->handlePointerMotion(event->position);
+    }
     void pointerAxis(PointerAxisEvent *) override { m_effect->handleStartupInput(); }
     void keyboardKey(KeyboardKeyEvent *) override { m_effect->handleStartupInput(); }
     void touchDown(TouchDownEvent *) override { m_effect->handleStartupInput(); }
@@ -224,6 +229,28 @@ void ContextMenuInputEffect::installPointerSpy()
     // compositor restart. Retry on its event loop instead of silently ending
     // up with a permanently inactive effect.
     QTimer::singleShot(100, this, &ContextMenuInputEffect::installPointerSpy);
+}
+
+void ContextMenuInputEffect::handlePointerMotion(const QPointF &position)
+{
+    if (m_pointerMotionThrottle.isValid()) {
+        if (m_pointerMotionThrottle.elapsed() < 33)
+            return;
+        const qreal dx = position.x() - m_lastReportedPointer.x();
+        const qreal dy = position.y() - m_lastReportedPointer.y();
+        if (std::hypot(dx, dy) < 2.0)
+            return;
+    }
+
+    m_lastReportedPointer = position;
+    m_pointerMotionThrottle.restart();
+
+    const QJsonObject eventData{
+        {QStringLiteral("type"), QStringLiteral("global-pointer-motion")},
+        {QStringLiteral("x"), position.x()},
+        {QStringLiteral("y"), position.y()},
+    };
+    publish(eventData);
 }
 
 void ContextMenuInputEffect::handlePointerPress(const QPointF &position,

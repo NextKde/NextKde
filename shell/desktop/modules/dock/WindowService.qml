@@ -43,6 +43,9 @@ QtObject {
     // bridge. Consumers use the global logical coordinates for outside-click
     // dismissal; the event itself is never consumed by KWin.
     signal globalPointerPressed(real x, real y, int button, real timestamp)
+    property real globalPointerX: -1
+    property real globalPointerY: -1
+    property bool globalPointerValid: false
 
     // Activation requested by this process (dock icon/preview/menu click):
     // emitted the instant the click happens, before the bridge command is
@@ -116,6 +119,7 @@ QtObject {
             if (eventName === "window.snapshot" || eventName === "desktops"
                     || eventName === "thumbnail"
                     || eventName === "global-pointer-press"
+                    || eventName === "global-pointer-motion"
                     || eventName === "window.action")
                 svc._consumeKwinEvent(payload)
         }
@@ -998,7 +1002,7 @@ QtObject {
                 // at the signal boundary before validating or storing the data.
                 if (event.type === "snapshot" || event.type === "desktops")
                     event = JSON.parse(JSON.stringify(event));
-                if (event.type !== "snapshot")
+                if (event.type !== "snapshot" && event.type !== "global-pointer-motion")
                     console.log("[WindowService] bridge event type=" + event.type
                         + (event.stage ? " stage=" + event.stage : ""));
                 // Command receipts (round35 NEW-2): the bridge echoes every
@@ -1090,7 +1094,14 @@ QtObject {
                             console.info("[WindowService] initial desktop snapshot desktops="
                                 + svc.desktops.length + " current=" + svc.currentDesktopId)
                         }
+                } else if (event.type === "global-pointer-motion") {
+                        svc.globalPointerX = Number(event.x);
+                        svc.globalPointerY = Number(event.y);
+                        svc.globalPointerValid = true;
                 } else if (event.type === "global-pointer-press") {
+                        svc.globalPointerX = Number(event.x);
+                        svc.globalPointerY = Number(event.y);
+                        svc.globalPointerValid = true;
                         svc.globalPointerPressed(Number(event.x), Number(event.y),
                                                  Number(event.button),
                                                  Number(event.timestamp));

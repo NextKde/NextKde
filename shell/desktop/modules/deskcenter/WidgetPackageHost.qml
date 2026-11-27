@@ -38,6 +38,8 @@ Item {
     property var backgroundSpec: null
     property string surfaceShape: "roundedRect"
     property bool useImplicitHeight: false
+    property real surfaceOriginX: 0
+    property real surfaceOriginY: 0
     readonly property Item widgetItem: root._loadedItem
     readonly property real preferredContentHeight: {
         if (!root._loadedItem) return 0
@@ -143,9 +145,14 @@ Item {
         readonly property var system: WidgetHostService.system
         readonly property var activity: WidgetHostService.activity
         readonly property var pim: WidgetHostService.pim
+        readonly property var pointer: WidgetHostService.pointer
         readonly property var settings: root.settingsData
         readonly property var lastActionResult: root.lastActionResult
 
+        function globalCenter() {
+            const p = root.mapToItem(null, root.width / 2, root.height / 2)
+            return { x: root.surfaceOriginX + p.x, y: root.surfaceOriginY + p.y }
+        }
         function hasAction(actionName) {
             return WidgetHostService.hasAction(actionName)
         }

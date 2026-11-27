@@ -26,6 +26,4 @@ WidgetGalleryWindow 1.0 WidgetGalleryWindow.qml
 WidgetConfiguration 1.0 WidgetConfiguration.qml
 WidgetPackageHost 1.0 WidgetPackageHost.qml
 WidgetPreviewHost 1.0 WidgetPreviewHost.qml
-ClockWidgetDataService 1.0 ClockWidgetDataService.qml
-MusicWidgetDataService 1.0 MusicWidgetDataService.qml
 singleton WidgetRegistry 1.0 WidgetRegistry.qml
