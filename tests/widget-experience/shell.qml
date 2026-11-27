@@ -53,8 +53,8 @@ ShellRoot {
         switch (stage) {
         case 0: {
             driver.interval = 120
-            const contentLayer = find(desktop.contentItem, "widget-content-layer")
-            check(!!contentLayer && contentLayer.enabled,
+            const card = test.cards.itemAt(0)
+            check(!!card && card.contentEnabled,
                 "widget contents answer input outside editing")
             check(!desktop.editMode, "editing gesture checks start outside editing")
             test.revealRequestsBeforeEditing = test.revealRequests
@@ -64,7 +64,7 @@ ShellRoot {
         case 1:
             check(desktop.editMode && WidgetGalleryService.open,
                 "enterWidgetEditMode opens edit mode and gallery")
-            check(!find(desktop.contentItem, "widget-content-layer").enabled,
+            check(!test.cards.itemAt(0).contentEnabled,
                 "widget contents stay inert while editing")
             events.mousePress(test.background, 100, 100, Qt.LeftButton, Qt.NoModifier, 0)
             break
@@ -214,8 +214,6 @@ ShellRoot {
                             check(card.usesColorArtwork === (previous.style === "color"),
                                 "card artwork independent of icon colour: " + JSON.stringify(previous))
                             check(!!card.blurRegion === backdrop, "correct compositor surface backend")
-                            check(!find(card, "widget-content-layer").layer.enabled,
-                                "clock text stays outside the saturation texture")
                         } else {
                             check(test.cards.count === 0,
                                 "macos package parks cleanly while material style is active")

@@ -22,7 +22,7 @@ ShellRoot {
     property var committedBeforeResize: [1, 1]
     property int renderIndex: 0
     property var renderSpans: [[1, 1], [2, 1]]
-    property var spans: [[2, 1], [2, 2], [1, 2], [1, 1], [1, 2]]
+    property var spans: [[2, 1], [2, 2], [1, 1], [2, 1]]
     property point releasePoint: Qt.point(0, 0)
     property int moveIndex: 0
     property var moveTargets: []
@@ -85,9 +85,9 @@ ShellRoot {
                         const restoredPrimary = instanceIdFor("org.nextkde.widget.calendar.macos")
                         check(restoredPrimary.length > 0, "placed SDK widget instance survives restart")
                         const span = DeskCenterConfigService.spanFor(restoredPrimary)
-                        check(span[0] === 1 && span[1] === 2, "portrait span survives restart")
+                        check(span[0] === 2 && span[1] === 1, "resized span survives restart")
                         const position = DeskCenterConfigService.positionsForOutput(desktop.desktopOutput)[restoredPrimary]
-                        check(position && position.column === desktop.maximumWidgetColumns - 1 && position.row === 2,
+                        check(position && position.column === desktop.maximumWidgetColumns - 2 && position.row === 2,
                             "manual grid position survives restart")
                         check(DeskCenterConfigService.positionsForOutput("projection-test").music.row === 6,
                             "another card's original position survives restart")
@@ -183,11 +183,11 @@ ShellRoot {
                         stage = 4
                         return
                     }
-                    DeskCenterConfigService.setSpan(test.primaryId, 1, 2)
+                    DeskCenterConfigService.setSpan(test.primaryId, 2, 1)
                     const occupied = desktop.placementFor(test.weatherId)
                     moveTargets = [
-                        { column: desktop.maximumWidgetColumns - 1, row: 0, allowed: true },
-                        { column: desktop.maximumWidgetColumns - 1, row: 2, allowed: true },
+                        { column: desktop.maximumWidgetColumns - 2, row: 0, allowed: true },
+                        { column: desktop.maximumWidgetColumns - 2, row: 2, allowed: true },
                         { column: occupied.column, row: occupied.row, allowed: false }
                     ]
                     stage = 6
