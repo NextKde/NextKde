@@ -82,6 +82,8 @@ qt_add_executable(kos-settings
     src/SettingsBridge.h
     src/SettingsBridge.cpp
     src/SettingsBridgeDesktop.cpp
+    src/KWinPluginAbi.cpp
+    src/KWinPluginAbi.h
     src/SettingsBridgeAppearance.cpp
     src/SettingsBridgeWallpaper.cpp
     src/SettingsBridgeScheduling.cpp
@@ -270,6 +272,15 @@ if(BUILD_TESTING)
     target_link_libraries(kos-settings-update-status-test PRIVATE Qt6::Core Qt6::Gui Qt6::Test)
     add_test(NAME kos-settings.update-status COMMAND kos-settings-update-status-test)
     set_tests_properties(kos-settings.update-status PROPERTIES LABELS logic TIMEOUT 20)
+
+    add_executable(kos-settings-kwin-abi-test
+        tests/backend/KWinPluginAbiTest.cpp
+        src/KWinPluginAbi.cpp
+        src/KWinPluginAbi.h)
+    target_include_directories(kos-settings-kwin-abi-test PRIVATE src)
+    target_link_libraries(kos-settings-kwin-abi-test PRIVATE Qt6::Core Qt6::Test)
+    add_test(NAME kos-settings.kwin-plugin-abi COMMAND kos-settings-kwin-abi-test)
+    set_tests_properties(kos-settings.kwin-plugin-abi PROPERTIES LABELS logic TIMEOUT 15)
 
     add_executable(kos-power-settings-test
         tests/power/backend.cpp

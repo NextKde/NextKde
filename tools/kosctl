@@ -71,8 +71,17 @@ kos_build_jobs() {
     printf '%s' "$jobs"
 }
 
+resolve_qdbus_bin() {
+    command -v qdbus6 2>/dev/null \
+        || command -v qdbus-qt6 2>/dev/null \
+        || { [[ -x /usr/lib64/qt6/bin/qdbus ]] && printf '/usr/lib64/qt6/bin/qdbus\n'; } \
+        || { [[ -x /usr/lib/qt6/bin/qdbus ]] && printf '/usr/lib/qt6/bin/qdbus\n'; } \
+        || command -v qdbus 2>/dev/null \
+        || true
+}
+
 qs_bin=$(command -v qs || command -v quickshell || true)
-qdbus_bin=$(command -v qdbus6 || command -v qdbus || true)
+qdbus_bin=$(resolve_qdbus_bin)
 
 is_nixos() {
     [[ -f /etc/NIXOS ]]
@@ -168,7 +177,7 @@ fedora_core_build_packages=(
     git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config
     quickshell
     extra-cmake-modules wayland-devel wayland-protocols-devel libxkbcommon-devel gtk3-devel flatpak-devel ostree-devel flatpak gnupg2
-    qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qttools-devel
+    qt6-qtbase-devel qt6-qtbase-private-devel qt6-qtdeclarative-devel qt6-qttools qt6-qttools-devel
     fontconfig-devel
     qt6-qttranslations qt6-qtquick3d-devel qt6-qtsvg-devel qt6-qtwayland-devel
     qt6-qtimageformats qt6-qt5compat-devel
@@ -317,6 +326,75 @@ opencv_available() {
     command -v pkg-config >/dev/null 2>&1 && pkg-config --exists opencv4
 }
 
+detect_kwin_header_version() {
+    local config_header="${KOS_KWIN_CONFIG_HEADER:-/usr/include/kwin/config-kwin.h}"
+    [[ -r "$config_header" ]] || return 0
+    sed -n 's/^#define KWIN_PLUGIN_VERSION_STRING "\([^"]*\)"$/\1/p' \
+        "$config_header" | head -n 1
+}
+
+detect_running_kwin_version() {
+    local kwin_bin="${KOS_KWIN_WAYLAND_BIN:-}"
+    if [[ -z "$kwin_bin" ]]; then
+        kwin_bin=$(command -v kwin_wayland 2>/dev/null || true)
+    fi
+    if [[ -n "$kwin_bin" && -x "$kwin_bin" ]]; then
+        local out ver
+        out=$("$kwin_bin" --version 2>/dev/null | head -n 1 || true)
+        ver=$(printf '%s\n' "$out" \
+            | sed -nE 's/^kwin[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+([a-zA-Z0-9._-]*)?).*/\1/p')
+        if [[ -n "$ver" ]]; then
+            printf '%s\n' "$ver"
+            return 0
+        fi
+    fi
+    detect_kwin_header_version
+}
+
+read_kwin_effect_plugin_abi() {
+    local plugin_path="$1"
+    [[ -r "$plugin_path" ]] || return 0
+    local iid
+    iid=$(LC_ALL=C grep -aoE \
+        'org\.kde\.kwin\.EffectPluginFactory[0-9]+\.[0-9]+\.[0-9]+([a-zA-Z0-9._-]*)?' \
+        "$plugin_path" 2>/dev/null | head -n 1 || true)
+    printf '%s\n' "${iid#org.kde.kwin.EffectPluginFactory}"
+}
+
+installed_kwin_plugin_abi_mismatches() {
+    local current_kwin="$1"
+    [[ -n "$current_kwin" ]] || return 0
+
+    local -a candidates=()
+    local entry
+    if [[ -s "$kwin_manifest" ]]; then
+        while IFS= read -r entry || [[ -n "$entry" ]]; do
+            case "$entry" in
+                */effects/plugins/*.so)
+                    [[ -r "$entry" ]] && candidates+=("$entry")
+                    ;;
+            esac
+        done < "$kwin_manifest"
+    else
+        local dir name
+        for dir in /usr/lib64/qt6/plugins/kwin/effects/plugins /usr/lib/qt6/plugins/kwin/effects/plugins; do
+            for name in glass kos_bridge kos_context_menu_input kos_dock_window_animation stageanim13; do
+                [[ -r "$dir/$name.so" ]] && candidates+=("$dir/$name.so")
+            done
+        done
+    fi
+
+    local plugin_path built_abi plugin_name
+    for plugin_path in "${candidates[@]}"; do
+        built_abi=$(read_kwin_effect_plugin_abi "$plugin_path")
+        [[ -n "$built_abi" ]] || continue
+        if [[ "$built_abi" != "$current_kwin" ]]; then
+            plugin_name=$(basename "$plugin_path" .so)
+            printf '%s:%s\n' "$plugin_name" "$built_abi"
+        fi
+    done
+}
+
 # KWin effect plugins do not have a stable ABI: their Qt plugin interface ID
 # includes KWIN_PLUGIN_VERSION_STRING. Distribution upgrades can retain the
 # timestamps of installed headers, which means Ninja may incorrectly reuse
@@ -325,11 +403,7 @@ opencv_available() {
 detect_kwin_plugin_api_version() {
     kwin_plugins_enabled || return 0
 
-    local config_header=/usr/include/kwin/config-kwin.h
-    [[ -r "$config_header" ]] || return 0
-    kwin_plugin_api_version=$(sed -n \
-        's/^#define KWIN_PLUGIN_VERSION_STRING "\([^"]*\)"$/\1/p' \
-        "$config_header" | head -n 1)
+    kwin_plugin_api_version=$(detect_kwin_header_version)
     [[ -n "$kwin_plugin_api_version" ]] || return 0
 
     if [[ ! -f "$kwin_plugin_api_stamp" ]] \
@@ -571,6 +645,25 @@ doctor() {
     else
         printf 'warn %-12s replaced binary still running: %s (./tools/kosctl start)\n' \
             units "${stale_units//$'\n'/, }"
+    fi
+    if kwin_plugins_enabled && ! is_nixos; then
+        local running_kwin header_kwin mismatches built_versions
+        running_kwin=$(detect_running_kwin_version)
+        header_kwin=$(detect_kwin_header_version)
+        if [[ -n "$running_kwin" && -n "$header_kwin" && "$running_kwin" != "$header_kwin" ]]; then
+            printf 'warn %-12s KWin headers are %s but kwin_wayland is %s (upgrade KWin development packages before ./tools/kosctl install)\n' \
+                kwin-sdk "$header_kwin" "$running_kwin"
+        fi
+        if [[ -n "$running_kwin" && -s "$kwin_manifest" ]]; then
+            mismatches=$(installed_kwin_plugin_abi_mismatches "$running_kwin")
+            if [[ -n "$mismatches" ]]; then
+                built_versions=$(printf '%s\n' "$mismatches" | cut -d: -f2 | sort -u | paste -sd, -)
+                printf 'warn %-12s installed plugins were built for KWin %s, system has KWin %s (run ./tools/kosctl install, then log out and back in)\n' \
+                    kwin-abi "$built_versions" "$running_kwin"
+            else
+                printf 'ok   %-12s installed KWin plugins match KWin %s\n' kwin-abi "$running_kwin"
+            fi
+        fi
     fi
     if is_nixos && (( nixos_hint )); then
         printf '\n'
@@ -1461,6 +1554,21 @@ start_all() {
     systemctl --user restart "${kos_units[@]}"
     verify_platform_binary_currentness
     enable_kwin_effects
+    if kwin_plugins_enabled && ! is_nixos; then
+        local running_kwin mismatches built_versions
+        running_kwin=$(detect_running_kwin_version)
+        mismatches=$(installed_kwin_plugin_abi_mismatches "$running_kwin")
+        if [[ -n "$mismatches" ]]; then
+            built_versions=$(printf '%s\n' "$mismatches" | cut -d: -f2 | sort -u | paste -sd, -)
+            printf '\n'
+            printf '  ⚠️  已安装的 KWin 插件基于 KWin %s 编译，当前系统为 KWin %s\n' \
+                "$built_versions" "$running_kwin"
+            printf '     Installed KWin plugins were built for KWin %s, but the system has KWin %s.\n' \
+                "$built_versions" "$running_kwin"
+            printf '     请运行 ./tools/kosctl install 重新编译并注销重登，以恢复玻璃与圆角特效。\n'
+            printf '     Run ./tools/kosctl install and log out/in to restore glass and rounded corners.\n'
+        fi
+    fi
     printf '\n'
     printf '  🚀 KOS 已启动（platform / data / shell）\n'
     printf '     KOS started — platform, data, and shell are running.\n'

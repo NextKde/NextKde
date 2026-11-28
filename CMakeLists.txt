@@ -682,6 +682,9 @@ if(BUILD_TESTING)
         add_test(NAME kos-window.gtk-buttons-install
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_gtk_window_buttons.py)
         set_tests_properties(kos-window.gtk-buttons-install PROPERTIES LABELS logic TIMEOUT 15)
+        add_test(NAME kos-tools.kwin-abi-and-qdbus
+            COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/tests/test_kosctl_kwin_abi.py)
+        set_tests_properties(kos-tools.kwin-abi-and-qdbus PROPERTIES LABELS logic TIMEOUT 15)
         add_test(NAME kos-app.dependency-migration
             COMMAND ${KOS_PYTHON_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tests/app-install/test_dependencies.py)
         set_tests_properties(kos-app.dependency-migration PROPERTIES LABELS data TIMEOUT 10)
@@ -1007,7 +1010,8 @@ if(KOS_BUILD_KWIN_PLUGINS)
     if(BUILD_TESTING AND KOS_PYTHON_EXECUTABLE)
         find_program(KOS_STAGE_QUICKSHELL_EXECUTABLE NAMES quickshell qs)
         find_program(KOS_STAGE_KWIN_EXECUTABLE NAMES kwin_wayland)
-        find_program(KOS_STAGE_QDBUS_EXECUTABLE NAMES qdbus6)
+        find_program(KOS_STAGE_QDBUS_EXECUTABLE NAMES qdbus6 qdbus-qt6 qdbus
+            HINTS /usr/lib64/qt6/bin /usr/lib/qt6/bin)
         find_program(KOS_STAGE_DBUS_EXECUTABLE NAMES dbus-run-session)
         if(KOS_STAGE_QUICKSHELL_EXECUTABLE AND KOS_STAGE_KWIN_EXECUTABLE
                 AND KOS_STAGE_QDBUS_EXECUTABLE AND KOS_STAGE_DBUS_EXECUTABLE)
@@ -1016,6 +1020,7 @@ if(KOS_BUILD_KWIN_PLUGINS)
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/stage-visibility/static_compositor.py
                     $<TARGET_FILE:stageanim13>
                     --quickshell ${KOS_STAGE_QUICKSHELL_EXECUTABLE}
+                    --qdbus ${KOS_STAGE_QDBUS_EXECUTABLE}
                     --output ${CMAKE_BINARY_DIR}/stage-static-compositor)
             set_tests_properties(kos-stage.static-desktop-compositor PROPERTIES LABELS ui TIMEOUT 40)
         endif()

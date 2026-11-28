@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -61,6 +62,24 @@ ensure_build_dependencies
         code, args = self.run_selection('cmake', failure=True)
         self.assertNotEqual(code, 0)
         self.assertEqual(args, ['dnf', 'install', '-y', 'cmake'])
+
+    def test_qt6_qttools_is_required_for_qdbus_qt6(self):
+        code, args = self.run_selection('qt6-qttools')
+        self.assertEqual((code, args), (0, ['dnf', 'install', '-y', 'qt6-qttools']))
+
+    def test_resolve_qdbus_bin_finds_qdbus_qt6_on_fedora(self):
+        with tempfile.TemporaryDirectory() as directory:
+            bin_dir = Path(directory) / 'bin'
+            bin_dir.mkdir()
+            qdbus_qt6 = bin_dir / 'qdbus-qt6'
+            qdbus_qt6.write_text('#!/bin/sh\nexit 0\n')
+            qdbus_qt6.chmod(0o755)
+            bash = shutil.which('bash') or '/bin/bash'
+            script = function('resolve_qdbus_bin') + '\nresolve_qdbus_bin\n'
+            result = subprocess.run([bash, '-euc', script], text=True, capture_output=True,
+                env={'PATH': str(bin_dir)})
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(result.stdout.strip(), str(qdbus_qt6))
 
 if __name__ == '__main__':
     if sys.argv[1:] == ['--packages']:

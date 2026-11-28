@@ -19,6 +19,7 @@ ColumnLayout {
     property var snapshot: ({})
     property string errorText: ""
     property bool inputMethodExpanded: false
+    property bool kwinAbiExpanded: false
     readonly property var candidatePreferences: snapshot.inputMethodPresentation || ({})
     readonly property bool candidatePreferencesReady: bridge !== null && candidatePreferences.ready === true
 
@@ -92,6 +93,24 @@ ColumnLayout {
         };
     }
 
+    function effectStatusRow(icon, tint, title, ready, detail) {
+        if (ready)
+            return statusRow(icon, tint, title, true, I18n.tr("Loaded"), detail);
+        if (snapshot.kwinAbiMismatch === true) {
+            return {
+                icon: icon,
+                tint: tint,
+                title: title,
+                label: I18n.tr("Rebuild required"),
+                color: "#ff9f0a",
+                detail: I18n.tr("Built for KWin %1; current KWin is %2")
+                    .arg(snapshot.kwinPluginVersion || "?")
+                    .arg(snapshot.kwinCurrentVersion || "?")
+            };
+        }
+        return statusRow(icon, tint, title, false, I18n.tr("Loaded"), detail);
+    }
+
     readonly property var notification: notificationState()
     readonly property var rows: [statusRow("K", "#0a84ff", "KOS Shell", !!snapshot.shellReady, I18n.tr("Running"), I18n.tr("Settings page and Quickshell IPC channel")), statusRow("↔", "#5ac8fa", I18n.tr("Platform bridge"), !!snapshot.platformConnected, I18n.tr("Connected"), I18n.tr("Windows, network, audio and system actions")), statusRow("D", "#34c759", I18n.tr("Data service"), !!snapshot.dataConnected, I18n.tr("Connected"), I18n.tr("System metrics, activity records and desktop files")), statusRow("▦", "#af52de", I18n.tr("Desktop widgets"), !!snapshot.desktopWidgetsVisible, I18n.tr("Shown"), snapshot.desktopFilesReady ? I18n.tr("Clock, weather, resource cards and desktop files are ready") : I18n.tr("Widget layer shown; desktop files still syncing")),
         {
@@ -102,7 +121,7 @@ ColumnLayout {
             color: notification.color,
             detail: notification.detail
         },
-        statusRow("G", "#64d2ff", I18n.tr("Glass effects"), !!snapshot.glassLoaded, I18n.tr("Loaded"), I18n.tr("KWin blur and liquid glass effects")), statusRow("A", "#ff375f", I18n.tr("Dock window animation"), !!snapshot.dockAnimationLoaded, I18n.tr("Loaded"), I18n.tr("KWin Dock opening / scaling animation")), statusRow("I", "#bf5af2", I18n.tr("Desktop input bridge"), !!snapshot.contextMenuInputLoaded, I18n.tr("Loaded"), I18n.tr("Global clicks and menu dismiss events"))]
+        effectStatusRow("G", "#64d2ff", I18n.tr("Glass effects"), !!snapshot.glassLoaded, I18n.tr("KWin blur and liquid glass effects")), effectStatusRow("A", "#ff375f", I18n.tr("Dock window animation"), !!snapshot.dockAnimationLoaded, I18n.tr("KWin Dock opening / scaling animation")), effectStatusRow("I", "#bf5af2", I18n.tr("Desktop input bridge"), !!snapshot.contextMenuInputLoaded, I18n.tr("Global clicks and menu dismiss events"))]
 
     Demo.SettingsGroup {
         title: I18n.tr("System Services & Bridges")
@@ -135,6 +154,38 @@ ColumnLayout {
     Demo.SettingsGroup {
         title: I18n.tr("Application Compatibility & Troubleshooting")
         backgroundColor: colors.card
+
+        Demo.SettingsItem {
+            objectName: "kwinAbiMismatchItem"
+            visible: integrationPage.snapshot.kwinAbiMismatch === true
+            title: I18n.tr("KWin Plugin ABI Mismatch")
+            description: I18n.tr("Installed KWin plugins were built for KWin %1, but the system has KWin %2. Glass and rounded window corners stay disabled until the plugins are rebuilt.")
+                .arg(integrationPage.snapshot.kwinPluginVersion || "?")
+                .arg(integrationPage.snapshot.kwinCurrentVersion || "?")
+            Demo.LiquidActionButton {
+                objectName: "kwinAbiStepsButton"
+                text: integrationPage.kwinAbiExpanded ? I18n.tr("Hide Steps ▴") : I18n.tr("Fix Steps ▾")
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                onClicked: integrationPage.kwinAbiExpanded = !integrationPage.kwinAbiExpanded
+            }
+            Demo.LiquidActionButton {
+                text: I18n.tr("View Guide")
+                materialForm: true
+                implicitHeight: 24
+                cornerRadius: 6
+                onClicked: Qt.openUrlExternally("https://github.com/NextKde/NextKde/blob/main/docs/GettingStarted"
+                    + (I18n.language === "zh-CN" ? ".zh-CN.md" : ".md"))
+            }
+        }
+
+        Demo.SettingsItem {
+            objectName: "kwinAbiRebuildStep"
+            visible: integrationPage.snapshot.kwinAbiMismatch === true && integrationPage.kwinAbiExpanded
+            title: "↳ " + I18n.tr("Rebuild and reinstall KWin plugins")
+            description: I18n.tr("Run ./tools/kosctl install in your NextKde checkout (ensure KWin development packages match the new KWin version), then log out and log back in.")
+        }
 
         Demo.SettingsItem {
             title: I18n.tr("Enable NextKde Input Method Popups")
