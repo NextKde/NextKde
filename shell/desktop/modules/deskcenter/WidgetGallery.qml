@@ -19,6 +19,7 @@ Rectangle {
     property string feedback: ""
     property bool placementEnabled: false
     property bool loading: false
+    property bool minimized: false
     readonly property bool compact: width < 600
     readonly property color ink: ThemeService.foregroundColor
     readonly property var _trippedList: WidgetDiagnostics.toList(root.trippedPackages)
@@ -66,10 +67,20 @@ Rectangle {
         }
         return false
     }
+    readonly property string currentCategoryTitle: {
+        const _lang = I18n.language
+        for (let i = 0; i < root.categories.length; i++) {
+            if (root.categories[i].id === root.selectedCategory)
+                return String(root.categories[i].name ?? "")
+        }
+        return I18n.tr("All Widgets")
+    }
     signal addRequested(var entry, string size)
     signal reEnableRequested(string packageId)
     signal removeRetiredInstanceRequested(string instanceId)
     signal done()
+    signal minimizeToggled()
+    signal openPluginStoreRequested()
     objectName: "widget-library"
     radius: 0
     color: "transparent"
@@ -196,6 +207,7 @@ Rectangle {
     MouseArea { anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton }
     Item {
         id: sidebar
+        visible: !root.minimized
         x: 14; y: 14
         width: root.compact ? parent.width - 28 : Math.min(190, parent.width * 0.24)
         height: root.compact ? 88 : parent.height - footer.height - 28
@@ -274,21 +286,197 @@ Rectangle {
         }
     }
     Rectangle {
-        visible: !root.compact
+        visible: !root.compact && !root.minimized
         x: sidebar.x + sidebar.width + 12
         y: 0
         width: 1
         height: parent.height - footer.height
         color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.08)
     }
+    // Fixed header pinned above the scrollable content area.
+    // Displays the active category title on the left and the Done / Minimize
+    // buttons on the right; also serves as the sole bar when minimized.
+    Item {
+        id: contentHeader
+        objectName: "widget-gallery-header"
+        z: 10
+        x: root.minimized ? 14 : (root.compact ? 14 : sidebar.x + sidebar.width + 28)
+        y: root.minimized ? Math.max(0, (root.height - height) / 2)
+            : (root.compact ? sidebar.y + sidebar.height + 6 : 12)
+        width: Math.max(1, root.minimized ? root.width - 28 : root.width - x - 16)
+        height: 40
+
+        Text {
+            id: headerTitle
+            objectName: "widget-gallery-header-title"
+            anchors {
+                left: parent.left
+                right: headerButtonGroup.left
+                verticalCenter: parent.verticalCenter
+                rightMargin: 12
+            }
+            text: root.currentCategoryTitle
+            textFormat: Text.PlainText
+            color: root.ink
+            font { pixelSize: 14; weight: Font.DemiBold }
+            elide: Text.ElideRight
+        }
+
+        Rectangle {
+            id: headerButtonGroup
+            objectName: "widget-gallery-header-actions"
+            anchors {
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+            }
+            width: headerButtonRow.implicitWidth
+            height: 32
+            radius: height / 2
+            color: Qt.rgba(0.32, 0.32, 0.35, 0.72)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.14)
+
+            Row {
+                id: headerButtonRow
+                anchors.fill: parent
+                spacing: 0
+
+                Controls.Button {
+                    id: doneButton
+                    objectName: "widget-gallery-done-button"
+                    width: 38
+                    height: parent.height
+                    hoverEnabled: true
+                    Accessible.name: I18n.tr("Done")
+                    contentItem: Item {
+                        BundledIcon {
+                            anchors.centerIn: parent
+                            name: "action.check"
+                            size: 18
+                            color: "white"
+                        }
+                    }
+                    background: Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: height / 2
+                        color: doneButton.down ? Qt.rgba(1, 1, 1, 0.22)
+                            : (doneButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent")
+                    }
+                    onClicked: root.done()
+                }
+
+                Rectangle {
+                    width: 1
+                    height: 18
+                    anchors.verticalCenter: parent.verticalCenter
+                    color: Qt.rgba(1, 1, 1, 0.18)
+                }
+
+                Controls.Button {
+                    id: minimizeButton
+                    objectName: "widget-gallery-minimize-button"
+                    width: 38
+                    height: parent.height
+                    hoverEnabled: true
+                    Accessible.name: root.minimized ? I18n.tr("Restore") : I18n.tr("Minimize")
+                    contentItem: Item {
+                        BundledIcon {
+                            anchors.centerIn: parent
+                            name: root.minimized ? "action.activateWindow" : "action.minimize"
+                            size: 18
+                            color: "white"
+                        }
+                    }
+                    background: Rectangle {
+                        anchors.fill: parent
+                        anchors.margins: 2
+                        radius: height / 2
+                        color: minimizeButton.down ? Qt.rgba(1, 1, 1, 0.22)
+                            : (minimizeButton.hovered ? Qt.rgba(1, 1, 1, 0.12) : "transparent")
+                    }
+                    onClicked: root.minimizeToggled()
+                }
+            }
+        }
+
+        // Custom pill tooltip replacing Qt's unstyled native ToolTip popup.
+        Item {
+            id: headerTooltipHost
+            readonly property string targetKey: doneButton.hovered ? "done"
+                : (minimizeButton.hovered ? "minimize" : "")
+            property string shownKey: ""
+            readonly property bool active: shownKey.length > 0 && targetKey === shownKey
+            onTargetKeyChanged: {
+                if (targetKey.length > 0) {
+                    if (shownKey.length > 0) shownKey = targetKey
+                    else headerTooltipTimer.restart()
+                } else {
+                    headerTooltipTimer.stop()
+                    shownKey = ""
+                }
+            }
+            Timer {
+                id: headerTooltipTimer
+                interval: 260
+                repeat: false
+                onTriggered: headerTooltipHost.shownKey = headerTooltipHost.targetKey
+            }
+            Rectangle {
+                id: headerActionTooltip
+                z: 20
+                readonly property real anchorCenterX: headerButtonGroup.x
+                    + (headerTooltipHost.shownKey === "done"
+                        ? doneButton.x + doneButton.width / 2
+                        : minimizeButton.x + minimizeButton.width / 2)
+                x: root.minimized
+                    ? Math.max(0, headerButtonGroup.x - width - 8)
+                    : Math.max(0, Math.min(contentHeader.width - width, anchorCenterX - width / 2))
+                y: root.minimized
+                    ? (contentHeader.height - height) / 2
+                    : headerButtonGroup.y + headerButtonGroup.height + 6
+                width: headerTooltipText.implicitWidth + 18
+                height: 24
+                radius: height / 2
+                color: AppearanceTokens.isDarkTheme
+                    ? Qt.rgba(0.14, 0.14, 0.16, 0.94)
+                    : Qt.rgba(0.98, 0.98, 0.99, 0.96)
+                border.width: 1
+                border.color: AppearanceTokens.isDarkTheme
+                    ? Qt.rgba(1, 1, 1, 0.14)
+                    : Qt.rgba(0, 0, 0, 0.10)
+                opacity: headerTooltipHost.active ? 1 : 0
+                visible: opacity > 0.01
+                Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
+
+                Text {
+                    id: headerTooltipText
+                    anchors.centerIn: parent
+                    text: headerTooltipHost.shownKey === "done"
+                        ? I18n.tr("Done")
+                        : (root.minimized ? I18n.tr("Restore") : I18n.tr("Minimize"))
+                    textFormat: Text.PlainText
+                    color: AppearanceTokens.isDarkTheme ? "white" : "#1c1c1e"
+                    font { pixelSize: 11; weight: Font.Medium }
+                }
+            }
+        }
+
+        Rectangle {
+            visible: !root.minimized
+            anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
+            height: 1
+            color: Qt.rgba(root.ink.r, root.ink.g, root.ink.b, 0.08)
+        }
+    }
     ListView {
         id: previewList
         objectName: "widget-gallery-previews"
-        visible: root.selectedCategory !== "dock" && root.selectedCategory !== "unavailable"
+        visible: !root.minimized && root.selectedCategory !== "dock" && root.selectedCategory !== "unavailable"
         x: root.compact ? 14 : sidebar.x + sidebar.width + 28
-        y: root.compact ? sidebar.y + sidebar.height + 6 : 16
+        y: contentHeader.y + contentHeader.height + 10
         width: Math.max(1, parent.width - x - 16)
-        height: Math.max(1, parent.height - y - footer.height - 12)
+        height: Math.max(1, parent.height - y - footer.height - 8)
         clip: true
         spacing: 24
         cacheBuffer: 240
@@ -621,7 +809,7 @@ Rectangle {
     Flickable {
         id: dockWidgetsPanel
         objectName: "widget-gallery-dock-widgets"
-        visible: root.selectedCategory === "dock"
+        visible: !root.minimized && root.selectedCategory === "dock"
         x: previewList.x
         y: previewList.y
         width: previewList.width
@@ -660,23 +848,13 @@ Rectangle {
             width: dockWidgetsPanel.width - 10
             spacing: 12
 
-            Column {
+            Text {
                 width: parent.width
-                spacing: 4
-                Text {
-                    id: dockWidgetsTitle
-                    text: I18n.tr("Dock Widgets")
-                    color: root.ink
-                    font { pixelSize: 13; weight: Font.DemiBold }
-                }
-                Text {
-                    width: parent.width
-                    text: I18n.tr("Tap to add or remove, drag to reorder.")
-                    color: root.ink
-                    opacity: 0.65
-                    font.pixelSize: 11
-                    wrapMode: Text.WordWrap
-                }
+                text: I18n.tr("Tap to add or remove, drag to reorder.")
+                color: root.ink
+                opacity: 0.65
+                font.pixelSize: 11
+                wrapMode: Text.WordWrap
             }
 
             Flow {
@@ -878,7 +1056,7 @@ Rectangle {
     Flickable {
         id: unavailablePanel
         objectName: "widget-gallery-unavailable"
-        visible: root.selectedCategory === "unavailable"
+        visible: !root.minimized && root.selectedCategory === "unavailable"
         x: previewList.x
         y: previewList.y
         width: previewList.width
@@ -1080,10 +1258,17 @@ Rectangle {
 
     Item {
         id: footer
+        visible: !root.minimized
         anchors { left: parent.left; right: parent.right; bottom: parent.bottom }
-        height: 50
+        height: 40
         Text {
-            anchors { left: parent.left; right: doneButton.left; verticalCenter: parent.verticalCenter; leftMargin: 16; rightMargin: 14 }
+            anchors {
+                left: parent.left
+                right: pluginStoreLink.left
+                verticalCenter: parent.verticalCenter
+                leftMargin: 16
+                rightMargin: 12
+            }
             text: root.feedback || (root.selectedCategory === "dock"
                 ? I18n.tr("Tap a widget to add or remove it, drag to reorder.")
                 : root.selectedCategory === "unavailable"
@@ -1098,24 +1283,48 @@ Rectangle {
             maximumLineCount: 2
             elide: Text.ElideRight
         }
-        Controls.Button {
-            id: doneButton
-            anchors { right: parent.right; verticalCenter: parent.verticalCenter; rightMargin: 16 }
-            width: 76; height: 28
-            contentItem: Text {
-                text: I18n.tr("Done")
-                color: "white"
-                font { pixelSize: 12; weight: Font.DemiBold }
-                horizontalAlignment: Text.AlignHCenter
-                verticalAlignment: Text.AlignVCenter
+        Rectangle {
+            id: pluginStoreLink
+            objectName: "widget-gallery-plugin-store-link"
+            anchors {
+                right: parent.right
+                verticalCenter: parent.verticalCenter
+                rightMargin: 14
             }
-            background: Rectangle {
-                radius: 14
-                color: doneButton.down ? "#0062cc" : "#007aff"
-                border.width: doneButton.activeFocus ? 2 : 0
-                border.color: "white"
+            height: 26
+            width: pluginStoreRow.implicitWidth + 16
+            radius: height / 2
+            color: pluginStoreArea.pressed
+                ? Qt.rgba(0, 122 / 255, 1, 0.18)
+                : (pluginStoreArea.containsMouse ? Qt.rgba(0, 122 / 255, 1, 0.11) : "transparent")
+
+            Row {
+                id: pluginStoreRow
+                anchors.centerIn: parent
+                spacing: 4
+
+                Text {
+                    text: I18n.tr("Get more plugins in Settings")
+                    textFormat: Text.PlainText
+                    color: "#007aff"
+                    font { pixelSize: 11; weight: Font.Medium }
+                    anchors.verticalCenter: parent.verticalCenter
+                }
+                BundledIcon {
+                    name: "audio.details"
+                    size: 12
+                    color: "#007aff"
+                    anchors.verticalCenter: parent.verticalCenter
+                }
             }
-            onClicked: root.done()
+
+            MouseArea {
+                id: pluginStoreArea
+                anchors.fill: parent
+                hoverEnabled: true
+                cursorShape: Qt.PointingHandCursor
+                onClicked: root.openPluginStoreRequested()
+            }
         }
     }
 }

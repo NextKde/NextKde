@@ -158,13 +158,21 @@ PanelWindow {
     // monitor's DeskCenterWindow would fight over the one shared singleton.
     readonly property bool isGalleryHost:
         root.screen?.name === ScreenLifecycle.activeScreen?.name
-    // Same bottom-center-floating geometry the panel used while embedded
-    // here, now published for WidgetGalleryWindow to consume instead of
-    // being read directly off a child item.
+    // Bottom-center-floating geometry positioned above the Dock so the Dock
+    // stays visible underneath, published for WidgetGalleryWindow to consume
+    // instead of being read directly off a child item.
+    readonly property real _dockEdgeMargin: ConfigService.dockStyle === "taskbar"
+        ? 0 : Math.max(4, Math.round(AppLauncherService.dockHeight * 0.12))
+    readonly property real galleryBottomInset: ConfigService.position === "bottom"
+        && AppLauncherService.dockHeight > 0
+        ? AppLauncherService.dockHeight + _dockEdgeMargin + 12
+        : 16
     readonly property real galleryWidth: Math.max(1, Math.min(940, root.width - root.leftInset - root.rightInset))
-    readonly property real galleryHeight: Math.max(180, Math.min(510, root.height - root.topInset - 44))
+    readonly property real galleryHeight: Math.max(180,
+        Math.min(510, root.height - root.topInset - 24 - root.galleryBottomInset))
     readonly property real galleryX: root.leftInset + (root.width - root.leftInset - root.rightInset - galleryWidth) / 2
-    readonly property real galleryY: Math.max(root.topInset + 44, root.height - galleryHeight)
+    readonly property real galleryY: Math.max(root.topInset + 24,
+        root.height - root.galleryBottomInset - galleryHeight)
     property var activeDragCard: null
     // The loaded grouped content, if the card is on screen. Its own editor is
     // the only visible rename surface while the normal icon field is hidden.

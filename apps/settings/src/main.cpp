@@ -69,7 +69,9 @@ int main(int argc, char* argv[])
 
     QString requestedApp;
     for (const auto &argument : application.arguments()) {
-        if (argument == QLatin1String("--app=calendar") || argument == QLatin1String("--app=weather"))
+        if (argument == QLatin1String("--app=calendar")
+                || argument == QLatin1String("--app=weather")
+                || argument == QLatin1String("--app=plugins"))
             requestedApp = argument.mid(6);
     }
     // Installed and development shells must never navigate each other's window.
@@ -166,7 +168,8 @@ int main(int argc, char* argv[])
                 bool pageOk = false;
                 const int page = app.startsWith("page:") ? app.mid(5).toInt(&pageOk) : -1;
                 pageOk = pageOk && page >= 0 && page <= 15;
-                if (app != "show" && app != "calendar" && app != "weather" && !pageOk) {
+                if (app != "show" && app != "calendar" && app != "weather"
+                        && app != "plugins" && !pageOk) {
                     client->disconnectFromServer();
                     return;
                 }
@@ -175,7 +178,7 @@ int main(int argc, char* argv[])
                     return;
                 }
                 QObject *root = engine.rootObjects().constFirst();
-                if (app == "calendar" || app == "weather") {
+                if (app == "calendar" || app == "weather" || app == "plugins") {
                     root->setProperty("requestedApp", QString::fromUtf8(app));
                     root->setProperty("currentPage", 9);
                     QMetaObject::invokeMethod(root, "revealRequestedApp");
@@ -202,7 +205,9 @@ int main(int argc, char* argv[])
     // contentByPage index N directly (integration status is 6). --page=windows
     // keeps its named form for the existing window-install test.
     for (const QString& argument : application.arguments()) {
-        if (argument == QStringLiteral("--app=calendar") || argument == QStringLiteral("--app=weather")) {
+        if (argument == QStringLiteral("--app=calendar")
+                || argument == QStringLiteral("--app=weather")
+                || argument == QStringLiteral("--app=plugins")) {
             engine.rootObjects().constFirst()->setProperty("requestedApp", argument.mid(6));
             engine.rootObjects().constFirst()->setProperty("currentPage", 9);
         } else if (argument == QStringLiteral("--page=about")) {

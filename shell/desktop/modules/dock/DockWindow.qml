@@ -4,7 +4,6 @@ import QtQuick
 import qs.desktop.modules.applauncher
 import qs.desktop.modules.dock
 import qs.desktop.modules.common
-import qs.desktop.modules.deskcenter
 import qs.desktop.modules.platform
 import qs.desktop.modules.wallpaper
 import "../../../Kos/Ui"
@@ -139,7 +138,6 @@ PanelWindow {
         dragging: dockContainer.draggedPinnedLoader !== null || dockContainer.statusDragActive
         popupOpen: DockModelService.activeDockPopup !== null || dockContainer.accessoryInteractionActive
         launcherOpen: AppLauncherService.open
-        forceHidden: WidgetGalleryService.open
     }
 
     // Only a permanently visible Dock reserves workspace. Hide modes keep the

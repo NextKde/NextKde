@@ -61,6 +61,11 @@ GridLayout {
     signal revealRequested(var card)
     property bool revealPending: true
     function requestReveal() {
+        if (requestedApp === "plugins") {
+            selectedCategory = 2
+            revealPending = false
+            return
+        }
         if (requestedApp) selectedCategory = 0
         revealPending = true
         Qt.callLater(page.revealApp)
@@ -490,6 +495,7 @@ GridLayout {
             bridge.wallpaperSnapshot();
     }
     Component.onCompleted: {
+        if (requestedApp) requestReveal()
         if (openSourcesOnCompleted) Qt.callLater(function() {
             sourceDialog.open()
             page.sourcesOpened()

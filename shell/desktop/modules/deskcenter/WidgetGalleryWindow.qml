@@ -55,19 +55,34 @@ PanelWindow {
         NumberAnimation { duration: 260; easing.type: Easing.OutCubic }
     }
 
+    readonly property real fullWidth: Math.max(1, WidgetGalleryService.galleryWidth)
+    readonly property real fullHeight: Math.max(1, WidgetGalleryService.galleryHeight)
+    readonly property real targetWidth: WidgetGalleryService.minimized
+        ? Math.min(root.fullWidth, 420) : root.fullWidth
+    readonly property real targetHeight: WidgetGalleryService.minimized
+        ? 56 : root.fullHeight
+    readonly property real targetX: WidgetGalleryService.galleryX
+        + (root.fullWidth - root.targetWidth) / 2
+    readonly property real targetY: WidgetGalleryService.galleryY
+        + root.fullHeight - root.targetHeight
+
     WidgetGallery {
         id: gallery
         objectName: "widget-gallery-panel"
-        x: WidgetGalleryService.galleryX
-        // Rises up from just below its resting position while opening, and
-        // sinks back down on close — paired with the Dock's own
-        // forceHidden sink (see DockAutoHideController) so the two read as
-        // one choreographed motion.
-        y: WidgetGalleryService.galleryY + (1 - root.openProgress) * 48
+        property real baseY: root.targetY
+        x: root.targetX
+        // Rises gently into its resting position above the Dock while opening,
+        // and sinks back down as it fades out on close.
+        y: gallery.baseY + (1 - root.openProgress) * 24
         opacity: root.openProgress
-        width: Math.max(1, WidgetGalleryService.galleryWidth)
-        height: Math.max(1, WidgetGalleryService.galleryHeight)
+        width: root.targetWidth
+        height: root.targetHeight
+        Behavior on x { enabled: root.visible && root.openProgress > 0.95; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on baseY { enabled: root.visible && root.openProgress > 0.95; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on width { enabled: root.visible && root.openProgress > 0.95; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on height { enabled: root.visible && root.openProgress > 0.95; NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
         visible: root.visible
+        minimized: WidgetGalleryService.minimized
         placementEnabled: true
         catalog: WidgetGalleryService.catalog
         invalidPackages: WidgetGalleryService.invalidPackages
@@ -80,6 +95,11 @@ PanelWindow {
             begin()
         }
         onDone: WidgetGalleryService.done()
+        onMinimizeToggled: WidgetGalleryService.toggleMinimized()
+        onOpenPluginStoreRequested: {
+            WidgetGalleryService.openPluginStore()
+            WidgetGalleryService.done()
+        }
         onAddRequested: (entry, size) => WidgetGalleryService.addRequested(entry, size)
         onReEnableRequested: packageId => WidgetGalleryService.reEnableRequested(packageId)
         onRemoveRetiredInstanceRequested: instanceId => WidgetGalleryService.removeRetiredInstanceRequested(instanceId)
