@@ -79,9 +79,19 @@ manifest_plugin() {
     done < "$manifest"
     (( found == 1 && failed == 0 ))
 }
+resolve_qdbus_bin() {
+    command -v qdbus6 2>/dev/null \
+        || command -v qdbus-qt6 2>/dev/null \
+        || { [[ -x /usr/lib64/qt6/bin/qdbus ]] && printf '/usr/lib64/qt6/bin/qdbus\n'; } \
+        || { [[ -x /usr/lib/qt6/bin/qdbus ]] && printf '/usr/lib/qt6/bin/qdbus\n'; } \
+        || command -v qdbus 2>/dev/null \
+        || true
+}
 effect_loaded() {
-    local reply
-    reply=$(qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.isEffectLoaded "$1") || return 1
+    local qdbus_bin reply
+    qdbus_bin=$(resolve_qdbus_bin)
+    [[ -n "$qdbus_bin" ]] || return 1
+    reply=$("$qdbus_bin" org.kde.KWin /Effects org.kde.kwin.Effects.isEffectLoaded "$1") || return 1
     [[ "$reply" == true ]]
 }
 

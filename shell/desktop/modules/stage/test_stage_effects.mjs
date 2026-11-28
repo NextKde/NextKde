@@ -3,16 +3,20 @@ import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { effectSwitchCommand, shellQuote } from './stage-effects.mjs';
+import { effectSwitchCommand, reconfigureEffectCommand, shellQuote } from './stage-effects.mjs';
 
 const dir = mkdtempSync(join(tmpdir(), 'stage-effects-'));
-const mock = `#!/usr/bin/env python3
+// Absolute interpreter: the Fedora scenario below runs with a PATH that holds
+// nothing but the mocks.
+const python = spawnSync('bash', ['-c', 'command -v python3'], { encoding: 'utf8' }).stdout.trim();
+const bash = spawnSync('bash', ['-c', 'command -v bash'], { encoding: 'utf8' }).stdout.trim();
+const mock = `#!${python}
 import json, os, sys
 p=os.environ['STAGE_TEST_STATE']
 s=json.load(open(p)); args=sys.argv[1:]; cmd=os.path.basename(sys.argv[0])
 s['calls'].append([cmd]+args)
 rc=0; out=''
-if cmd=='qdbus6':
+if cmd in ('qdbus6', 'qdbus-qt6'):
     op=args[-2].split('.')[-1]; effect=args[-1]
     if op=='isEffectLoaded': out=str(s['loaded'][effect]).lower()
     elif op=='loadEffect':
@@ -34,16 +38,16 @@ sys.exit(rc)
 for (const cmd of ['qdbus6', 'kreadconfig6', 'kwriteconfig6'])
     writeFileSync(join(dir, cmd), mock, { mode: 0o755 });
 let cases = 0;
-function run(enabled, changes = {}, commit = ':') {
+function run(enabled, changes = {}, commit = ':', path = dir + ':' + process.env.PATH) {
     const initial = { loaded: { stageanim13: !enabled, kos_dock_window_animation: enabled },
         config: {}, calls: [], ...changes };
-    const path = join(dir, 'state.json');
-    writeFileSync(path, JSON.stringify(initial));
-    const result = spawnSync('bash', ['-c', effectSwitchCommand(enabled, 'stageanim13', commit)],
-        { env: { ...process.env, PATH: dir + ':' + process.env.PATH, STAGE_TEST_STATE: path }, encoding: 'utf8' });
+    const statePath = join(dir, 'state.json');
+    writeFileSync(statePath, JSON.stringify(initial));
+    const result = spawnSync(bash, ['-c', effectSwitchCommand(enabled, 'stageanim13', commit)],
+        { env: { ...process.env, PATH: path, STAGE_TEST_STATE: statePath }, encoding: 'utf8' });
     assert.equal(result.error, undefined);
     cases++;
-    return { initial, result, state: JSON.parse(readFileSync(path, 'utf8')) };
+    return { initial, result, state: JSON.parse(readFileSync(statePath, 'utf8')) };
 }
 try {
     for (const enabled of [true, false]) {
@@ -72,6 +76,25 @@ try {
     assert.notEqual(bothOff.result.status, 0);
     assert.deepEqual(bothOff.state.loaded, bothOff.initial.loaded);
     assert.throws(() => effectSwitchCommand(true, 'bad;id'));
+    // Fedora ships the Qt 6 D-Bus CLI as qdbus-qt6 and no qdbus6: Stage must
+    // still switch, through whichever name the system has.
+    const fedora = mkdtempSync(join(tmpdir(), 'stage-effects-fedora-'));
+    try {
+        for (const cmd of ['qdbus-qt6', 'kreadconfig6', 'kwriteconfig6'])
+            writeFileSync(join(fedora, cmd), mock, { mode: 0o755 });
+        const onFedora = run(true, {}, ':', fedora);
+        assert.equal(onFedora.result.status, 0, onFedora.result.stderr);
+        assert.equal(onFedora.state.loaded.stageanim13, true);
+        assert.ok(onFedora.state.calls.some(call => call[0] === 'qdbus-qt6'));
+        const statePath = join(dir, 'state.json');
+        writeFileSync(statePath, JSON.stringify({ loaded: {}, config: {}, calls: [] }));
+        const reconfigure = spawnSync(bash, ['-c', reconfigureEffectCommand('stageanim13')],
+            { env: { ...process.env, PATH: fedora, STAGE_TEST_STATE: statePath }, encoding: 'utf8' });
+        assert.equal(reconfigure.status, 0, reconfigure.stderr);
+        assert.deepEqual(JSON.parse(readFileSync(statePath, 'utf8')).calls, [['qdbus-qt6', 'org.kde.KWin',
+            '/Effects', 'org.kde.kwin.Effects.reconfigureEffect', 'stageanim13']]);
+        assert.throws(() => reconfigureEffectCommand('bad;id'));
+    } finally { rmSync(fedora, { recursive: true, force: true }); }
     const quoted = spawnSync('bash', ['-c', 'printf %s ' + shellQuote("a b'$(false)")], { encoding: 'utf8' });
     assert.equal(quoted.stdout, "a b'$(false)");
     console.log(`stage-effects: ${cases} transition scenarios passed`);

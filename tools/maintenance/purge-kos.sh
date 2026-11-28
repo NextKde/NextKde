@@ -307,9 +307,18 @@ if (( ${#pids[@]} )); then
     fi
 fi
 
+resolve_qdbus_bin() {
+    command -v qdbus6 2>/dev/null \
+        || command -v qdbus-qt6 2>/dev/null \
+        || { [[ -x /usr/lib64/qt6/bin/qdbus ]] && printf '/usr/lib64/qt6/bin/qdbus\n'; } \
+        || { [[ -x /usr/lib/qt6/bin/qdbus ]] && printf '/usr/lib/qt6/bin/qdbus\n'; } \
+        || command -v qdbus 2>/dev/null \
+        || true
+}
+
 # Shortcut cleanup uses KGlobalAccel, not a CLI the daemon does not expose.
 # Stop owners first so cleanUp can remove their inactive shortcut registration.
-qdbus_bin=$(command -v qdbus6 || command -v qdbus || true)
+qdbus_bin=$(resolve_qdbus_bin)
 if [[ -n "$qdbus_bin" ]]; then
     "$qdbus_bin" org.kde.kglobalaccel /component/kos_platform \
         org.kde.kglobalaccel.Component.cleanUp >/dev/null 2>&1 || true
@@ -357,7 +366,7 @@ if command -v kreadconfig6 >/dev/null 2>&1 &&
 fi
 # Legacy plugin installs can predate the manifest. Unload them as well before
 # the fixed-path fallback sweep; do not touch unrelated KWin effects.
-qdbus_bin=$(command -v qdbus6 || command -v qdbus || true)
+qdbus_bin=$(resolve_qdbus_bin)
 if [[ -n "$qdbus_bin" ]]; then
     for effect in glass kos_bridge kos_context_menu_input kos_dock_window_animation quickshell_context_menu_input; do
         "$qdbus_bin" org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect "$effect" >/dev/null 2>&1 || true

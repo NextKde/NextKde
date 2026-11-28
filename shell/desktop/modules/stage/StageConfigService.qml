@@ -3,6 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import qs.desktop.modules.platform
+import "stage-effects.mjs" as StageEffects
 
 // StageConfigService — 台前调度（Stage 侧栏）全部可调参数的唯一事实来源。
 // 持久化 <stateDir>/stage/config.json（JsonConfigStore 原子写）；kwinrc
@@ -364,8 +365,7 @@ QtObject {
             + " --key TiltAngle " + tilt
             + " && kwriteconfig6 --file kwinrc --group Effect-stageanim"
             + " --key GlassOpacity " + glassOpacity
-            + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects"
-            + ".reconfigureEffect " + StageModeService.effectId
+            + " && " + StageEffects.reconfigureEffectCommand(StageModeService.effectId)
             + _verifyKeyCmd("TiltAngle", tilt)
             + _verifyKeyCmd("GlassOpacity", glassOpacity)])
     }
