@@ -30,6 +30,12 @@ constexpr int kBrightnessCacheTtlMs = 10000;
 
 constexpr int kNightLightCacheTtlMs = 10000;
 
+bool isSecondarySeat()
+{
+    const QString currentSeat = qEnvironmentVariable("XDG_SEAT").trimmed();
+    return !currentSeat.isEmpty() && currentSeat != QStringLiteral("seat0");
+}
+
 std::unique_ptr<QDBusInterface> openScreenBrightness(QString &serviceName)
 {
     for (const QString &candidate : {QStringLiteral("org.kde.ScreenBrightness"),
@@ -65,8 +71,7 @@ QJsonObject readKdeBrightness(QString *serviceNameOut = nullptr,
             *displayIdsOut = displayIds;
         QJsonArray displays;
         QJsonObject primary;
-        const QString currentSeat = qEnvironmentVariable("XDG_SEAT").trimmed();
-        const bool preferExternal = (!currentSeat.isEmpty() && currentSeat != QStringLiteral("seat0"));
+        const bool preferExternal = isSecondarySeat();
 
         for (const QString &displayId : displayIds) {
             if (displayId.isEmpty() || displayId.contains(QLatin1Char('/')))
@@ -291,6 +296,8 @@ private:
 
 QJsonObject readSysfsBrightness()
 {
+    if (isSecondarySeat())
+        return QJsonObject{{QStringLiteral("available"), false}};
     const QDir backlights(QStringLiteral("/sys/class/backlight"));
     const QFileInfoList entries = backlights.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot,
                                                            QDir::Name);
@@ -539,16 +546,18 @@ bool PlatformServer::handleDisplayOperation(QLocalSocket *socket, const QJsonObj
             storeReply(key, kBrightnessCacheTtlMs, true, kdeBrightness);
             return true;
         }
-        const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
-        if (!brightnessctl.isEmpty()) {
-            runCommand(socket, request, brightnessctl, {QStringLiteral("-m")},
-                       parseBrightness, kDefaultCommandTimeoutMs,
-                       key, kBrightnessCacheTtlMs);
-        } else {
-            const QJsonObject sysfs = readSysfsBrightness();
-            respond(socket, request, true, sysfs);
-            storeReply(key, kBrightnessCacheTtlMs, true, sysfs);
+        if (!isSecondarySeat()) {
+            const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
+            if (!brightnessctl.isEmpty()) {
+                runCommand(socket, request, brightnessctl, {QStringLiteral("-m")},
+                           parseBrightness, kDefaultCommandTimeoutMs,
+                           key, kBrightnessCacheTtlMs);
+                return true;
+            }
         }
+        const QJsonObject sysfs = readSysfsBrightness();
+        respond(socket, request, true, sysfs);
+        storeReply(key, kBrightnessCacheTtlMs, true, sysfs);
         return true;
     }
     if (op == QStringLiteral("display.brightness.set")) {
@@ -571,11 +580,13 @@ bool PlatformServer::handleDisplayOperation(QLocalSocket *socket, const QJsonObj
             }
             QLocalSocket *socket = guarded.data();
             if (!socket) return;
-            const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
-            if (!brightnessctl.isEmpty()) {
-                runCommand(socket, request, brightnessctl,
-                           {QStringLiteral("set"), QStringLiteral("%1%").arg(value)});
-                return;
+            if (!isSecondarySeat()) {
+                const QString brightnessctl = QStandardPaths::findExecutable(QStringLiteral("brightnessctl"));
+                if (!brightnessctl.isEmpty()) {
+                    runCommand(socket, request, brightnessctl,
+                               {QStringLiteral("set"), QStringLiteral("%1%").arg(value)});
+                    return;
+                }
             }
             const QJsonObject backlight = readSysfsBrightness();
             if (!backlight.value(QStringLiteral("available")).toBool()) {
