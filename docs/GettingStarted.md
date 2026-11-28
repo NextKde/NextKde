@@ -74,7 +74,7 @@ sudo dnf install \
   git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config gettext \
   quickshell extra-cmake-modules \
   wayland-devel wayland-protocols-devel libxkbcommon-devel \
-  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qttranslations qt6-qtquick3d-devel \
+  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools qt6-qttools-devel qt6-qttranslations qt6-qtquick3d-devel \
   qt6-qtsvg-devel qt6-qtwayland-devel qt6-qtimageformats qt6-qt5compat-devel \
   qt6-qtbase-private-devel \
   kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel \
@@ -86,7 +86,8 @@ sudo dnf install \
 ```
 
 Qt base/QPA private headers ship in `qt6-qtbase-private-devel`; QuickPrivate ships in
-`qt6-qtdeclarative-devel`. Fedora uses a
+`qt6-qtdeclarative-devel`. `qt6-qttools` provides `qdbus-qt6`, which `kosctl` and Stage Manager
+resolve automatically on Fedora (where `qdbus6` is not shipped). Fedora uses a
 single `libxcb-devel`, unlike Debian's split extension packages. Clipboard history also needs
 `wl-clipboard` and `cliphist` (`sudo dnf install wl-clipboard cliphist`); `doctor` warns when they
 are missing.
@@ -274,6 +275,23 @@ Settings → About updates the source checkout in place: it writes progress and 
 `${XDG_STATE_HOME:-$HOME/.local/state}/kos/update/`, can outlive the Settings window, and leaves
 the running Shell untouched until you choose Restart KOS. If authorization or the build fails,
 the source checkout may already be updated; check the log and retry before logging out.
+
+### Rebuilding KWin plugins after a system KWin upgrade
+
+KWin effect plugins embed the exact KWin ABI version (`EffectPluginFactory<version>`). After a
+distribution upgrade changes KWin (for example `6.7.5` → `6.8.3`), KWin refuses previously built
+`glass`, `kos_bridge`, `kos_context_menu_input`, `kos_dock_window_animation`, and `stageanim13`
+plugins, leaving rounded corners and liquid glass disabled until rebuilt.
+
+`./tools/kosctl doctor`, `./tools/kosctl start`, and **Settings → Integration Status** report the
+mismatch between installed plugin ABI and the system KWin version. To recover, make sure KWin
+development packages match the upgraded KWin, then rebuild and reinstall:
+
+```sh
+./tools/kosctl install
+```
+
+Log out and log back in (or reboot) so KWin loads the rebuilt plugins.
 
 ```sh
 ./tools/kosctl uninstall
