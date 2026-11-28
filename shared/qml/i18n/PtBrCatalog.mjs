@@ -1625,6 +1625,7 @@ export const catalog = {
     "Enable NextKde popups once. Existing Fcitx Qt/GTK modules and native Wayland input use the same candidate panel.": "Ative uma vez. Os módulos Fcitx Qt/GTK existentes e a entrada nativa Wayland usam o mesmo painel de candidatos.",
     "NextKde Fcitx5 panel extension is unavailable; reinstall NextKde with Fcitx5 support": "A extensão de candidatos Fcitx5 do NextKde está indisponível; reinstale o NextKde com suporte ao Fcitx5",
     "Plugins": "Plugins",
+    "Get more plugins in Settings": "Baixar mais plugins nas Configurações",
     "Plugin": "Plugin",
     "Installed": "Instalado",
     "Refresh": "Atualizar",

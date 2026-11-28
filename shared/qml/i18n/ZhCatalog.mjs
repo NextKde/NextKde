@@ -1908,6 +1908,7 @@ export const catalog = {
     "Enable NextKde popups once. Existing Fcitx Qt/GTK modules and native Wayland input use the same candidate panel.": "开启一次即可，现有 Fcitx Qt/GTK 模块和原生 Wayland 输入将使用同一个候选面板。",
     "NextKde Fcitx5 panel extension is unavailable; reinstall NextKde with Fcitx5 support": "NextKde Fcitx5 候选面板扩展不可用，请安装支持 Fcitx5 的 NextKde 版本",
     "Plugins": "插件",
+    "Get more plugins in Settings": "前往设置下载更多插件",
     "Plugin": "插件",
     "Installed": "已安装",
     "Refresh": "刷新",
