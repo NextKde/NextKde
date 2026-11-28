@@ -536,6 +536,15 @@ if(BUILD_TESTING)
                     ${KOS_QUICKSHELL_EXECUTABLE}
             )
             set_tests_properties(kos-shell.dock-hover-hit PROPERTIES TIMEOUT 20)
+            # Middle-clicking an application tile opens a new window. The
+            # fixture drives the shipping DockIcon with synthetic pointer
+            # events; model.test.mjs asserts the host-to-service wiring.
+            add_test(NAME kos-shell.dock-middle-click
+                COMMAND ${KOS_NODE_EXECUTABLE}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs middle-click
+                    ${KOS_QUICKSHELL_EXECUTABLE}
+            )
+            set_tests_properties(kos-shell.dock-middle-click PROPERTIES TIMEOUT 20)
             add_test(NAME kos-shell.dock-magnification-runtime
                 COMMAND ${KOS_NODE_EXECUTABLE}
                     ${CMAKE_CURRENT_SOURCE_DIR}/tests/dock/runtime.mjs magnification
@@ -561,7 +570,8 @@ if(BUILD_TESTING)
             set_tests_properties(kos-shell.static-work-runtime
                 kos-shell.squircle-mask kos-shell.liquid-glass-panel
                 kos-shell.glass-ink
-                kos-shell.dock-hover-hit kos-shell.dock-magnification-runtime
+                kos-shell.dock-hover-hit kos-shell.dock-middle-click
+                kos-shell.dock-magnification-runtime
                 PROPERTIES ENVIRONMENT "QML2_IMPORT_PATH=${CMAKE_BINARY_DIR}/qml")
         endif()
         find_program(KOS_WESTON_EXECUTABLE NAMES weston)
@@ -907,7 +917,8 @@ if(BUILD_TESTING)
             kos-shell.liquid-glass-panel kos-shell.glass-ink
             kos-shell.bar-mac-style
             kos-shell.traditional-color-runtime
-            kos-shell.dock-hover-hit kos-shell.dock-magnification-runtime
+            kos-shell.dock-hover-hit kos-shell.dock-middle-click
+            kos-shell.dock-magnification-runtime
             PROPERTIES LABELS ui)
     endif()
     if(KOS_PYTHON_EXECUTABLE)

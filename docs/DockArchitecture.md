@@ -106,7 +106,9 @@ readiness and `AppActionService.launchFailed`, and expires windowless launches
 after 15 seconds. An immediately ready window preserves at least 500 ms of
 launch feedback; this only delays clearing the animation state, never launching
 or displaying the application. Failed launches still clear immediately.
-Repeated clicks while pending do not spawn duplicate launches.
+Repeated clicks while pending do not spawn duplicate launches from this path;
+the explicit new-window action is not deduplicated (see
+[Pointer actions](#pointer-actions)).
 The compositor launch ticket is still prepared before executing the app.
 
 `DockIcon` composes a frame-driven ballistic bounce with its shared hover
@@ -776,17 +778,55 @@ collision.
 window actions. `DockContainer.qml` owns the launcher and trash menus. These
 menus join `DockModelService`'s popup coordinator so opening one closes the
 previous popup and holds the Dock visible. Right-click is handled by `DockIcon`;
-left-click behavior is unchanged.
+left-click behavior is unchanged. See [Pointer actions](#pointer-actions) for
+what each mouse button does on a Dock icon.
 
 Current context menu actions call service methods:
 
 ```text
-Pinned App:  activateApp, unpinApp, addSeparatorAfter
+Pinned App:  activateApp, launchNewWindow, unpinApp, addSeparatorAfter
 Separator:   removeSeparator
-Window:      activateWindow, minimizeWindow, closeWindow, pinApp/unpinApp
+Window:      activateWindow, minimizeWindow, closeWindow, launchNewWindow,
+             pinApp/unpinApp
 ```
 
 Do not mutate `pinnedItems` directly from a menu.
+
+### Pointer actions
+
+A plain left click activates or toggles the application's window group. Right
+click opens the shared context menu. Middle click on an application-bearing
+tile — a pinned app, a grouped running aggregate, or a single window task —
+launches another instance through `DockModelService.launchNewWindow`, the same
+action as the context menu's "New window" entry and the preview card's
+new-window button. The gesture is enabled only when the host resolved the
+tile's identity to a real desktop entry (`hasDesktopEntry`); a non-empty raw
+window class that merely synthesises an id is not enough. The fixed launcher,
+the trash, and window tasks without a desktop entry therefore do not accept the
+middle button at all.
+
+`DockIcon` emits `newWindowRequested` only when its host sets
+`newWindowEnabled` for a non-empty `appId`; `DockContainer` derives that flag
+from `appId` and `hasDesktopEntry` and routes every application host through
+`launchNewWindowFor(appId)`. Edit mode suppresses the launch: a middle click
+there only ends the edit session. Pinned tiles exit through the icon's own
+`editMode` early return; window tasks, which do not bind it, exit through the
+shared container handler's `isEditing` check. A middle press-and-hold never
+enters reorder/edit mode: the handler rejects the composed press-and-hold event
+so the release still counts as a click and opens the window, even though
+`MouseArea.onPressAndHold` fires for any accepted button.
+
+The launch path itself is unchanged: middle click does not toggle or minimize
+the current window, does not clear notification counts, and adds no
+duplicate-click suppression, so an explicit repeat opens another instance.
+Whether a second launch produces a new window is app-defined: a single-instance
+or D-Bus-activatable application may focus its existing window instead. The
+Dock uses the application's normal launch entry, not an application-specific
+new-window action.
+
+`tests/dock/middle-click.qml` drives the shipping `DockIcon` with synthetic
+middle, left and right clicks; the host wiring and the press-and-hold guard
+are asserted against the real sources in `model.test.mjs`.
 
 ### Window previews
 
@@ -921,12 +961,19 @@ All Dock tests live in `tests/dock/`. Group related checks in these suites
 instead of adding a new directory or runner for each regression:
 
 - `model.test.mjs`: process identity, unpinning, window indexing/updates,
-  transport fallback, QML payload arrays and lyric parsing.
+  transport fallback, QML payload arrays, lyric parsing and Dock click-action
+  wiring.
 - `policy.test.mjs`: adaptive layout, auto-hide policy and wallpaper colors.
 - `motion.test.mjs`: launch feedback, magnification response/layout and reveal
   geometry. Named Node test cases preserve individual failure diagnostics.
 - `runtime.mjs`: one entry point selecting an isolated QML scenario. Each case
   keeps its own scratch configuration and cleanup; QML scenes remain separate.
+  The `middle-click` case drives the shipping `DockIcon` with synthetic
+  middle, left and right clicks (new-window gesture, unchanged activation and
+  context-menu paths, edit-mode suppression, unresolved-entry inertness,
+  held-press behaviour); like `hover-hit` it is a `ui`-labelled quickshell
+  scene, so the VM runs the interaction while `kos-dock.model` guards the
+  wiring in CI.
 - `fixtures/`: shared QML service and renderer doubles for runtime scenes.
 - `sweep.qml` and `sweep_wayland.py`: the compositor-dependent label/frame probe.
 
@@ -938,6 +985,7 @@ node tests/dock/policy.test.mjs
 node tests/dock/motion.test.mjs
 node tests/dock/runtime.mjs highlight /usr/lib/qt6/bin/qmltestrunner
 node tests/dock/runtime.mjs magnification quickshell
+node tests/dock/runtime.mjs middle-click quickshell
 node tests/dock/runtime.mjs lyrics /usr/lib/qt6/bin/qmltestrunner
 ```
 

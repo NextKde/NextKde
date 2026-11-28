@@ -129,6 +129,7 @@ QtObject {
                     desktopId: identity.desktopId,
                     name: identity.name || dockItem.appId,
                     icon: windows[0]?.iconSource ?? identity.iconSource,
+                    hasDesktopEntry: identity.hasDesktopEntry,
                     isRunning: windows.length > 0,
                     isUrgent: windows.some(window => !!window.isUrgent)
                         || TrayAttentionService.needsAttention(
@@ -153,6 +154,7 @@ QtObject {
                 return item.appId === prev.appId
                     && item.name === prev.name
                     && item.icon === prev.icon
+                    && item.hasDesktopEntry === prev.hasDesktopEntry
                     && item.isRunning === prev.isRunning
                     && item.isUrgent === prev.isUrgent
                     && item.windowCount === prev.windowCount;
@@ -199,6 +201,7 @@ QtObject {
                         desktopId: desktopId,
                         appId: desktopId,
                         rawAppId: record.identity.rawAppId,
+                        hasDesktopEntry: record.identity.hasDesktopEntry,
                         title: record.identity.name || record.title,
                         icon: record.iconSource ?? record.identity.iconSource,
                         isActivated: false,
@@ -246,6 +249,7 @@ QtObject {
                     desktopId: record.identity.desktopId,
                     appId: record.identity.desktopId,
                     rawAppId: record.identity.rawAppId,
+                    hasDesktopEntry: record.identity.hasDesktopEntry,
                     title: record.title,
                     icon: record.iconSource ?? record.identity.iconSource,
                     isActivated: !!record.toplevel.activated,
