@@ -96,6 +96,51 @@ by `kosctl doctor`; if the repository package is older, use a compatible 0.3.x b
 an appropriate source as described above. This dependency helper does not upgrade a
 source-installed Quickshell or certify desktop runtime compatibility.
 
+### Fedora 45 (community-contributed)
+
+Fedora 45 ships Quickshell 0.2.1, which is older than the required 0.3.x. The Shell then fails
+to load its configuration (`Non-existent attached object` in `StatusTooltip.qml`) and
+`kos-shell.service` restarts continuously, so the screen alternates between a loading screen
+and the desktop. Install a 0.3.x build from the
+[`errornointernet/quickshell`](https://copr.fedorainfracloud.org/coprs/errornointernet/quickshell/)
+COPR before installing KOS:
+
+```sh
+sudo dnf copr enable -y errornointernet/quickshell
+sudo dnf upgrade -y quickshell        # 0.2.1 -> 0.3.2
+qs --version                          # must report 0.3.x
+```
+
+`dnf install quickshell` reports the package as already installed and leaves 0.2.1 in place;
+`dnf upgrade` selects the COPR build. `quickshell-git` is the alternative when a development
+build is required (`sudo dnf install -y --allowerasing quickshell-git`).
+
+The Fedora 44 package list above applies, but Fedora 45 also needs `fontconfig-devel` and
+`fcitx5-devel`; `kosctl doctor` reports them as missing on a fresh KDE edition:
+
+```sh
+sudo dnf install fontconfig-devel fcitx5-devel
+```
+
+Then install the desktop:
+
+```sh
+git clone --depth 1 https://github.com/NextKde/NextKde.git
+cd NextKde
+./tools/kosctl update
+./tools/kosctl doctor
+./tools/kosctl install
+./tools/kosctl start
+```
+
+Log out and back in so KWin loads the new effects and decoration. If the Shell had been
+crash-looping, `systemctl --user reset-failed kos-shell` clears the failed unit state before
+`start`.
+
+The installation and first start above were exercised on Fedora 45 (KDE Plasma Desktop) with
+Plasma 6.8.3, KWin 6.8.3, Qt 6.11.2 and Quickshell 0.3.2 from the COPR. This community recipe
+is not official Fedora runtime acceptance.
+
 ### openSUSE Tumbleweed (community-contributed)
 
 Tumbleweed does not currently provide Quickshell 0.3.x in its default repositories. Add the signed

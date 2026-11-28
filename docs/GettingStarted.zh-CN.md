@@ -79,6 +79,47 @@ Qt base/QPA 私有头在 `qt6-qtbase-private-devel` 中，QuickPrivate 在 `qt6-
 
 Fedora 包可用不代表 Quickshell 已达到 0.3.x。请检查 `kosctl doctor` 报告的版本；仓库版本较旧时，按上文从合适来源安装兼容的 0.3.x。此依赖助手不会升级源码安装的 Quickshell，也不代表桌面运行兼容性验收。
 
+### Fedora 45（社区提供）
+
+Fedora 45 官方仓库的 Quickshell 为 0.2.1，低于要求的 0.3.x。Shell 会因
+`StatusTooltip.qml` 中的 `Non-existent attached object` 无法加载配置，`kos-shell.service`
+不断重启，屏幕在加载画面与桌面之间反复切换。安装 KOS 前先从
+[`errornointernet/quickshell`](https://copr.fedorainfracloud.org/coprs/errornointernet/quickshell/)
+COPR 安装 0.3.x：
+
+```sh
+sudo dnf copr enable -y errornointernet/quickshell
+sudo dnf upgrade -y quickshell        # 0.2.1 -> 0.3.2
+qs --version                          # 应显示 0.3.x
+```
+
+`dnf install quickshell` 只会提示“已安装”并保留 0.2.1，需用 `dnf upgrade` 选择 COPR 版本；
+需要开发版时可改装 `quickshell-git`（`sudo dnf install -y --allowerasing quickshell-git`）。
+
+上文 Fedora 44 的包清单同样适用，但 Fedora 45 全新 KDE 版还需 `fontconfig-devel` 与
+`fcitx5-devel`，缺失时 `kosctl doctor` 会报告：
+
+```sh
+sudo dnf install fontconfig-devel fcitx5-devel
+```
+
+随后安装桌面：
+
+```sh
+git clone --depth 1 https://github.com/NextKde/NextKde.git
+cd NextKde
+./tools/kosctl update
+./tools/kosctl doctor
+./tools/kosctl install
+./tools/kosctl start
+```
+
+安装后注销并重新登录，使 KWin 加载新的特效和窗口装饰。若此前 Shell 一直在崩溃重启，先执行
+`systemctl --user reset-failed kos-shell` 清除失败状态再 `start`。
+
+以上安装与首次启动已在 Fedora 45（KDE Plasma Desktop）、Plasma 6.8.3、KWin 6.8.3、Qt 6.11.2
+与 COPR 的 Quickshell 0.3.2 上实际执行。此社区配方仍不代表官方 Fedora 运行验收。
+
 ### openSUSE Tumbleweed（社区提供）
 
 Tumbleweed 默认软件源目前不提供
