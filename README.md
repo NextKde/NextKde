@@ -84,6 +84,7 @@ your distribution before running the installation commands:
 | Debian 13 | [Installer and manual setup](docs/GettingStarted.md#debian-13-trixie) |
 | Ubuntu 26.04 | [Packages and setup](docs/GettingStarted.md#ubuntu-2604-resolute) |
 | Fedora 44 | [Packages and setup](docs/GettingStarted.md#fedora-44-community-contributed) |
+| Fedora 45 | [Quickshell COPR, packages and setup](docs/GettingStarted.md#fedora-45-community-contributed) |
 | openSUSE Tumbleweed | [zypper packages and setup](docs/GettingStarted.md#opensuse-tumbleweed-community-contributed) |
 | NixOS | [Flake quick start](docs/nixos-quickstart.md) |
 

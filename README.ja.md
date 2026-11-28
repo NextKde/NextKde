@@ -80,6 +80,7 @@ ListenFree は明示的に
 | Debian 13 | [インストーラーと手動セットアップ](docs/GettingStarted.md#debian-13-trixie) |
 | Ubuntu 26.04 | [パッケージとセットアップ](docs/GettingStarted.md#ubuntu-2604-resolute) |
 | Fedora 44 | [パッケージとセットアップ](docs/GettingStarted.md#fedora-44-community-contributed) |
+| Fedora 45 | [Quickshell の COPR、パッケージとセットアップ](docs/GettingStarted.md#fedora-45-community-contributed) |
 | openSUSE Tumbleweed | [zypper パッケージとセットアップ](docs/GettingStarted.md#opensuse-tumbleweed-community-contributed) |
 | NixOS | [Flake クイックスタート](docs/nixos-quickstart.md) |
 

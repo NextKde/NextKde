@@ -77,6 +77,7 @@ la guía de tu distribución antes de ejecutar los comandos de instalación:
 | Debian 13 | [Instalador y configuración manual](docs/GettingStarted.md#debian-13-trixie) |
 | Ubuntu 26.04 | [Paquetes y configuración](docs/GettingStarted.md#ubuntu-2604-resolute) |
 | Fedora 44 | [Paquetes y configuración](docs/GettingStarted.md#fedora-44-community-contributed) |
+| Fedora 45 | [COPR de Quickshell, paquetes y configuración](docs/GettingStarted.md#fedora-45-community-contributed) |
 | openSUSE Tumbleweed | [Paquetes zypper y configuración](docs/GettingStarted.md#opensuse-tumbleweed-community-contributed) |
 | NixOS | [Inicio rápido con Flake](docs/nixos-quickstart.md) |
 
