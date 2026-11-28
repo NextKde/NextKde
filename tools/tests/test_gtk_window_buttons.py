@@ -224,6 +224,21 @@ class GtkButtonsTests(unittest.TestCase):
             module.uninstall(self.config)
             self.assertFalse(any(call.args[0] == 'set' for call in settings.call_args_list))
 
+    def test_reload_bridge_falls_back_to_qdbus_qt6(self):
+        self.which.stop()
+        self.reload.stop()
+        def fake_which(name):
+            return '/usr/bin/qdbus-qt6' if name == 'qdbus-qt6' else None
+        with patch.object(module.shutil, 'which', side_effect=fake_which), \
+             patch.object(module.os, 'access', return_value=False), \
+             patch.object(module.subprocess, 'run') as run:
+            run.return_value.returncode = 0
+            module.reload_bridge()
+            run.assert_called_once_with(
+                ['/usr/bin/qdbus-qt6', 'org.kde.KWin', '/Effects',
+                 'org.kde.kwin.Effects.reconfigureEffect', 'kos_bridge'],
+                capture_output=True, text=True)
+
 
 if __name__ == '__main__':
     unittest.main()

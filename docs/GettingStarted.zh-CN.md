@@ -64,7 +64,7 @@ sudo dnf install \
   git python3 cmake ninja-build gcc-c++ golang curl patchelf pkgconf-pkg-config gettext \
   quickshell extra-cmake-modules \
   wayland-devel wayland-protocols-devel libxkbcommon-devel \
-  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools-devel qt6-qttranslations qt6-qtquick3d-devel \
+  qt6-qtbase-devel qt6-qtdeclarative-devel qt6-qttools qt6-qttools-devel qt6-qttranslations qt6-qtquick3d-devel \
   qt6-qtsvg-devel qt6-qtwayland-devel qt6-qtimageformats qt6-qt5compat-devel \
   qt6-qtbase-private-devel \
   kf6-kwindowsystem-devel kf6-kiconthemes-devel kf6-kglobalaccel-devel \
@@ -75,7 +75,7 @@ sudo dnf install \
   vulkan-headers vulkan-loader-devel zlib-devel libxcb-devel
 ```
 
-Qt base/QPA 私有头在 `qt6-qtbase-private-devel` 中，QuickPrivate 在 `qt6-qtdeclarative-devel` 中；Fedora 的 `libxcb-devel` 不同于 Debian 拆分包。剪贴板历史另需 `wl-clipboard` 与 `cliphist`（`sudo dnf install wl-clipboard cliphist`），缺失时 `doctor` 会警告。
+Qt base/QPA 私有头在 `qt6-qtbase-private-devel` 中，QuickPrivate 在 `qt6-qtdeclarative-devel` 中；`qt6-qttools` 提供 `qdbus-qt6`，`kosctl` 与台前调度在无 `qdbus6` 的 Fedora 上会自动回退解析。Fedora 的 `libxcb-devel` 不同于 Debian 拆分包。剪贴板历史另需 `wl-clipboard` 与 `cliphist`（`sudo dnf install wl-clipboard cliphist`），缺失时 `doctor` 会警告。
 
 Fedora 包可用不代表 Quickshell 已达到 0.3.x。请检查 `kosctl doctor` 报告的版本；仓库版本较旧时，按上文从合适来源安装兼容的 0.3.x。此依赖助手不会升级源码安装的 Quickshell，也不代表桌面运行兼容性验收。
 
@@ -227,6 +227,18 @@ journalctl --user -u kos-platform.service -u kos-data.service -u kos-shell.servi
 Settings → 关于 会原地更新源码 checkout：进度和完整日志写在
 `${XDG_STATE_HOME:-$HOME/.local/state}/kos/update/`，关闭设置窗口后仍会继续；在点“重启 KOS”
 之前不会动正在运行的 Shell。如果授权或构建失败，源码可能已经更新；请查看日志并重试，确认前不要注销。
+
+### 系统升级 KWin 后重建插件
+
+KWin 特效插件会绑定精确的 KWin ABI 版本（`EffectPluginFactory<version>`）。系统升级更换 KWin 版本后（例如 `6.7.5` → `6.8.3`），KWin 会拒绝加载旧版本编译的 `glass`、`kos_bridge`、`kos_context_menu_input`、`kos_dock_window_animation` 与 `stageanim13`，导致液态玻璃与窗口圆角失效。
+
+`./tools/kosctl doctor`、`./tools/kosctl start` 以及 **设置 → 集成状态** 会检测已安装插件与当前系统 KWin 版本的 ABI 差异。确保 KWin 开发包已同步升级后，重新编译并安装：
+
+```sh
+./tools/kosctl install
+```
+
+完成后注销并重新登录（或重启），使 KWin 加载新编译的插件。
 
 ```sh
 ./tools/kosctl uninstall

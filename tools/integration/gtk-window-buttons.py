@@ -265,8 +265,19 @@ def uninstall(config):
     restore_styles(config)
 
 
+def resolve_qdbus():
+    for name in ('qdbus6', 'qdbus-qt6'):
+        found = shutil.which(name)
+        if found:
+            return found
+    for path in ('/usr/lib64/qt6/bin/qdbus', '/usr/lib/qt6/bin/qdbus'):
+        if os.access(path, os.X_OK):
+            return path
+    return shutil.which('qdbus')
+
+
 def reload_bridge():
-    command = shutil.which('qdbus6') or shutil.which('qdbus')
+    command = resolve_qdbus()
     if command:
         result = subprocess.run([command, 'org.kde.KWin', '/Effects',
                                  'org.kde.kwin.Effects.reconfigureEffect', 'kos_bridge'],

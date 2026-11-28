@@ -106,8 +106,7 @@ QtObject {
     function _onSideChanged() {
         StageConfigService.enqueueBashChain(["bash", "-c",
             (enabled ? targetRectCmd : clearTargetRectCmd)
-            + " && qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects"
-            + ".reconfigureEffect " + effectId])
+            + " && " + StageEffects.reconfigureEffectCommand(effectId)])
         console.info("[StageMode] side=" + StageConfigService.side)
     }
 

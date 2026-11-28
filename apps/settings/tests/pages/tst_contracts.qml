@@ -1,6 +1,7 @@
 import QtQuick
 import QtTest
 import Kos.Demo as Demo
+import "../../../../shared/qml/i18n"
 
 Item {
     id: harness
@@ -105,6 +106,42 @@ Item {
             page.setCandidatePreference("highContrast", true)
             compare(candidateBridge.calls.length, 3)
             verify(!font.enabled)
+        }
+        function test_kwin_abi_mismatch_shows_diagnostic_and_steps() {
+            const page = makePage("IntegrationStatusPage")
+            const mismatchItem = findChild(page, "kwinAbiMismatchItem")
+            const stepsButton = findChild(page, "kwinAbiStepsButton")
+            const rebuildStep = findChild(page, "kwinAbiRebuildStep")
+            verify(mismatchItem !== null && stepsButton !== null && rebuildStep !== null)
+            verify(!mismatchItem.visible)
+            verify(!rebuildStep.visible)
+
+            page.snapshot = {
+                glassLoaded: false,
+                dockAnimationLoaded: false,
+                contextMenuInputLoaded: false,
+                kwinAbiMismatch: true,
+                kwinPluginVersion: "6.7.5",
+                kwinCurrentVersion: "6.8.3"
+            }
+            verify(mismatchItem.visible)
+            verify(mismatchItem.description.indexOf("6.7.5") >= 0)
+            verify(mismatchItem.description.indexOf("6.8.3") >= 0)
+            compare(page.rows[5].label, I18n.tr("Rebuild required"))
+            verify(page.rows[5].detail.indexOf("6.7.5") >= 0)
+            verify(!rebuildStep.visible)
+
+            stepsButton.clicked()
+            verify(rebuildStep.visible)
+
+            page.snapshot = {
+                glassLoaded: true,
+                dockAnimationLoaded: true,
+                contextMenuInputLoaded: true,
+                kwinAbiMismatch: false
+            }
+            verify(!mismatchItem.visible)
+            compare(page.rows[5].label, I18n.tr("Loaded"))
         }
         function test_isolated_load(data) {
             const page = makePage(data.name)

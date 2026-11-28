@@ -5,15 +5,31 @@ export function shellQuote(value) {
     return "'" + String(value).replace(/'/g, "'\\''") + "'";
 }
 
+// Distributions name the Qt 6 D-Bus CLI differently: qdbus6 (Arch, openSUSE),
+// qdbus-qt6 or the Qt 6 bin directory's qdbus (Fedora), plain qdbus
+// elsewhere. Fedora ships no qdbus6 at all, so a hard-coded name fails every
+// Stage transition there before KWin is ever asked. Sets $qdbus, or fails.
+export const QDBUS_RESOLVE = "qdbus=$(command -v qdbus6 || command -v qdbus-qt6"
+    + " || { [ -x /usr/lib64/qt6/bin/qdbus ] && echo /usr/lib64/qt6/bin/qdbus; }"
+    + " || { [ -x /usr/lib/qt6/bin/qdbus ] && echo /usr/lib/qt6/bin/qdbus; }"
+    + " || command -v qdbus)";
+
+export function reconfigureEffectCommand(effectId) {
+    if (!/^[a-zA-Z0-9_]+$/.test(effectId))
+        throw new Error("invalid effect id");
+    return `{ ${QDBUS_RESOLVE} && "$qdbus" org.kde.KWin /Effects org.kde.kwin.Effects.reconfigureEffect ${shellQuote(effectId)}; }`;
+}
+
 export function effectSwitchCommand(enabled, effectId, commit = ":") {
     if (!/^[a-zA-Z0-9_]+$/.test(effectId))
         throw new Error("invalid effect id");
     const next = enabled ? effectId : "kos_dock_window_animation";
     const previous = enabled ? "kos_dock_window_animation" : effectId;
     return `set -e
+${QDBUS_RESOLVE}
 next=${shellQuote(next)}
 previous=${shellQuote(previous)}
-call_effect() { qdbus6 org.kde.KWin /Effects "org.kde.kwin.Effects.$1" "$2"; }
+call_effect() { "$qdbus" org.kde.KWin /Effects "org.kde.kwin.Effects.$1" "$2"; }
 next_loaded=$(call_effect isEffectLoaded "$next")
 previous_loaded=$(call_effect isEffectLoaded "$previous")
 case "$next_loaded:$previous_loaded" in true:true|true:false|false:true|false:false) ;; *) exit 1 ;; esac

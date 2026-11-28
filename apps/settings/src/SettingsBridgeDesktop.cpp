@@ -1,4 +1,5 @@
 #include "SettingsBridge.h"
+#include "KWinPluginAbi.h"
 
 #include <QDBusArgument>
 #include <QDBusError>
@@ -496,6 +497,14 @@ void SettingsBridge::startIntegrationProbe(const QVariantMap& replyMap)
                 loadedEffects.contains(QStringLiteral("kos_dock_window_animation")));
             result.insert(QStringLiteral("contextMenuInputLoaded"),
                 loadedEffects.contains(QStringLiteral("kos_context_menu_input")));
+            if (!worker->isInterruptionRequested()) {
+                const KWinPluginAbiStatus abi = inspectInstalledKWinPluginAbi();
+                result.insert(QStringLiteral("kwinAbiChecked"), abi.checked);
+                result.insert(QStringLiteral("kwinAbiMismatch"), abi.mismatch);
+                result.insert(QStringLiteral("kwinCurrentVersion"), abi.kwinVersion);
+                result.insert(QStringLiteral("kwinPluginVersion"), abi.pluginVersion);
+                result.insert(QStringLiteral("kwinMismatchedPlugins"), abi.mismatchedPlugins);
+            }
             if (!result.contains(QStringLiteral("inputMethodEnabled"))) {
                 const QString configPath = QStandardPaths::writableLocation(QStandardPaths::GenericConfigLocation)
                     + QStringLiteral("/kos/inputmethod.json");

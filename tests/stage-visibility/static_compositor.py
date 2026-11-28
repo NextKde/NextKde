@@ -14,6 +14,7 @@ import time
 parser = argparse.ArgumentParser()
 parser.add_argument("plugin", type=Path)
 parser.add_argument("--quickshell", default="quickshell")
+parser.add_argument("--qdbus", default=None)
 parser.add_argument("--output", type=Path, required=True)
 parser.add_argument("--inside", action="store_true")
 args = parser.parse_args()
@@ -65,8 +66,17 @@ Duration=700
         env.pop(name, None)
     processes = []
 
+    qdbus_bin = (
+        args.qdbus
+        or shutil.which("qdbus6")
+        or shutil.which("qdbus-qt6")
+        or next((p for p in ("/usr/lib64/qt6/bin/qdbus", "/usr/lib/qt6/bin/qdbus") if os.access(p, os.X_OK)), None)
+        or shutil.which("qdbus")
+        or "qdbus6"
+    )
+
     def call(*arguments):
-        return subprocess.check_output(["qdbus6", *arguments], env=env, text=True,
+        return subprocess.check_output([qdbus_bin, *arguments], env=env, text=True,
                                        stderr=subprocess.DEVNULL, timeout=2).strip()
 
     def until(predicate, timeout=8):
