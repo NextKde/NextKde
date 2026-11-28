@@ -19,11 +19,13 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSet>
+#include <QSslConfiguration>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUuid>
 #include <QtEndian>
+#include <mutex>
 
 static void catalogResources() { Q_INIT_RESOURCE(catalog); }
 namespace {
@@ -380,6 +382,10 @@ bool githubUrl(const QUrl& url, const QString& repository, bool redirected)
 }
 static QByteArray fetchBounded(const QUrl& initial, const QString& repository, qint64 maximum, QString* error, const Cancelled& cancelled, bool iconOnly)
 {
+#ifndef QT_NO_SSL
+    static std::once_flag sslInitialized;
+    std::call_once(sslInitialized, [] { (void)QSslConfiguration::defaultConfiguration(); });
+#endif
     QNetworkAccessManager manager;
     auto url = initial;
     for (int redirect = 0; redirect <= 5; ++redirect) {

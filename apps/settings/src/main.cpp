@@ -25,6 +25,7 @@
 #include <QQuickWindow>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
+#include <QSslConfiguration>
 #include <QTimer>
 #include <QtQml/qqmlextensionplugin.h>
 
@@ -115,6 +116,12 @@ int main(int argc, char* argv[])
             return 1;
         }
     }
+
+#ifndef QT_NO_SSL
+    // Initialize Qt's TLS backend and system CA cache on the main thread
+    // before QtConcurrent workers or QML issue HTTPS requests.
+    (void)QSslConfiguration::defaultConfiguration();
+#endif
 
     TaskNotifications taskNotifications;
     SettingsBridge bridge;

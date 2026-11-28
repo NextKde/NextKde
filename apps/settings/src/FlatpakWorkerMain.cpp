@@ -18,6 +18,7 @@
 #include <QDateTime>
 #include <QUuid>
 #include <QSocketNotifier>
+#include <QSslConfiguration>
 #include <QTimer>
 #include <csignal>
 #include <cstdio>
@@ -244,6 +245,12 @@ int main(int argc, char** argv)
     if (parent <= 1 || ::prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || ::getppid() != parent) return 2;
     const rlimit noCore{0, 0};
     setrlimit(RLIMIT_CORE, &noCore);
+
+#ifndef QT_NO_SSL
+    // Initialize Qt's TLS backend and system CA cache on the main thread
+    // before QtConcurrent workers issue HTTPS requests.
+    (void)QSslConfiguration::defaultConfiguration();
+#endif
 
     loadPersistedPlans();
     FlatpakApps backend;
